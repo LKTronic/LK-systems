@@ -1,0 +1,166 @@
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model User {
+  id           Int              @id @default(autoincrement())
+  name         String
+  username     String           @unique
+  passwordHash String
+  role         Role             @default(STAFF)
+  status       UserStatus       @default(ACTIVE)
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+
+  productsCreated Product[]        @relation("CreatedBy")
+  history         ProductHistory[]
+}
+
+model Category {
+  id        Int       @id @default(autoincrement())
+  name      String    @unique
+  createdAt DateTime  @default(now())
+
+  products  Product[]
+}
+
+model Supplier {
+  id          Int       @id @default(autoincrement())
+  name        String    @unique
+  contactInfo String?
+  notes       String?
+  createdAt   DateTime  @default(now())
+
+  products       Product[]
+  priceHistories ProductPriceHistory[]
+}
+
+model Product {
+  id                 Int             @id @default(autoincrement())
+  recordNo           String          @unique
+  referenceNo        String?         @unique
+  productName        String
+  modelAndName       String?
+  sku                String?
+  productDate        DateTime        @db.Date
+  price              Decimal         @default(0) @db.Decimal(12, 2)
+  priceUSD           Decimal?        @db.Decimal(12, 2)
+  priceLKR           Decimal?        @db.Decimal(12, 2)
+  quantity           Int             @default(1)
+  weight             Decimal?        @db.Decimal(10, 4)
+  description        String?         @db.Text
+  referenceLink      String?         @db.Text
+  additionalNote     String?         @db.Text
+  imagePath          String?         @db.Text
+
+  // Web store integration (e.g. lk-tronics.com)
+  source             String          @default("PMS") // "PMS" or "LK_TRONICS"
+  externalId         String?         // Remote Store Product ID
+  externalUrl        String?         @db.Text // Live product URL on lk-tronics.com
+  stockStatus        String?         // 'instock', 'outofstock'
+  shippingClass      String?         // e.g. 'over-the-sea'
+
+  categoryId         Int?
+  category           Category?       @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  categoryNames      String?         @db.Text // All categories for this product (JSON array or comma-separated)
+
+  supplierId         Int?
+  supplier           Supplier?       @relation(fields: [supplierId], references: [id], onDelete: SetNull)
+
+  warrantyPeriod     String?
+  priceValidity      String?
+  leadTime           String?
+  isBrandNewOriginal String?
+  supplierImage      String?
+  supplierNote       String?         @db.Text
+
+  priceUpdatedAt     DateTime?
+  createdBy          Int
+  status             ProductStatus   @default(PENDING)
+  createdAt          DateTime        @default(now())
+  updatedAt          DateTime        @updatedAt
+
+  author             User            @relation("CreatedBy", fields: [createdBy], references: [id])
+  history            ProductHistory[]
+  priceHistory       ProductPriceHistory[]
+
+  @@index([status])
+  @@index([sku])
+  @@index([source])
+  @@index([externalId])
+  @@index([categoryId])
+  @@index([supplierId])
+  @@index([createdBy])
+  @@index([productDate])
+  @@index([createdAt])
+  @@index([status, createdAt])
+}
+
+model ProductPriceHistory {
+  id             Int       @id @default(autoincrement())
+  productId      Int
+  priceLKR       Decimal   @db.Decimal(12, 2)
+  priceUSD       Decimal?  @db.Decimal(12, 2)
+  supplierId     Int?
+  supplierName   String?
+  warrantyPeriod String?
+  leadTime       String?
+  note           String?   @db.Text
+  createdAt      DateTime  @default(now())
+
+  product        Product   @relation(fields: [productId], references: [id], onDelete: Cascade)
+  supplier       Supplier? @relation(fields: [supplierId], references: [id], onDelete: SetNull)
+
+  @@index([productId])
+  @@index([createdAt])
+}
+
+model SystemSetting {
+  key       String   @id
+  value     String
+  updatedAt DateTime @updatedAt
+}
+
+model ProductHistory {
+  id          Int      @id @default(autoincrement())
+  productId   Int?
+  userId      Int?
+  action      String
+  oldData     Json?
+  newData     Json?
+  createdAt   DateTime @default(now())
+
+  product     Product? @relation(fields: [productId], references: [id], onDelete: SetNull)
+  user        User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([productId])
+  @@index([userId])
+  @@index([createdAt])
+}
+
+enum Role {
+  SUPERADMIN
+  ADMIN
+  STAFF
+}
+
+enum UserStatus {
+  ACTIVE
+  INACTIVE
+}
+
+enum ProductStatus {
+  PENDING
+  ACTIVE
+  EXPIRED
+  PRICE_NOT_AVAILABLE
+  NOT_REQUESTED
+  QUOTED
+}
+
+
