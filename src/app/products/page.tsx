@@ -96,7 +96,7 @@ export default function ProductsPage() {
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [didYouMean, setDidYouMean] = useState<string | null>(null);
   const [status, setStatus] = useState("ALL");
-  const [sourceFilter, setSourceFilter] = useState("ALL"); // ALL, PMS, LK_TRONICS
+  const [sourceFilter, setSourceFilter] = useState("ONLINE_WEB"); // ONLINE_WEB (default), ALL, PMS
   const [categoryId, setCategoryId] = useState("ALL");
   const [addedBy, setAddedBy] = useState("ALL");
   const [users, setUsers] = useState<{ id: number; name: string; username: string }[]>([]);
@@ -410,14 +410,14 @@ export default function ProductsPage() {
       if (hasUrlParams) {
         const p = parseInt(urlParams.get("page") || "1", 10) || 1;
         const st = urlParams.get("status") || "ALL";
-        const sf = urlParams.get("source") || "ALL";
+        const sf = urlParams.get("source") || "ONLINE_WEB";
         const cat = urlParams.get("categoryId") || "ALL";
         const ab = urlParams.get("createdBy") || "ALL";
         const q = urlParams.get("search") || "";
 
         if (p !== 1) setPage(p);
         if (st !== "ALL") setStatus(st);
-        if (sf !== "ALL") setSourceFilter(sf);
+        if (sf) setSourceFilter(sf);
         if (cat !== "ALL") setCategoryId(cat);
         if (ab !== "ALL") setAddedBy(ab);
         if (q) {
@@ -430,7 +430,7 @@ export default function ProductsPage() {
           const parsed = JSON.parse(saved);
           if (parsed.page && parsed.page !== 1) setPage(parsed.page);
           if (parsed.status && parsed.status !== "ALL") setStatus(parsed.status);
-          if (parsed.sourceFilter && parsed.sourceFilter !== "ALL") setSourceFilter(parsed.sourceFilter);
+          if (parsed.sourceFilter) setSourceFilter(parsed.sourceFilter);
           if (parsed.categoryId && parsed.categoryId !== "ALL") setCategoryId(parsed.categoryId);
           if (parsed.addedBy && parsed.addedBy !== "ALL") setAddedBy(parsed.addedBy);
           if (parsed.search) {
@@ -882,7 +882,7 @@ export default function ProductsPage() {
               </div>
             )}
 
-            {/* Source Filter: ALL, PMS, ONLINE_WEB */}
+            {/* Source Filter: ONLINE_WEB (Default), ALL, PMS */}
             <div className="w-48">
               <select
                 value={sourceFilter}
@@ -892,9 +892,9 @@ export default function ProductsPage() {
                 }}
                 className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-200 focus:border-indigo-500 outline-none"
               >
+                <option value="ONLINE_WEB">🌐 Online Web</option>
                 <option value="ALL">All Sources (PMS + Web)</option>
                 <option value="PMS">PMS Products Only</option>
-                <option value="ONLINE_WEB">🌐 Online Web</option>
               </select>
             </div>
 
@@ -971,7 +971,7 @@ export default function ProductsPage() {
                 setSearch("");
                 setDebouncedSearch("");
                 setStatus("ALL");
-                setSourceFilter("ALL");
+                setSourceFilter("ONLINE_WEB");
                 setCategoryId("ALL");
                 setAddedBy("ALL");
                 setPage(1);
