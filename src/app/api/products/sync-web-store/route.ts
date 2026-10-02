@@ -24,25 +24,34 @@ export async function GET(request: NextRequest) {
 
     const { storeUrl, authHeader } = config;
 
-    // Fetch total products count from WooCommerce
-    const res = await fetch(
-      `${storeUrl}/wp-json/wc/v3/products?per_page=1&status=publish`,
-      {
-        headers: {
-          Authorization: authHeader,
-        },
-        cache: "no-store",
-      }
-    );
+    let totalStoreProducts = 0;
+    let totalPages = 0;
+    let isConnected = false;
 
-    const totalStoreProducts = parseInt(
-      res.headers.get("x-wp-total") || "0",
-      10
-    );
-    const totalPages = parseInt(
-      res.headers.get("x-wp-totalpages") || "0",
-      10
-    );
+    // Gracefully check WooCommerce connectivity with timeout for offline support
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 2500);
+
+      const res = await fetch(
+        `${storeUrl}/wp-json/wc/v3/products?per_page=1&status=publish`,
+        {
+          headers: { Authorization: authHeader },
+          cache: "no-store",
+          signal: controller.signal,
+        }
+      );
+      clearTimeout(timeoutId);
+
+      if (res.ok) {
+        isConnected = true;
+        totalStoreProducts = parseInt(res.headers.get("x-wp-total") || "0", 10);
+        totalPages = parseInt(res.headers.get("x-wp-totalpages") || "0", 10);
+      }
+    } catch {
+      // Offline mode: gracefully continue using local PMS database
+      isConnected = false;
+    }
 
     // Get count of products already synced in PMS as ONLINE_WEB / LK_TRONICS
     const [syncedCount, pmsTotalCount, lastSyncedProduct] = await Promise.all([
@@ -70,7 +79,7 @@ export async function GET(request: NextRequest) {
     ]);
 
     return NextResponse.json({
-      connected: res.ok,
+      connected: isConnected,
       storeUrl,
       totalStoreProducts,
       totalPages,

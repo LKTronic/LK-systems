@@ -108,17 +108,35 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // Search matches on modelAndName, productName, referenceNo, sku, or recordNo
+    // Search matches on modelAndName, productName, referenceNo, sku, recordNo, or description
     if (search) {
-      andConditions.push({
-        OR: [
-          { modelAndName: { contains: search } },
-          { productName: { contains: search } },
-          { referenceNo: { contains: search } },
-          { sku: { contains: search } },
-          { recordNo: { contains: search } },
-        ],
-      });
+      const searchWords = search.split(/\s+/).filter(Boolean);
+      if (searchWords.length === 1) {
+        andConditions.push({
+          OR: [
+            { modelAndName: { contains: search } },
+            { productName: { contains: search } },
+            { sku: { contains: search } },
+            { referenceNo: { contains: search } },
+            { recordNo: { contains: search } },
+            { description: { contains: search } },
+          ],
+        });
+      } else {
+        // Multi-word search: all keywords must match within product metadata
+        for (const word of searchWords) {
+          andConditions.push({
+            OR: [
+              { modelAndName: { contains: word } },
+              { productName: { contains: word } },
+              { sku: { contains: word } },
+              { referenceNo: { contains: word } },
+              { recordNo: { contains: word } },
+              { description: { contains: word } },
+            ],
+          });
+        }
+      }
     }
 
     // Date range filter

@@ -242,13 +242,13 @@ export default function ProductsPage() {
   const fetchFiltersAndSettings = async () => {
     try {
       const [catRes, setRes, usersRes, supRes] = await Promise.all([
-        fetch("/api/categories"),
-        fetch("/api/settings"),
-        fetch("/api/users/list"),
-        fetch("/api/suppliers"),
+        fetch("/api/categories").catch(() => null),
+        fetch("/api/settings").catch(() => null),
+        fetch("/api/users/list").catch(() => null),
+        fetch("/api/suppliers").catch(() => null),
       ]);
-      if (catRes.ok) {
-        const catData = await catRes.json();
+      if (catRes && catRes.ok) {
+        const catData = await catRes.json().catch(() => ({}));
         const raw: Category[] = catData.categories || [];
         const sorted = [...raw].sort((a, b) => {
           const aName = a.name.trim().toLowerCase();
@@ -261,34 +261,35 @@ export default function ProductsPage() {
         });
         setCategories(sorted);
       }
-      if (setRes.ok) {
-        const setData = await setRes.json();
+      if (setRes && setRes.ok) {
+        const setData = await setRes.json().catch(() => ({}));
         if (setData.priceValidityMonths) {
           setValidityMonths(setData.priceValidityMonths);
         }
       }
-      if (usersRes.ok) {
-        const uData = await usersRes.json();
+      if (usersRes && usersRes.ok) {
+        const uData = await usersRes.json().catch(() => ({}));
         setUsers(uData.users || []);
       }
       if (supRes && supRes.ok) {
-        const sData = await supRes.json();
+        const sData = await supRes.json().catch(() => ({}));
         setSuppliers(sData.suppliers || []);
       }
     } catch (e) {
-      console.error("Failed to load metadata:", e);
+      console.warn("Failed to load metadata:", e);
     }
   };
 
   const fetchStoreStats = async () => {
+    if (!isAdmin) return;
     try {
-      const res = await fetch("/api/products/sync-web-store");
-      if (res.ok) {
-        const data = await res.json();
-        setSyncStats(data);
+      const res = await fetch("/api/products/sync-web-store").catch(() => null);
+      if (res && res.ok) {
+        const data = await res.json().catch(() => null);
+        if (data) setSyncStats(data);
       }
     } catch (e) {
-      console.error("Failed to fetch web store stats", e);
+      console.warn("Failed to fetch web store stats (offline mode active)", e);
     }
   };
 
