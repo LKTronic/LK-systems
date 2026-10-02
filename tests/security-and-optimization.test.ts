@@ -323,3 +323,57 @@ describe("Warehouse Storage Location Extraction (Section & Rack)", () => {
   });
 });
 
+describe("Offline Dynamic Vocabulary & Search Correction", () => {
+  const sampleOfflineProducts = [
+    {
+      id: 1,
+      recordNo: "001001",
+      productName: "Nextion NX3224T024 2.4 inch Resistive Touch Screen HMI Display",
+      modelAndName: "Nextion NX3224T024",
+      sku: "LKDIS00015",
+      price: 10500,
+      quantity: 2,
+      status: "ACTIVE",
+      categoryNames: '["Display"]',
+      createdAt: "2026-10-01T00:00:00.000Z",
+      updatedAt: "2026-10-01T00:00:00.000Z",
+    },
+    {
+      id: 2,
+      recordNo: "001002",
+      productName: "Omron E2B-M12KS04-WP-B1 Proximity Sensor",
+      modelAndName: "Omron E2B Proximity Sensor",
+      sku: "LKSEN00111",
+      price: 4500,
+      quantity: 10,
+      status: "ACTIVE",
+      categoryNames: '["Sensors"]',
+      createdAt: "2026-10-01T00:00:00.000Z",
+      updatedAt: "2026-10-01T00:00:00.000Z",
+    },
+  ];
+
+  it("builds offline vocabulary containing electronic keywords and model names", async () => {
+    const { buildOfflineVocabulary } = await import("../src/lib/offlineShopDb");
+    const vocab = buildOfflineVocabulary(sampleOfflineProducts as any);
+    assert.ok(vocab.has("nextion"));
+    assert.ok(vocab.has("sensor"));
+    assert.ok(vocab.has("display"));
+    assert.ok(vocab.has("omron"));
+  });
+
+  it("generates typo corrections for offline searches using offline vocabulary", async () => {
+    const { buildOfflineVocabulary } = await import("../src/lib/offlineShopDb");
+    const { getFuzzySuggestion } = await import("../src/lib/fuzzySearch");
+    const vocab = buildOfflineVocabulary(sampleOfflineProducts as any);
+
+    const res1 = getFuzzySuggestion("nexton display", vocab);
+    assert.equal(res1.hasCorrection, true);
+    assert.equal(res1.correctedQuery, "nextion display");
+
+    const res2 = getFuzzySuggestion("omrom senser", vocab);
+    assert.equal(res2.hasCorrection, true);
+    assert.equal(res2.correctedQuery, "omron sensor");
+  });
+});
+

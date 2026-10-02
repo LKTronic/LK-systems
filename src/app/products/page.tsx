@@ -415,7 +415,7 @@ export default function ProductsPage() {
         setProducts(localResult.products as any);
         setTotal(localResult.pagination.total);
         setTotalPages(localResult.pagination.totalPages);
-        setDidYouMean(null);
+        setDidYouMean(localResult.didYouMean || null);
         setIsLoading(false);
         return;
       }
@@ -439,6 +439,7 @@ export default function ProductsPage() {
         setProducts(localResult.products as any);
         setTotal(localResult.pagination.total);
         setTotalPages(localResult.pagination.totalPages);
+        setDidYouMean(localResult.didYouMean || null);
       }
     } catch (err) {
       console.warn("Network request failed, falling back to offline IndexedDB:", err);
@@ -455,6 +456,7 @@ export default function ProductsPage() {
           setProducts(localResult.products as any);
           setTotal(localResult.pagination.total);
           setTotalPages(localResult.pagination.totalPages);
+          setDidYouMean(localResult.didYouMean || null);
         } catch (dbErr) {
           console.error("Failed to read from local offline store:", dbErr);
         }

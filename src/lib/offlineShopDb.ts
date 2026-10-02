@@ -6,6 +6,7 @@
 
 import {
   scoreProductRelevance,
+  getFuzzySuggestion,
   BASELINE_ELECTRONICS_VOCABULARY,
 } from "./fuzzySearch";
 
@@ -50,6 +51,7 @@ export interface OfflineSearchResult {
     limit: number;
     totalPages: number;
   };
+  didYouMean?: string | null;
   fromOfflineCache: boolean;
 }
 
@@ -449,6 +451,35 @@ export async function getShopOfflineMeta(): Promise<{ lastSyncTime: string | nul
   }
 }
 
+// In-memory cache for dynamic offline vocabulary
+let offlineVocabCache: Set<string> | null = null;
+let offlineVocabProductCount = 0;
+
+/**
+ * Builds an offline dictionary of electronic terms, SKUs, and keywords from cached products.
+ */
+export function buildOfflineVocabulary(products: ShopOfflineProduct[]): Set<string> {
+  if (offlineVocabCache && offlineVocabProductCount === products.length) {
+    return offlineVocabCache;
+  }
+  const vocab = new Set<string>(BASELINE_ELECTRONICS_VOCABULARY);
+  for (const p of products) {
+    const text = `${p.productName} ${p.modelAndName || ""} ${p.categoryNames || ""} ${p.category?.name || ""}`;
+    const words = text
+      .toLowerCase()
+      .split(/[^a-z0-9_-]+/)
+      .filter((w) => w.length >= 3);
+    for (const w of words) {
+      if (!/^\d+$/.test(w)) {
+        vocab.add(w);
+      }
+    }
+  }
+  offlineVocabCache = vocab;
+  offlineVocabProductCount = products.length;
+  return vocab;
+}
+
 /**
  * Searches and filters products directly inside IndexedDB when offline.
  */
@@ -514,14 +545,37 @@ export async function searchShopIndexedDb(params: {
       }
 
       // Smart Weighted Relevance & Fuzzy Search for Electronics
+      let didYouMean: string | null = null;
+
       if (search) {
-        const scoredItems: { product: ShopOfflineProduct; score: number }[] = [];
+        const offlineVocab = buildOfflineVocabulary(items);
+
+        // Check for typo correction suggestions (e.g. "arduno" -> "arduino", "omron prox" -> "proximity")
+        const fuzzy = getFuzzySuggestion(search, offlineVocab);
+        if (fuzzy.hasCorrection) {
+          didYouMean = fuzzy.correctedQuery;
+        }
+
+        // Score candidate items using weighted electronics relevance engine
+        let scoredItems: { product: ShopOfflineProduct; score: number }[] = [];
         for (const p of items) {
-          const score = scoreProductRelevance(search, p, BASELINE_ELECTRONICS_VOCABULARY);
+          const score = scoreProductRelevance(search, p, offlineVocab);
           if (score > 0) {
             scoredItems.push({ product: p, score });
           }
         }
+
+        // If exact/direct search returns 0 results but we have a typo suggestion,
+        // automatically search using the corrected query so user gets instant results!
+        if (scoredItems.length === 0 && fuzzy.hasCorrection) {
+          for (const p of items) {
+            const score = scoreProductRelevance(fuzzy.correctedQuery, p, offlineVocab);
+            if (score > 0) {
+              scoredItems.push({ product: p, score });
+            }
+          }
+        }
+
         // Sort descending: closest/best matches appear first
         scoredItems.sort((a, b) => b.score - a.score);
         items = scoredItems.map((s) => s.product);
@@ -540,6 +594,7 @@ export async function searchShopIndexedDb(params: {
           limit,
           totalPages,
         },
+        didYouMean,
         fromOfflineCache: true,
       });
     };
