@@ -31,6 +31,7 @@ export interface ShopOfflineProduct {
   externalUrl?: string | null;
   referenceLink?: string | null;
   description?: string | null;
+  additionalNote?: string | null;
   stockStatus?: string | null;
   shippingClass?: string | null;
   status: string;

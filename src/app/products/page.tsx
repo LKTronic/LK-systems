@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { AppLayout } from "@/components/AppLayout";
 import { CategorySearchDropdown } from "@/components/CategorySearchDropdown";
-import { formatLKR, formatDateDMY } from "@/lib/formatters";
+import { formatLKR, formatDateDMY, extractStorageLocation } from "@/lib/formatters";
 import { syncShopCatalogToIndexedDb, searchShopIndexedDb } from "@/lib/offlineShopDb";
 import {
   Search,
@@ -38,6 +38,7 @@ import {
   Sparkles,
   LayoutGrid,
   List,
+  MapPin,
 } from "lucide-react";
 
 interface Product {
@@ -1932,6 +1933,47 @@ export default function ProductsPage() {
                       </div>
                     </div>
                   )}
+
+                  {/* Storage Warehouse Location (Section & Rack) for Shop user */}
+                  {isShop && (() => {
+                    const loc = extractStorageLocation(
+                      previewProduct.additionalNote,
+                      previewProduct.description
+                    );
+                    if (!loc) return null;
+                    return (
+                      <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/30 flex items-center gap-2.5">
+                        <div className="p-1.5 rounded-lg bg-amber-500/20 text-amber-300 shrink-0">
+                          <MapPin className="w-4 h-4" />
+                        </div>
+                        <div>
+                          <span className="text-[10px] uppercase font-bold tracking-wider text-amber-400 block">
+                            Storage Location
+                          </span>
+                          <div className="flex flex-wrap items-center gap-2 font-mono font-black text-xs text-white mt-0.5">
+                            {loc.section && (
+                              <span className="px-2 py-0.5 rounded bg-slate-900 border border-amber-500/40 text-amber-300">
+                                SECTION: <strong className="text-white font-bold">{loc.section}</strong>
+                              </span>
+                            )}
+                            {loc.rack && (
+                              <span className="px-2 py-0.5 rounded bg-slate-900 border border-amber-500/40 text-amber-300">
+                                RACK: <strong className="text-white font-bold">{loc.rack}</strong>
+                              </span>
+                            )}
+                            {loc.shelf && (
+                              <span className="px-2 py-0.5 rounded bg-slate-900 border border-amber-500/40 text-amber-300">
+                                SHELF: <strong className="text-white font-bold">{loc.shelf}</strong>
+                              </span>
+                            )}
+                            {!loc.section && !loc.rack && !loc.shelf && (
+                              <span className="text-slate-200">{loc.raw}</span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })()}
 
                   {/* Description / Specifications */}
                   {previewProduct.description && (

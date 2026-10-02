@@ -299,3 +299,27 @@ describe("Smart Electronics Relevance Scoring & Ranking", () => {
   });
 });
 
+describe("Warehouse Storage Location Extraction (Section & Rack)", () => {
+  it("extracts Section and Rack from LKDIS00015 format note", async () => {
+    const { extractStorageLocation } = await import("../src/lib/formatters");
+    const loc = extractStorageLocation("LKDIS00015\n\nSECTION: 3 RACK: E", "");
+    assert.ok(loc !== null);
+    assert.equal(loc?.section, "3");
+    assert.equal(loc?.rack, "E");
+  });
+
+  it("extracts Section and Rack with multiple spaces", async () => {
+    const { extractStorageLocation } = await import("../src/lib/formatters");
+    const loc = extractStorageLocation("SECTION: 6   RACK: C", "");
+    assert.ok(loc !== null);
+    assert.equal(loc?.section, "6");
+    assert.equal(loc?.rack, "C");
+  });
+
+  it("returns null when no storage location is present", async () => {
+    const { extractStorageLocation } = await import("../src/lib/formatters");
+    const loc = extractStorageLocation(null, "Just a standard product description without location");
+    assert.equal(loc, null);
+  });
+});
+

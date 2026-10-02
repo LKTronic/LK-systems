@@ -38,6 +38,7 @@ export async function GET(request: NextRequest) {
         externalUrl: true,
         referenceLink: true,
         description: true,
+        additionalNote: true,
         stockStatus: true,
         shippingClass: true,
         status: true,

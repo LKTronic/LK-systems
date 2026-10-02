@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { AppLayout } from "@/components/AppLayout";
-import { formatDateDMY, formatLKR } from "@/lib/formatters";
+import { formatDateDMY, formatLKR, extractStorageLocation } from "@/lib/formatters";
 import { getShopProductFromIndexedDb } from "@/lib/offlineShopDb";
 import {
   ArrowLeft,
@@ -27,6 +27,7 @@ import {
   History,
   RotateCcw,
   Globe,
+  MapPin,
 } from "lucide-react";
 
 interface PriceHistoryEntry {
@@ -510,6 +511,48 @@ export default function ProductDetailPage({
                     )}
                   </div>
                 </div>
+
+                {/* Storage Warehouse Location (Section & Rack) - Shown before description for SHOP user */}
+                {isShop && (() => {
+                  const loc = extractStorageLocation(product.additionalNote, product.description);
+                  if (!loc) return null;
+                  return (
+                    <div className="pt-2 border-t border-slate-800">
+                      <div className="p-3.5 rounded-xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-between gap-3">
+                        <div className="flex items-center gap-3">
+                          <div className="p-2 rounded-lg bg-amber-500/20 text-amber-300 font-bold shrink-0">
+                            <MapPin className="w-4 h-4" />
+                          </div>
+                          <div>
+                            <span className="text-[10px] uppercase font-bold tracking-wider text-amber-400 block">
+                              Storage Warehouse Location
+                            </span>
+                            <div className="flex flex-wrap items-center gap-2.5 font-mono font-black text-sm text-white mt-1">
+                              {loc.section && (
+                                <span className="px-2.5 py-1 rounded-lg bg-slate-900 border border-amber-500/40 text-amber-300">
+                                  SECTION: <strong className="text-white font-bold">{loc.section}</strong>
+                                </span>
+                              )}
+                              {loc.rack && (
+                                <span className="px-2.5 py-1 rounded-lg bg-slate-900 border border-amber-500/40 text-amber-300">
+                                  RACK: <strong className="text-white font-bold">{loc.rack}</strong>
+                                </span>
+                              )}
+                              {loc.shelf && (
+                                <span className="px-2.5 py-1 rounded-lg bg-slate-900 border border-amber-500/40 text-amber-300">
+                                  SHELF: <strong className="text-white font-bold">{loc.shelf}</strong>
+                                </span>
+                              )}
+                              {!loc.section && !loc.rack && !loc.shelf && (
+                                <span className="text-slate-200">{loc.raw}</span>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })()}
 
                 {product.description && (
                   <div className="pt-2 border-t border-slate-800">

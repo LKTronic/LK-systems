@@ -151,6 +151,7 @@ export async function syncWebStoreBatch(options: {
           // Web site permalink used as reference link
           const permalink = item.permalink || `${storeUrl}/?post_type=product&p=${item.id}`;
           const imageUrl = item.images?.[0]?.src || null;
+          const shortDescClean = cleanHtml(item.short_description || "").trim();
           const description = cleanHtml(item.description || item.short_description || "");
           const weightNum = item.weight ? parseFloat(item.weight) : null;
 
@@ -235,6 +236,7 @@ export async function syncWebStoreBatch(options: {
                 imagePath: imageUrl || existing.imagePath,
                 source: "ONLINE_WEB",
                 description: description || existing.description,
+                ...(shortDescClean ? { additionalNote: shortDescClean } : {}),
                 ...(existing.status !== "PENDING" ? { priceUpdatedAt: new Date() } : {}),
                 ...(primaryCategoryId ? { categoryId: primaryCategoryId } : {}),
                 ...(categoryNamesJson ? { categoryNames: categoryNamesJson } : {}),
@@ -258,6 +260,7 @@ export async function syncWebStoreBatch(options: {
                   quantity: qty,
                   weight: weightNum !== null && !isNaN(weightNum) ? weightNum : null,
                   description: description || null,
+                  additionalNote: shortDescClean || null,
                   referenceLink: permalink, // Product link on web site
                   imagePath: imageUrl,
                   source: "ONLINE_WEB",
