@@ -35,6 +35,8 @@ import {
   ExternalLink,
   ShieldAlert,
   Sparkles,
+  LayoutGrid,
+  List,
 } from "lucide-react";
 
 interface Product {
@@ -100,8 +102,25 @@ export default function ProductsPage() {
   const [users, setUsers] = useState<{ id: number; name: string; username: string }[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isReady, setIsReady] = useState(false);
+  const [viewMode, setViewMode] = useState<"list" | "grid">("list");
   const isInitialSearch = useRef(true);
   const hasRestoredScroll = useRef(false);
+
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem("pms_product_view_mode");
+      if (saved === "list" || saved === "grid") {
+        setViewMode(saved);
+      }
+    } catch (e) {}
+  }, []);
+
+  const handleToggleViewMode = (mode: "list" | "grid") => {
+    setViewMode(mode);
+    try {
+      localStorage.setItem("pms_product_view_mode", mode);
+    } catch (e) {}
+  };
 
   const saveScrollState = (productId?: number) => {
     try {
@@ -961,152 +980,423 @@ export default function ProductsPage() {
             >
               Reset
             </button>
+
+            {/* View Mode Toggle: List (Table) vs Grid (Cards) */}
+            <div className="flex items-center gap-1 p-1 bg-slate-950 border border-slate-800 rounded-xl sm:ml-auto">
+              <button
+                type="button"
+                onClick={() => handleToggleViewMode("list")}
+                className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer ${
+                  viewMode === "list"
+                    ? "bg-indigo-600 text-white shadow-md shadow-indigo-600/25"
+                    : "text-slate-400 hover:text-slate-200 hover:bg-slate-800/60"
+                }`}
+                title="List View (Table)"
+              >
+                <List className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline text-[11px]">List</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => handleToggleViewMode("grid")}
+                className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer ${
+                  viewMode === "grid"
+                    ? "bg-indigo-600 text-white shadow-md shadow-indigo-600/25"
+                    : "text-slate-400 hover:text-slate-200 hover:bg-slate-800/60"
+                }`}
+                title="Grid View (Cards)"
+              >
+                <LayoutGrid className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline text-[11px]">Grid</span>
+              </button>
+            </div>
           </form>
         </div>
 
-        {/* Product Table - Table layout:
-            Sku / Source | Name | Category | Status | Qty / Stock | Price (LKR) | Date | Image preview | Actions */}
-        <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-xl">
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs text-slate-300">
-              <thead className="bg-slate-950/80 text-slate-400 uppercase font-semibold text-[10px] tracking-wider border-b border-slate-800">
-                <tr>
-                  <th className="px-2.5 py-3 w-[110px]">Sku / Source</th>
-                  <th className="px-3 py-3 min-w-[180px] max-w-[280px]">Name</th>
-                  {!isShop && <th className="px-2 py-3 w-[120px]">Category</th>}
-                  {!isShop && <th className="px-2 py-3 text-center w-[105px]">Status</th>}
-                  <th className="px-2 py-3 text-center w-[90px]">Qty / Stock</th>
-                  <th className="px-2.5 py-3 text-right w-[105px]">Price (LKR)</th>
-                  <th className="px-2 py-3 text-center w-[95px]">Date</th>
-                  <th className={`px-1.5 py-3 text-center ${isShop ? "w-[84px]" : "w-[52px]"}`}>Image</th>
-                  <th className={`px-2.5 py-3 text-right ${isShop ? "w-[130px]" : "w-[85px]"}`}>Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-800/60">
-                {isLoading ? (
-                  <tr>
-                    <td colSpan={isShop ? 7 : 9} className="py-16 text-center">
-                      <Loader2 className="w-6 h-6 animate-spin text-indigo-500 mx-auto" />
-                      <p className="text-xs text-slate-400 mt-2">Loading products...</p>
-                    </td>
-                  </tr>
-                ) : products.length === 0 ? (
-                  <tr>
-                    <td colSpan={isShop ? 7 : 9} className="py-16 text-center text-slate-400">
-                      No products found matching the criteria.
-                    </td>
-                  </tr>
-                ) : (
-                  products.map((p) => {
-                    const skuDisplay = p.sku ? p.sku : "—";
-                    const nameDisplay = p.modelAndName || p.productName;
-                    const isOnlineWeb =
-                      p.source === "ONLINE_WEB" ||
-                      p.source === "LK_TRONICS" ||
-                      Boolean(p.externalId);
+        {/* Product Display: Grid View vs List View */}
+        {viewMode === "grid" ? (
+          <div className="space-y-6">
+            {isLoading ? (
+              <div className="bg-slate-900 border border-slate-800 rounded-2xl p-16 text-center shadow-xl">
+                <Loader2 className="w-8 h-8 animate-spin text-indigo-500 mx-auto" />
+                <p className="text-xs text-slate-400 mt-2">Loading products...</p>
+              </div>
+            ) : products.length === 0 ? (
+              <div className="bg-slate-900 border border-slate-800 rounded-2xl p-16 text-center text-slate-400 shadow-xl">
+                No products found matching the criteria.
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
+                {products.map((p) => {
+                  const skuDisplay = p.sku ? p.sku : "—";
+                  const nameDisplay = p.modelAndName || p.productName;
+                  const isOnlineWeb =
+                    p.source === "ONLINE_WEB" ||
+                    p.source === "LK_TRONICS" ||
+                    Boolean(p.externalId);
 
-                    return (
-                      <tr
-                        key={p.id}
-                        id={`product-row-${p.id}`}
-                        onClick={() => {
-                          saveScrollState(p.id);
-                          router.push(`/products/${p.id}`);
-                        }}
-                        className={`cursor-pointer transition-colors group ${
-                          isOnlineWeb
-                            ? "border-l-4 border-l-orange-500 bg-orange-950/10 hover:bg-orange-950/20"
-                            : "border-l-4 border-l-blue-500/50 hover:bg-slate-800/60"
-                        }`}
-                        title="Click row to view product details"
-                      >
-                        {/* 1. Sku / Source */}
-                        <td className="px-2.5 py-2 font-mono whitespace-nowrap">
-                          <div className="flex flex-col gap-0.5 items-start">
+                  return (
+                    <div
+                      key={p.id}
+                      id={`product-card-${p.id}`}
+                      onClick={() => {
+                        saveScrollState(p.id);
+                        router.push(`/products/${p.id}`);
+                      }}
+                      className={`bg-slate-900 border rounded-2xl p-3.5 flex flex-col justify-between transition-all duration-200 shadow-lg hover:shadow-indigo-950/40 group cursor-pointer relative overflow-hidden ${
+                        isOnlineWeb
+                          ? "border-orange-500/30 hover:border-orange-400/70"
+                          : "border-slate-800 hover:border-indigo-500/60"
+                      }`}
+                    >
+                      <div>
+                        {/* Header: SKU / Source Badge */}
+                        <div className="flex items-center justify-between gap-1.5 mb-2.5">
+                          <div className="flex items-center gap-1.5 overflow-hidden">
                             <span
-                              className={`font-bold tracking-wide text-xs ${
+                              className={`font-mono font-bold text-xs truncate ${
                                 isOnlineWeb ? "text-orange-400" : "text-blue-400"
                               }`}
                             >
                               {skuDisplay}
                             </span>
                             {isOnlineWeb ? (
-                              <div className="flex flex-col gap-0.5 items-start">
-                                <span
-                                  className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[9px] font-bold bg-orange-500/15 text-orange-300 border border-orange-500/30 shadow-sm"
-                                  title="Product synced from Online Web (lk-tronics.com)"
-                                >
-                                  <Globe className="w-2.5 h-2.5 text-orange-400 shrink-0" />
-                                  Online Web
-                                </span>
-                                {(p.supplierId || (p.supplier && p.supplier.name) || p.additionalNote?.includes("PMS Updated")) && (
-                                  <span
-                                    className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[8.5px] font-bold bg-indigo-500/20 text-indigo-300 border border-indigo-500/35 shadow-sm"
-                                    title={`Price updated via PMS ${p.supplier ? `(Supplier: ${p.supplier.name})` : ""}`}
-                                  >
-                                    PMS Updated
-                                  </span>
-                                )}
-                              </div>
+                              <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[8.5px] font-bold bg-orange-500/15 text-orange-300 border border-orange-500/30 shrink-0">
+                                <Globe className="w-2.5 h-2.5" />
+                                Web
+                              </span>
                             ) : (
-                              <span
-                                className="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-semibold bg-blue-500/15 text-blue-300 border border-blue-500/30"
-                                title="PMS local product"
-                              >
+                              <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[8.5px] font-semibold bg-blue-500/15 text-blue-300 border border-blue-500/30 shrink-0">
                                 PMS
                               </span>
                             )}
                           </div>
-                        </td>
 
-                        {/* 2. Name & Supply / Special Note */}
-                        <td className="px-3 py-2">
-                          <div className="font-semibold text-white group-hover:text-indigo-300 transition-colors max-w-[220px] lg:max-w-[280px] truncate text-xs">
-                            {nameDisplay}
-                          </div>
-                          {(p.referenceLink || p.externalUrl) && (
-                            <div className="mt-0.5">
-                              <a
-                                href={p.referenceLink || p.externalUrl!}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                onClick={(e) => e.stopPropagation()}
-                                className="inline-flex items-center gap-1 text-[10px] text-violet-400 hover:text-violet-300 hover:underline transition-colors"
-                                title="Open product on web site"
+                          {!isShop && <div>{getStatusBadge(p.status)}</div>}
+                        </div>
+
+                        {/* Image */}
+                        <div className="w-full h-40 bg-slate-950 rounded-xl overflow-hidden flex items-center justify-center border border-slate-800/80 relative group/img">
+                          {p.imagePath ? (
+                            <>
+                              <img
+                                src={p.imagePath}
+                                alt={nameDisplay}
+                                referrerPolicy="no-referrer"
+                                className="w-full h-full object-contain p-2 group-hover/img:scale-105 transition-transform duration-300"
+                              />
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setPreviewImage(p.imagePath!);
+                                }}
+                                className="absolute bottom-1.5 right-1.5 p-1 rounded-lg bg-slate-900/80 backdrop-blur-sm border border-slate-700 text-slate-300 hover:text-white opacity-0 group-hover/img:opacity-100 transition-opacity cursor-pointer"
+                                title="Zoom Image"
                               >
-                                <span>View on Web Site</span>
-                                <ExternalLink className="w-3 h-3 text-violet-400 shrink-0" />
-                              </a>
+                                <ImageIcon className="w-3.5 h-3.5" />
+                              </button>
+                            </>
+                          ) : (
+                            <div className="text-slate-600 flex flex-col items-center gap-1">
+                              <ImageIcon className="w-8 h-8 stroke-1" />
+                              <span className="text-[10px] text-slate-600">No image</span>
                             </div>
                           )}
-                          {(p.supplierNote || p.additionalNote) && (
-                            <div className="flex items-center gap-1.5 mt-0.5 text-[10px] text-amber-300/90 max-w-[220px] lg:max-w-[280px] truncate font-normal">
-                              <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[8.5px] uppercase font-bold tracking-wider bg-amber-500/15 text-amber-400 border border-amber-500/25 shrink-0">
-                                {p.supplierNote ? "Note" : "Note"}
-                              </span>
-                              <span className="truncate text-slate-300" title={p.supplierNote || p.additionalNote || ""}>
-                                {p.supplierNote || p.additionalNote}
-                              </span>
-                            </div>
-                          )}
-                        </td>
+                        </div>
 
-                        {/* 3. Category (Hidden for SHOP) */}
-                        {!isShop && (
-                          <td className="px-2 py-2">
-                            {(() => {
-                              let catList: string[] = [];
-                              if (p.categoryNames) {
-                                try {
-                                  const parsed = JSON.parse(p.categoryNames);
-                                  if (Array.isArray(parsed)) {
-                                    catList = parsed.filter(Boolean);
-                                  }
-                                } catch {
-                                  catList = p.categoryNames
-                                    .split(",")
-                                    .map((s) => s.trim())
-                                    .filter(Boolean);
+                        {/* Title */}
+                        <h4
+                          className="font-semibold text-white group-hover:text-indigo-300 transition-colors text-xs line-clamp-2 leading-snug mt-2.5 min-h-[32px]"
+                          title={nameDisplay}
+                        >
+                          {nameDisplay}
+                        </h4>
+
+                        {/* Category & Stock Tag */}
+                        <div className="flex flex-wrap items-center gap-1.5 mt-2">
+                          {p.shippingClass === "over-the-sea" || p.shippingClass === "Over the Sea" ? (
+                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[9px] font-bold bg-cyan-950/80 text-cyan-300 border border-cyan-500/40">
+                              <span>🚢</span>
+                              <span>Over Sea</span>
+                            </span>
+                          ) : p.stockStatus === "outofstock" || p.quantity === 0 ? (
+                            <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold bg-rose-500/15 text-rose-400 border border-rose-500/30">
+                              Out of Stock
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center px-1.5 py-0.5 rounded-full font-mono text-[9.5px] font-bold bg-slate-800 text-slate-300 border border-slate-700">
+                              Qty: {p.quantity}
+                            </span>
+                          )}
+
+                          {!isShop && (p.categoryNames || p.category?.name) && (
+                            <span className="px-1.5 py-0.5 rounded text-[9px] font-medium bg-slate-800 text-slate-300 border border-slate-700 truncate max-w-[120px]">
+                              {p.category?.name || "Category"}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Bottom Price & Action Footer */}
+                      <div className="mt-3.5 pt-3 border-t border-slate-800/80 flex items-center justify-between gap-2">
+                        <div>
+                          <div className="text-[9px] text-slate-400 uppercase tracking-wider font-semibold">Price</div>
+                          <div className="text-xs font-bold text-emerald-400">
+                            {p.status === "NOT_REQUESTED" ? (
+                              <span className="text-sky-400 text-[10px]">Not Req</span>
+                            ) : p.status === "PRICE_NOT_AVAILABLE" || Number(p.priceLKR || p.price) === 0 ? (
+                              <span className="text-rose-400 text-[10px]">Not Available</span>
+                            ) : (
+                              formatLKR(p.priceLKR || p.price)
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Actions */}
+                        <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+                          {(isShop || canRequestPrice(p)) && (
+                            <button
+                              onClick={() => handleRequestPrice(p.id, nameDisplay)}
+                              disabled={requestingPriceId === p.id}
+                              className={`px-2 py-1 rounded-lg border text-[11px] font-semibold transition-all flex items-center gap-1 ${
+                                p.status === "PENDING"
+                                  ? "bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 border-amber-500/40"
+                                  : "bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 border-amber-500/30"
+                              } ${requestingPriceId === p.id ? "opacity-60 cursor-not-allowed" : "cursor-pointer"}`}
+                              title="Request updated price quote"
+                            >
+                              {requestingPriceId === p.id ? (
+                                <Loader2 className="w-3 h-3 animate-spin" />
+                              ) : (
+                                <RotateCcw className="w-3 h-3" />
+                              )}
+                              <span>{isShop ? "Request Price" : "Quote"}</span>
+                            </button>
+                          )}
+
+                          {!isShop && (
+                            <Link
+                              href={`/products/${p.id}/edit`}
+                              onClick={() => saveScrollState(p.id)}
+                              className="p-1.5 rounded-lg text-slate-400 hover:text-amber-400 hover:bg-slate-800 transition-colors"
+                              title="Edit Product"
+                            >
+                              <Edit2 className="w-3.5 h-3.5" />
+                            </Link>
+                          )}
+
+                          {!isShop && (() => {
+                            const isPmsModified = Boolean(
+                              p.supplierId ||
+                              (p.supplier && p.supplier.name) ||
+                              p.additionalNote?.includes("PMS Updated") ||
+                              p.status === "PENDING"
+                            );
+
+                            if (isOnlineWeb && !isPmsModified) return null;
+
+                            return (
+                              <button
+                                onClick={() => handleDelete(p.id, nameDisplay, isOnlineWeb)}
+                                className={`p-1.5 rounded-lg transition-colors cursor-pointer ${
+                                  isOnlineWeb
+                                    ? "text-amber-400 hover:text-amber-300 hover:bg-amber-950/40"
+                                    : "text-slate-400 hover:text-rose-400 hover:bg-slate-800"
+                                }`}
+                                title={isOnlineWeb ? "Revert to web" : "Delete Product"}
+                              >
+                                {isOnlineWeb ? (
+                                  <RotateCcw className="w-3.5 h-3.5" />
+                                ) : (
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                )}
+                              </button>
+                            );
+                          })()}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            {/* Shared Pagination for Grid */}
+            <div className="p-4 bg-slate-900 border border-slate-800 rounded-2xl flex flex-wrap items-center justify-between gap-4 text-xs text-slate-400 shadow-xl">
+              <div>
+                Showing {products.length > 0 ? (page - 1) * limit + 1 : 0} to{" "}
+                {Math.min(page * limit, total)} of {total} items
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  disabled={page <= 1}
+                  onClick={() => {
+                    saveScrollPosToTop();
+                    setPage((p) => Math.max(1, p - 1));
+                  }}
+                  className="p-2 rounded-lg border border-slate-800 text-slate-300 disabled:text-slate-600 hover:bg-slate-800 disabled:hover:bg-transparent transition-all"
+                >
+                  <ChevronLeft className="w-4 h-4" />
+                </button>
+                <span className="font-semibold text-white px-2">
+                  Page {page} of {totalPages || 1}
+                </span>
+                <button
+                  disabled={page >= totalPages}
+                  onClick={() => {
+                    saveScrollPosToTop();
+                    setPage((p) => Math.min(totalPages, p + 1));
+                  }}
+                  className="p-2 rounded-lg border border-slate-800 text-slate-300 disabled:text-slate-600 hover:bg-slate-800 disabled:hover:bg-transparent transition-all"
+                >
+                  <ChevronRight className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+          </div>
+        ) : (
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-xl">
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs text-slate-300">
+                <thead className="bg-slate-950/80 text-slate-400 uppercase font-semibold text-[10px] tracking-wider border-b border-slate-800">
+                  <tr>
+                    <th className="px-2.5 py-3 w-[110px]">Sku / Source</th>
+                    <th className="px-3 py-3 min-w-[180px] max-w-[280px]">Name</th>
+                    {!isShop && <th className="px-2 py-3 w-[120px]">Category</th>}
+                    {!isShop && <th className="px-2 py-3 text-center w-[105px]">Status</th>}
+                    <th className="px-2 py-3 text-center w-[90px]">Qty / Stock</th>
+                    <th className="px-2.5 py-3 text-right w-[105px]">Price (LKR)</th>
+                    <th className="px-2 py-3 text-center w-[95px]">Date</th>
+                    <th className={`px-1.5 py-3 text-center ${isShop ? "w-[84px]" : "w-[52px]"}`}>Image</th>
+                    <th className={`px-2.5 py-3 text-right ${isShop ? "w-[130px]" : "w-[85px]"}`}>Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-800/60">
+                  {isLoading ? (
+                    <tr>
+                      <td colSpan={isShop ? 7 : 9} className="py-16 text-center">
+                        <Loader2 className="w-6 h-6 animate-spin text-indigo-500 mx-auto" />
+                        <p className="text-xs text-slate-400 mt-2">Loading products...</p>
+                      </td>
+                    </tr>
+                  ) : products.length === 0 ? (
+                    <tr>
+                      <td colSpan={isShop ? 7 : 9} className="py-16 text-center text-slate-400">
+                        No products found matching the criteria.
+                      </td>
+                    </tr>
+                  ) : (
+                    products.map((p) => {
+                      const skuDisplay = p.sku ? p.sku : "—";
+                      const nameDisplay = p.modelAndName || p.productName;
+                      const isOnlineWeb =
+                        p.source === "ONLINE_WEB" ||
+                        p.source === "LK_TRONICS" ||
+                        Boolean(p.externalId);
+
+                      return (
+                        <tr
+                          key={p.id}
+                          id={`product-row-${p.id}`}
+                          onClick={() => {
+                            saveScrollState(p.id);
+                            router.push(`/products/${p.id}`);
+                          }}
+                          className={`cursor-pointer transition-colors group ${
+                            isOnlineWeb
+                              ? "border-l-4 border-l-orange-500 bg-orange-950/10 hover:bg-orange-950/20"
+                              : "border-l-4 border-l-blue-500/50 hover:bg-slate-800/60"
+                          }`}
+                          title="Click row to view product details"
+                        >
+                          {/* 1. Sku / Source */}
+                          <td className="px-2.5 py-2 font-mono whitespace-nowrap">
+                            <div className="flex flex-col gap-0.5 items-start">
+                              <span
+                                className={`font-bold tracking-wide text-xs ${
+                                  isOnlineWeb ? "text-orange-400" : "text-blue-400"
+                                }`}
+                              >
+                                {skuDisplay}
+                              </span>
+                              {isOnlineWeb ? (
+                                <div className="flex flex-col gap-0.5 items-start">
+                                  <span
+                                    className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[9px] font-bold bg-orange-500/15 text-orange-300 border border-orange-500/30 shadow-sm"
+                                    title="Product synced from Online Web (lk-tronics.com)"
+                                  >
+                                    <Globe className="w-2.5 h-2.5 text-orange-400 shrink-0" />
+                                    Online Web
+                                  </span>
+                                  {(p.supplierId || (p.supplier && p.supplier.name) || p.additionalNote?.includes("PMS Updated")) && (
+                                    <span
+                                      className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[8.5px] font-bold bg-indigo-500/20 text-indigo-300 border border-indigo-500/35 shadow-sm"
+                                      title={`Price updated via PMS ${p.supplier ? `(Supplier: ${p.supplier.name})` : ""}`}
+                                    >
+                                      PMS Updated
+                                    </span>
+                                  )}
+                                </div>
+                              ) : (
+                                <span
+                                  className="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-semibold bg-blue-500/15 text-blue-300 border border-blue-500/30"
+                                  title="PMS local product"
+                                >
+                                  PMS
+                                </span>
+                              )}
+                            </div>
+                          </td>
+
+                          {/* 2. Name & Supply / Special Note */}
+                          <td className="px-3 py-2">
+                            <div className="font-semibold text-white group-hover:text-indigo-300 transition-colors max-w-[220px] lg:max-w-[280px] truncate text-xs">
+                              {nameDisplay}
+                            </div>
+                            {(p.referenceLink || p.externalUrl) && (
+                              <div className="mt-0.5">
+                                <a
+                                  href={p.referenceLink || p.externalUrl!}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  onClick={(e) => e.stopPropagation()}
+                                  className="inline-flex items-center gap-1 text-[10px] text-violet-400 hover:text-violet-300 hover:underline transition-colors"
+                                  title="Open product on web site"
+                                >
+                                  <span>View on Web Site</span>
+                                  <ExternalLink className="w-3 h-3 text-violet-400 shrink-0" />
+                                </a>
+                              </div>
+                            )}
+                            {(p.supplierNote || p.additionalNote) && (
+                              <div className="flex items-center gap-1.5 mt-0.5 text-[10px] text-amber-300/90 max-w-[220px] lg:max-w-[280px] truncate font-normal">
+                                <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[8.5px] uppercase font-bold tracking-wider bg-amber-500/15 text-amber-400 border border-amber-500/25 shrink-0">
+                                  {p.supplierNote ? "Note" : "Note"}
+                                </span>
+                                <span className="truncate text-slate-300" title={p.supplierNote || p.additionalNote || ""}>
+                                  {p.supplierNote || p.additionalNote}
+                                </span>
+                              </div>
+                            )}
+                          </td>
+
+                          {/* 3. Category (Hidden for SHOP) */}
+                          {!isShop && (
+                            <td className="px-2 py-2">
+                              {(() => {
+                                let catList: string[] = [];
+                                if (p.categoryNames) {
+                                  try {
+                                    const parsed = JSON.parse(p.categoryNames);
+                                    if (Array.isArray(parsed)) {
+                                      catList = parsed.filter(Boolean);
+                                    }
+                                  } catch {
+                                    catList = p.categoryNames
+                                      .split(",")
+                                      .map((s) => s.trim())
+                                      .filter(Boolean);
                                 }
                               }
                               if (catList.length === 0 && p.category?.name) {
@@ -1385,6 +1675,7 @@ export default function ProductsPage() {
             </div>
           </div>
         </div>
+      )}
       </div>
 
       {/* Admin Setting: Price Validity Period Modal */}
