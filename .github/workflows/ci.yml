@@ -1,10 +1,13 @@
-name: CI - Test & Build
+name: CI - Test & Auto-Promote to Main
 
 on:
   push:
-    branches: [ main, master ]
+    branches: [ master, main ]
   pull_request:
-    branches: [ main, master ]
+    branches: [ master, main ]
+
+permissions:
+  contents: write
 
 jobs:
   test-and-build:
@@ -40,3 +43,27 @@ jobs:
 
       - name: Validate Next.js Production Build
         run: npm run build
+
+  promote-to-main:
+    name: Promote Master to Main
+    needs: test-and-build
+    if: github.ref == 'refs/heads/master' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Configure Git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Fast-forward Main to Master and Push
+        run: |
+          git checkout main
+          git merge --ff-only origin/master
+          git push origin main
