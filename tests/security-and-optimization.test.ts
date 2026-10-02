@@ -1,5 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
+import { cleanHtml } from "../src/lib/webStoreAutoSync";
 
 describe("Security & Role Authorization Rules", () => {
   function canDeleteProduct(userRole: string, userId: number, product: { createdBy: number; status: string; isOnlineWeb: boolean }) {
@@ -208,6 +209,26 @@ describe("SHOP User Authorization & Access Control", () => {
     assert.equal(isRouteAllowedForRole("STAFF", "/supply"), true);
     assert.equal(isRouteAllowedForRole("ADMIN", "/products/pending-download"), true);
     assert.equal(isRouteAllowedForRole("STAFF", "/products/pending-download"), true);
+  });
+});
+
+describe("Web Store Description HTML Cleaning & Line Breaks", () => {
+  it("preserves paragraphs, line breaks, and specifications without flattening into single line", () => {
+    const rawHtml = `<p>STM32F103C6T6 ARM Minimum System Board Embedded Microcomputer Core Module</p>
+<p>This is STM32F103C6T6 Development Board Minimum System STM32 ARM Core Board.</p>
+<p><strong>Specification:</strong></p>
+<ul>
+<li>Onboard Mini USB interface</li>
+<li>72MHz work frequency</li>
+<li>32KB flash memory, 20K SRAM</li>
+</ul>`;
+
+    const cleaned = cleanHtml(rawHtml);
+    assert.ok(cleaned.includes("STM32F103C6T6 ARM Minimum System Board Embedded Microcomputer Core Module\n\n"));
+    assert.ok(cleaned.includes("Specification:"));
+    assert.ok(cleaned.includes("Onboard Mini USB interface\n72MHz work frequency\n32KB flash memory, 20K SRAM"));
+    assert.equal(cleaned.includes("<p>"), false);
+    assert.equal(cleaned.includes("<li>"), false);
   });
 });
 

@@ -1,19 +1,33 @@
 import { prisma } from "@/lib/prisma";
 import { getNextRecordNo, withSequenceLock } from "@/lib/recordNo";
 
-function cleanHtml(html: string): string {
+export function cleanHtml(html: string): string {
   if (!html) return "";
   return html
     .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, "")
     .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, "")
-    .replace(/<[^>]*>/g, " ")
+    .replace(/<br\s*[\/]?>/gi, "\n")
+    .replace(/<\/(p|div|tr|h[1-6]|blockquote)>\s*/gi, "\n\n")
+    .replace(/<\/li>\s*<li[^>]*>/gi, "\n")
+    .replace(/<li[^>]*>/gi, "\n")
+    .replace(/<\/(li|ul|ol|table|thead|tbody)>/gi, "")
+    .replace(/<[^>]*>/g, "")
     .replace(/&nbsp;/gi, " ")
     .replace(/&amp;/gi, "&")
     .replace(/&lt;/gi, "<")
     .replace(/&gt;/gi, ">")
     .replace(/&quot;/gi, '"')
-    .replace(/&#039;/gi, "'")
-    .replace(/\s+/g, " ")
+    .replace(/&#039;|&#39;|&apos;/gi, "'")
+    .replace(/&bull;/gi, "•")
+    .replace(/&ndash;|&#8211;/gi, "–")
+    .replace(/&mdash;|&#8212;/gi, "—")
+    .replace(/&ldquo;|&#8220;|&rdquo;|&#8221;/gi, '"')
+    .replace(/&lsquo;|&#8216;|&rsquo;|&#8217;/gi, "'")
+    .replace(/&deg;/gi, "°")
+    .replace(/[^\S\r\n]+/g, " ")
+    .replace(/^[ \t]+/gm, "")
+    .replace(/[ \t]+$/gm, "")
+    .replace(/\n{3,}/g, "\n\n")
     .trim();
 }
 
