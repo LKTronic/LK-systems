@@ -4,6 +4,11 @@
  * and viewing product specifications work 100% offline without network connection.
  */
 
+import {
+  scoreProductRelevance,
+  BASELINE_ELECTRONICS_VOCABULARY,
+} from "./fuzzySearch";
+
 const DB_NAME = "PMS_SHOP_OFFLINE_DB";
 const DB_VERSION = 1;
 const STORE_PRODUCTS = "products";
@@ -338,18 +343,18 @@ export async function searchShopIndexedDb(params: {
         }
       }
 
-      // Multi-word keyword search
+      // Smart Weighted Relevance & Fuzzy Search for Electronics
       if (search) {
-        const keywords = search.split(/\s+/).filter(Boolean);
-        items = items.filter((p) => {
-          const skuText = (p.sku || p.recordNo || p.referenceNo || "").toLowerCase();
-          const nameText = (p.modelAndName || p.productName || "").toLowerCase();
-          const descText = (p.description || "").toLowerCase();
-          const catText = (p.categoryNames || p.category?.name || "").toLowerCase();
-
-          const combined = `${skuText} ${nameText} ${descText} ${catText}`;
-          return keywords.every((kw) => combined.includes(kw));
-        });
+        const scoredItems: { product: ShopOfflineProduct; score: number }[] = [];
+        for (const p of items) {
+          const score = scoreProductRelevance(search, p, BASELINE_ELECTRONICS_VOCABULARY);
+          if (score > 0) {
+            scoredItems.push({ product: p, score });
+          }
+        }
+        // Sort descending: closest/best matches appear first
+        scoredItems.sort((a, b) => b.score - a.score);
+        items = scoredItems.map((s) => s.product);
       }
 
       const total = items.length;

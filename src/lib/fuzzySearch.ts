@@ -2,7 +2,7 @@
 // Supports transpositions (pluse -> pulse), insertions (pulsee -> pulse),
 // deletions (puse -> pulse), and substitutions (senser -> sensor).
 
-const BASELINE_ELECTRONICS_VOCABULARY = [
+export const BASELINE_ELECTRONICS_VOCABULARY = [
   "pulse", "sensor", "arduino", "module", "relay", "capacitor", "resistor",
   "battery", "display", "adapter", "switch", "transistor", "transformer",
   "controller", "converter", "voltage", "current", "cable", "motor", "driver",
@@ -132,6 +132,130 @@ export function getFuzzySuggestion(
     correctedQuery: correctedTokens.join(" "),
     hasCorrection,
   };
+}
+
+export interface ScorableProduct {
+  id?: number;
+  productName: string;
+  modelAndName?: string | null;
+  sku?: string | null;
+  recordNo?: string | null;
+  referenceNo?: string | null;
+  categoryNames?: string | null;
+  category?: { id?: number; name: string } | null;
+  description?: string | null;
+  supplierNote?: string | null;
+  additionalNote?: string | null;
+  quantity?: number;
+}
+
+/**
+ * Calculates a weighted relevance score for an electronic product against a search query.
+ * Returns 0 if the product does not match, or a positive integer score where higher = better match.
+ */
+export function scoreProductRelevance(
+  query: string,
+  product: ScorableProduct,
+  vocabulary?: Iterable<string>
+): number {
+  const cleanQuery = query.trim().toLowerCase();
+  if (!cleanQuery) return 1;
+
+  const sku = (product.sku || "").trim().toLowerCase();
+  const recordNo = (product.recordNo || "").trim().toLowerCase();
+  const refNo = (product.referenceNo || "").trim().toLowerCase();
+  const name = (product.modelAndName || product.productName || "").trim().toLowerCase();
+  const rawName = (product.productName || "").trim().toLowerCase();
+  const desc = (product.description || "").trim().toLowerCase();
+  const cat = (product.categoryNames || product.category?.name || "").trim().toLowerCase();
+  const notes = `${product.supplierNote || ""} ${product.additionalNote || ""}`.trim().toLowerCase();
+
+  let score = 0;
+
+  // 1. Exact SKU / Reference Match (Highest Priority: +150)
+  if (sku === cleanQuery || recordNo === cleanQuery || refNo === cleanQuery) {
+    score += 150;
+  } else if (sku.startsWith(cleanQuery) || recordNo.startsWith(cleanQuery)) {
+    score += 90;
+  } else if (sku.includes(cleanQuery) || recordNo.includes(cleanQuery)) {
+    score += 70;
+  }
+
+  // Compact alphanumerics check (e.g. "e2bm12" matches "e2b-m12ks04")
+  const compactQuery = cleanQuery.replace(/[^a-z0-9]/g, "");
+  const compactSku = sku.replace(/[^a-z0-9]/g, "");
+  if (compactQuery.length >= 3 && compactSku.includes(compactQuery)) {
+    score += 65;
+  }
+
+  // 2. Exact Full Name Match (+120)
+  if (name === cleanQuery || rawName === cleanQuery) {
+    score += 120;
+  } else if (name.startsWith(cleanQuery)) {
+    score += 85;
+  } else if (name.includes(cleanQuery)) {
+    score += 60;
+  }
+
+  // 3. Multi-token breakdown & matching
+  const tokens = cleanQuery.split(/[\s,+/_\-:]+/).filter(Boolean);
+  if (tokens.length > 0) {
+    let matchedTokenCount = 0;
+    const vocab = vocabulary || BASELINE_ELECTRONICS_VOCABULARY;
+
+    for (const token of tokens) {
+      let tokenMatched = false;
+
+      // Exact token in SKU
+      if (sku.includes(token) || recordNo.includes(token)) {
+        score += 25;
+        tokenMatched = true;
+      }
+
+      // Word boundary match in name (e.g. "relay" matching "... 5V Relay Module ...")
+      const wordRegex = new RegExp(`\\b${token.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`, "i");
+      if (wordRegex.test(name)) {
+        score += 25;
+        tokenMatched = true;
+      } else if (name.includes(token)) {
+        score += 15;
+        tokenMatched = true;
+      } else if (cat.includes(token)) {
+        score += 10;
+        tokenMatched = true;
+      } else if (desc.includes(token) || notes.includes(token)) {
+        score += 6;
+        tokenMatched = true;
+      } else {
+        // Typo tolerance check for electronics words (e.g. "arduno" -> "arduino")
+        const closest = findClosestWord(token, vocab);
+        if (closest && (name.includes(closest) || desc.includes(closest) || cat.includes(closest))) {
+          score += 14;
+          tokenMatched = true;
+        }
+      }
+
+      if (tokenMatched) {
+        matchedTokenCount++;
+      }
+    }
+
+    // Bonus for matching all search tokens
+    if (matchedTokenCount === tokens.length) {
+      score += 50; // All tokens found in product
+    } else if (matchedTokenCount > 0 && matchedTokenCount / tokens.length >= 0.6) {
+      score += 20; // Majority of tokens found
+    } else if (matchedTokenCount === 0 && score === 0) {
+      return 0; // No match
+    }
+  }
+
+  // 4. In-Stock tie-breaker
+  if (product.quantity && product.quantity > 0) {
+    score += 2;
+  }
+
+  return score;
 }
 
 /**

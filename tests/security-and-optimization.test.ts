@@ -249,3 +249,53 @@ describe("Shop Offline Catalog Access Control", () => {
   });
 });
 
+describe("Smart Electronics Relevance Scoring & Ranking", () => {
+  const products = [
+    {
+      id: 1,
+      productName: "Omron E2B-M12KS04-WP-B1 2M Proximity Sensor",
+      modelAndName: "Omron E2B-M12KS04-WP-B1 2M Proximity Sensor",
+      sku: "LKSEN00111",
+      quantity: 10,
+    },
+    {
+      id: 2,
+      productName: "Samkoon EA-070B V4 7.0 inch HMI Touch Screen",
+      modelAndName: "Samkoon EA-070B V4 7.0 inch HMI Touch Screen",
+      sku: "LKIA00229",
+      quantity: 5,
+    },
+    {
+      id: 3,
+      productName: "Arduino Uno R3 ATmega328P Development Board",
+      modelAndName: "Arduino Uno R3",
+      sku: "LKMIC00010",
+      quantity: 20,
+    },
+  ];
+
+  it("ranks exact SKU match higher than unrelated products", async () => {
+    const { scoreProductRelevance, BASELINE_ELECTRONICS_VOCABULARY } = await import("../src/lib/fuzzySearch");
+    const s1 = scoreProductRelevance("LKSEN00111", products[0] as any, BASELINE_ELECTRONICS_VOCABULARY);
+    const s2 = scoreProductRelevance("LKSEN00111", products[1] as any, BASELINE_ELECTRONICS_VOCABULARY);
+    assert.ok(s1 > 100);
+    assert.equal(s2, 0);
+  });
+
+  it("ranks jumbled multi-word keywords correctly with high relevance", async () => {
+    const { scoreProductRelevance, BASELINE_ELECTRONICS_VOCABULARY } = await import("../src/lib/fuzzySearch");
+    const sSamkoon = scoreProductRelevance("touch screen samkoon 7 inch", products[1] as any, BASELINE_ELECTRONICS_VOCABULARY);
+    const sArduino = scoreProductRelevance("touch screen samkoon 7 inch", products[2] as any, BASELINE_ELECTRONICS_VOCABULARY);
+    assert.ok(sSamkoon > 100);
+    assert.equal(sArduino, 0);
+  });
+
+  it("handles typos for electronic components and ranks the intended product first", async () => {
+    const { scoreProductRelevance, BASELINE_ELECTRONICS_VOCABULARY } = await import("../src/lib/fuzzySearch");
+    const sArduino = scoreProductRelevance("arduno uno", products[2] as any, BASELINE_ELECTRONICS_VOCABULARY);
+    const sOmron = scoreProductRelevance("arduno uno", products[0] as any, BASELINE_ELECTRONICS_VOCABULARY);
+    assert.ok(sArduino > 50);
+    assert.equal(sOmron, 0);
+  });
+});
+

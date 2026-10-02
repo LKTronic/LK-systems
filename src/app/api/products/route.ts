@@ -3,7 +3,11 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { productSchema } from "@/lib/validations/product";
-import { getDynamicVocabulary, getFuzzySuggestion } from "@/lib/fuzzySearch";
+import {
+  getDynamicVocabulary,
+  getFuzzySuggestion,
+  scoreProductRelevance,
+} from "@/lib/fuzzySearch";
 import { getNextRecordNo, getNextSku, withSequenceLock } from "@/lib/recordNo";
 
 // GET /api/products (List products with search, pagination, category, supplier, and status filters)
@@ -171,65 +175,84 @@ export async function GET(request: NextRequest) {
       },
     };
 
-    let [products, total] = await Promise.all([
-      prisma.product.findMany({
-        where,
-        skip,
-        take: limit,
-        orderBy: { id: "desc" },
-        include: includeRelations,
-      }),
-      prisma.product.count({ where }),
-    ]);
-
+    let products: any[] = [];
+    let total = 0;
     let didYouMean: string | null = null;
 
-    // Fuzzy search fallback when exact search yields 0 results (e.g. "pluse" -> "pulse")
-    if (total === 0 && search) {
+    if (search) {
+      // When searching: fetch candidates, score by relevance, and rank best matches first
       const vocab = await getDynamicVocabulary(prisma);
-      const fuzzy = getFuzzySuggestion(search, vocab);
+      const candidates = await prisma.product.findMany({
+        where,
+        take: 200,
+        orderBy: { id: "desc" },
+        include: includeRelations,
+      });
 
-      if (fuzzy.hasCorrection) {
-        // Construct fuzzy search condition with the corrected query
-        const fuzzyAndConditions = andConditions.filter(
-          (c) =>
-            !c.OR ||
-            !c.OR.some(
-              (sub: any) =>
-                sub.productName?.contains === search ||
-                sub.modelAndName?.contains === search
-            )
-        );
+      if (candidates.length > 0) {
+        const scored = candidates.map((p) => ({
+          product: p,
+          score: scoreProductRelevance(search, p as any, vocab),
+        }));
+        // Sort descending: highest relevance score first
+        scored.sort((a, b) => b.score - a.score);
+        total = scored.length;
+        products = scored.slice(skip, skip + limit).map((s) => s.product);
+      } else {
+        // Fallback: Check for typo suggestions (e.g. "arduno" -> "arduino")
+        const fuzzy = getFuzzySuggestion(search, vocab);
+        if (fuzzy.hasCorrection) {
+          const fuzzyAndConditions = andConditions.filter(
+            (c) =>
+              !c.OR ||
+              !c.OR.some(
+                (sub: any) =>
+                  sub.productName?.contains === search ||
+                  sub.modelAndName?.contains === search
+              )
+          );
 
-        fuzzyAndConditions.push({
-          OR: [
-            { modelAndName: { contains: fuzzy.correctedQuery } },
-            { productName: { contains: fuzzy.correctedQuery } },
-            { referenceNo: { contains: fuzzy.correctedQuery } },
-            { sku: { contains: fuzzy.correctedQuery } },
-            { recordNo: { contains: fuzzy.correctedQuery } },
-          ],
-        });
+          fuzzyAndConditions.push({
+            OR: [
+              { modelAndName: { contains: fuzzy.correctedQuery } },
+              { productName: { contains: fuzzy.correctedQuery } },
+              { referenceNo: { contains: fuzzy.correctedQuery } },
+              { sku: { contains: fuzzy.correctedQuery } },
+              { recordNo: { contains: fuzzy.correctedQuery } },
+            ],
+          });
 
-        const fuzzyWhere = { ...where, AND: fuzzyAndConditions };
-
-        const [fuzzyProducts, fuzzyTotal] = await Promise.all([
-          prisma.product.findMany({
+          const fuzzyWhere = { ...where, AND: fuzzyAndConditions };
+          const fuzzyCandidates = await prisma.product.findMany({
             where: fuzzyWhere,
-            skip,
-            take: limit,
+            take: 200,
             orderBy: { id: "desc" },
             include: includeRelations,
-          }),
-          prisma.product.count({ where: fuzzyWhere }),
-        ]);
+          });
 
-        if (fuzzyTotal > 0) {
-          products = fuzzyProducts;
-          total = fuzzyTotal;
-          didYouMean = fuzzy.correctedQuery;
+          if (fuzzyCandidates.length > 0) {
+            const scored = fuzzyCandidates.map((p) => ({
+              product: p,
+              score: scoreProductRelevance(fuzzy.correctedQuery, p as any, vocab),
+            }));
+            scored.sort((a, b) => b.score - a.score);
+            total = scored.length;
+            products = scored.slice(skip, skip + limit).map((s) => s.product);
+            didYouMean = fuzzy.correctedQuery;
+          }
         }
       }
+    } else {
+      [products, total] = await Promise.all([
+        prisma.product.findMany({
+          where,
+          skip,
+          take: limit,
+          orderBy: { id: "desc" },
+          include: includeRelations,
+        }),
+        prisma.product.count({ where }),
+      ]);
     }
 
     return NextResponse.json({
