@@ -104,10 +104,10 @@ export async function PUT(
     });
 
     return NextResponse.json(updated);
-  } catch (error) {
+  } catch (error: any) {
     console.error("Error updating user:", error);
     return NextResponse.json(
-      { error: "Failed to update user." },
+      { error: error?.message || "Failed to update user." },
       { status: 500 }
     );
   }
