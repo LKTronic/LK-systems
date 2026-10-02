@@ -24,10 +24,12 @@ export function cleanHtml(html: string): string {
     .replace(/&ldquo;|&#8220;|&rdquo;|&#8221;/gi, '"')
     .replace(/&lsquo;|&#8216;|&rsquo;|&#8217;/gi, "'")
     .replace(/&deg;/gi, "°")
+    .replace(/VISIT OUR (?:FACEBOOK PAGE|SHOP).*$/gim, "")
     .replace(/[^\S\r\n]+/g, " ")
     .replace(/^[ \t]+/gm, "")
     .replace(/[ \t]+$/gm, "")
     .replace(/\n{3,}/g, "\n\n")
+    .replace(/(\b(?:Specification|Specifications|Features|Package Included|Package Includes|Package Content|Pinout|Pinouts|Overview|Note|Description):\s*)\n\n+/gi, "$1\n")
     .trim();
 }
 
