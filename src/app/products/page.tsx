@@ -104,8 +104,22 @@ export default function ProductsPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isReady, setIsReady] = useState(false);
   const [viewMode, setViewMode] = useState<"list" | "grid">("list");
+  const [isOffline, setIsOffline] = useState(false);
   const isInitialSearch = useRef(true);
   const hasRestoredScroll = useRef(false);
+
+  useEffect(() => {
+    const updateOnlineStatus = () => {
+      setIsOffline(typeof navigator !== "undefined" ? !navigator.onLine : false);
+    };
+    updateOnlineStatus();
+    window.addEventListener("online", updateOnlineStatus);
+    window.addEventListener("offline", updateOnlineStatus);
+    return () => {
+      window.removeEventListener("online", updateOnlineStatus);
+      window.removeEventListener("offline", updateOnlineStatus);
+    };
+  }, []);
 
   useEffect(() => {
     try {
@@ -1102,7 +1116,8 @@ export default function ProductsPage() {
                       key={p.id}
                       id={`product-card-${p.id}`}
                       onClick={() => {
-                        if (isShop) {
+                        const offline = typeof navigator !== "undefined" && !navigator.onLine;
+                        if (isShop && offline) {
                           setPreviewProduct(p);
                         } else {
                           saveScrollState(p.id);
@@ -1366,7 +1381,8 @@ export default function ProductsPage() {
                           key={p.id}
                           id={`product-row-${p.id}`}
                           onClick={() => {
-                            if (isShop) {
+                            const offline = typeof navigator !== "undefined" && !navigator.onLine;
+                            if (isShop && offline) {
                               setPreviewProduct(p);
                             } else {
                               saveScrollState(p.id);
