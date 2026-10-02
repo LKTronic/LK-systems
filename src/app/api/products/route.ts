@@ -3,7 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { productSchema } from "@/lib/validations/product";
-
+import { getDynamicVocabulary, getFuzzySuggestion } from "@/lib/fuzzySearch";
 import { getNextRecordNo, getNextSku, withSequenceLock } from "@/lib/recordNo";
 
 // GET /api/products (List products with search, pagination, category, supplier, and status filters)
@@ -137,30 +137,82 @@ export async function GET(request: NextRequest) {
       where.AND = andConditions;
     }
 
-    const [products, total] = await Promise.all([
+    const includeRelations = {
+      category: {
+        select: { id: true, name: true },
+      },
+      supplier: {
+        select: { id: true, name: true },
+      },
+      author: {
+        select: {
+          id: true,
+          name: true,
+          username: true,
+        },
+      },
+    };
+
+    let [products, total] = await Promise.all([
       prisma.product.findMany({
         where,
         skip,
         take: limit,
         orderBy: { id: "desc" },
-        include: {
-          category: {
-            select: { id: true, name: true },
-          },
-          supplier: {
-            select: { id: true, name: true },
-          },
-          author: {
-            select: {
-              id: true,
-              name: true,
-              username: true,
-            },
-          },
-        },
+        include: includeRelations,
       }),
       prisma.product.count({ where }),
     ]);
+
+    let didYouMean: string | null = null;
+
+    // Fuzzy search fallback when exact search yields 0 results (e.g. "pluse" -> "pulse")
+    if (total === 0 && search) {
+      const vocab = await getDynamicVocabulary(prisma);
+      const fuzzy = getFuzzySuggestion(search, vocab);
+
+      if (fuzzy.hasCorrection) {
+        // Construct fuzzy search condition with the corrected query
+        const fuzzyAndConditions = andConditions.filter(
+          (c) =>
+            !c.OR ||
+            !c.OR.some(
+              (sub: any) =>
+                sub.productName?.contains === search ||
+                sub.modelAndName?.contains === search
+            )
+        );
+
+        fuzzyAndConditions.push({
+          OR: [
+            { modelAndName: { contains: fuzzy.correctedQuery } },
+            { productName: { contains: fuzzy.correctedQuery } },
+            { referenceNo: { contains: fuzzy.correctedQuery } },
+            { sku: { contains: fuzzy.correctedQuery } },
+            { recordNo: { contains: fuzzy.correctedQuery } },
+          ],
+        });
+
+        const fuzzyWhere = { ...where, AND: fuzzyAndConditions };
+
+        const [fuzzyProducts, fuzzyTotal] = await Promise.all([
+          prisma.product.findMany({
+            where: fuzzyWhere,
+            skip,
+            take: limit,
+            orderBy: { id: "desc" },
+            include: includeRelations,
+          }),
+          prisma.product.count({ where: fuzzyWhere }),
+        ]);
+
+        if (fuzzyTotal > 0) {
+          products = fuzzyProducts;
+          total = fuzzyTotal;
+          didYouMean = fuzzy.correctedQuery;
+        }
+      }
+    }
 
     return NextResponse.json({
       products,
@@ -170,6 +222,7 @@ export async function GET(request: NextRequest) {
         limit,
         totalPages: Math.ceil(total / limit),
       },
+      didYouMean,
     });
   } catch (error) {
     console.error("Error fetching products:", error);

@@ -34,6 +34,7 @@ import {
   Globe,
   ExternalLink,
   ShieldAlert,
+  Sparkles,
 } from "lucide-react";
 
 interface Product {
@@ -90,6 +91,7 @@ export default function ProductsPage() {
   const [limit, setLimit] = useState(25);
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
+  const [didYouMean, setDidYouMean] = useState<string | null>(null);
   const [status, setStatus] = useState("ALL");
   const [sourceFilter, setSourceFilter] = useState("ALL"); // ALL, PMS, LK_TRONICS
   const [categoryId, setCategoryId] = useState("ALL");
@@ -364,6 +366,7 @@ export default function ProductsPage() {
         setProducts(data.products || []);
         setTotal(data.pagination?.total || 0);
         setTotalPages(data.pagination?.totalPages || 1);
+        setDidYouMean(data.didYouMean || null);
       }
     } catch (err) {
       console.error("Failed to fetch products:", err);
@@ -830,6 +833,28 @@ export default function ProductsPage() {
                 </button>
               )}
             </div>
+
+            {/* Google-style Typo Tolerance Suggestion */}
+            {didYouMean && (
+              <div className="w-full flex items-center gap-2 px-3.5 py-2 bg-indigo-950/70 border border-indigo-500/40 rounded-xl text-xs text-indigo-200">
+                <Sparkles className="w-4 h-4 text-amber-400 shrink-0" />
+                <span>
+                  Showing results for{" "}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSearch(didYouMean);
+                      setDebouncedSearch(didYouMean);
+                    }}
+                    className="font-bold underline text-amber-300 hover:text-white"
+                  >
+                    {didYouMean}
+                  </button>
+                  {" "}&bull; Search instead for{" "}
+                  <span className="italic opacity-80">"{debouncedSearch}"</span>
+                </span>
+              </div>
+            )}
 
             {/* Source Filter: ALL, PMS, ONLINE_WEB */}
             <div className="w-48">

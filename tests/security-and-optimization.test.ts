@@ -129,3 +129,34 @@ describe("Bounded LRU Cache Eviction", () => {
     assert.equal(cache.has("img4"), true);
   });
 });
+
+describe("Fuzzy Search & Typo Tolerance (Google-style)", () => {
+  const { damerauLevenshtein, getFuzzySuggestion, findClosestWord } = require("../src/lib/fuzzySearch");
+
+  it("calculates correct Damerau-Levenshtein distances for typos", () => {
+    assert.equal(damerauLevenshtein("pluse", "pulse"), 1); // Transposition
+    assert.equal(damerauLevenshtein("arduno", "arduino"), 1); // Missing char
+    assert.equal(damerauLevenshtein("senser", "sensor"), 1); // Typo char
+    assert.equal(damerauLevenshtein("resistorr", "resistor"), 1); // Extra char
+  });
+
+  it("corrects misspelled words against vocabulary", () => {
+    const vocab = new Set(["pulse", "arduino", "sensor", "module", "relay", "capacitor"]);
+    assert.equal(findClosestWord("pluse", vocab), "pulse");
+    assert.equal(findClosestWord("arduno", vocab), "arduino");
+    assert.equal(findClosestWord("senser", vocab), "sensor");
+    assert.equal(findClosestWord("capasitor", vocab), "capacitor");
+  });
+
+  it("suggests full corrected query while preserving SKU", () => {
+    const vocab = new Set(["pulse", "sensor", "arduino"]);
+    const result = getFuzzySuggestion("pluse senser", vocab);
+    assert.equal(result.hasCorrection, true);
+    assert.equal(result.correctedQuery, "pulse sensor");
+
+    const skuResult = getFuzzySuggestion("PMS-00123", vocab);
+    assert.equal(skuResult.hasCorrection, false);
+    assert.equal(skuResult.correctedQuery, "PMS-00123");
+  });
+});
+
