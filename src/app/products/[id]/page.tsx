@@ -344,18 +344,18 @@ export default function ProductDetailPage({
             </div>
 
             {/* Specifications and Image Grid */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-start">
               {/* Image Card */}
-              <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl flex flex-col items-center justify-center min-h-[340px]">
+              <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl flex flex-col items-center justify-start sticky top-6">
                 {product.imagePath ? (
                   <img
                     src={product.imagePath}
                     alt={product.modelAndName || product.productName}
                     referrerPolicy="no-referrer"
-                    className="max-h-[300px] w-full object-contain rounded-xl"
+                    className="max-h-[420px] w-full object-contain rounded-xl"
                   />
                 ) : (
-                  <div className="flex flex-col items-center gap-3 text-slate-600">
+                  <div className="flex flex-col items-center gap-3 text-slate-600 py-16">
                     <ImageIcon className="w-16 h-16 stroke-1" />
                     <span className="text-xs font-medium">No product image uploaded</span>
                   </div>
