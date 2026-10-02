@@ -34,6 +34,10 @@ export function AppLayout({
     if (!isMounted) return;
 
     if (status === "unauthenticated") {
+      const isOffline = typeof navigator !== "undefined" && !navigator.onLine;
+      if (isOffline) {
+        return;
+      }
       router.push("/login");
     } else if (status === "authenticated") {
       if (requireAdmin && role !== "ADMIN" && role !== "SUPERADMIN") {
@@ -46,13 +50,19 @@ export function AppLayout({
   useEffect(() => {
     const timer = setTimeout(() => {
       if (status === "loading") {
+        const isOffline = typeof navigator !== "undefined" && !navigator.onLine;
+        if (isOffline) {
+          return;
+        }
         router.push("/login");
       }
     }, 4000);
     return () => clearTimeout(timer);
   }, [status, router]);
 
-  if (!isMounted || status === "loading") {
+  const isOffline = typeof navigator !== "undefined" && !navigator.onLine;
+
+  if (!isMounted || (status === "loading" && !isOffline)) {
     return (
       <div
         suppressHydrationWarning
@@ -72,7 +82,7 @@ export function AppLayout({
     );
   }
 
-  if (status === "unauthenticated") {
+  if (status === "unauthenticated" && !isOffline) {
     return null;
   }
 

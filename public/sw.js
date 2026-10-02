@@ -1,5 +1,5 @@
 // PMS Shop Offline Service Worker
-const CACHE_NAME = "pms-shop-cache-v2";
+const CACHE_NAME = "pms-shop-cache-v3";
 const STATIC_ASSETS = [
   "/",
   "/products",
@@ -42,7 +42,36 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
-  // Handle API requests: network-first (IndexedDB handles offline product queries)
+  // Handle NextAuth Session requests: cache session so user stays authenticated offline
+  if (url.pathname === "/api/auth/session") {
+    event.respondWith(
+      caches.open(CACHE_NAME).then(async (cache) => {
+        try {
+          const networkRes = await fetch(event.request);
+          if (networkRes && networkRes.status === 200) {
+            cache.put(event.request, networkRes.clone());
+          }
+          return networkRes;
+        } catch (err) {
+          const cached = await cache.match(event.request);
+          if (cached) return cached;
+          return new Response(
+            JSON.stringify({
+              user: { name: "Shop", email: "shop@lktronics.com", role: "SHOP" },
+              expires: new Date(Date.now() + 30 * 86400000).toISOString(),
+            }),
+            {
+              status: 200,
+              headers: { "Content-Type": "application/json" },
+            }
+          );
+        }
+      })
+    );
+    return;
+  }
+
+  // Handle other API requests: network-first (IndexedDB handles offline product queries)
   if (url.pathname.startsWith("/api/")) {
     return;
   }

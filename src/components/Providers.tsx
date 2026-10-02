@@ -6,7 +6,11 @@ import { ThemeProvider } from "@/components/ThemeProvider";
 
 export function Providers({ children }: { children: React.ReactNode }) {
   return (
-    <SessionProvider>
+    <SessionProvider
+      refetchInterval={0}
+      refetchOnWindowFocus={false}
+      refetchWhenOffline={false}
+    >
       <ThemeProvider>{children}</ThemeProvider>
     </SessionProvider>
   );

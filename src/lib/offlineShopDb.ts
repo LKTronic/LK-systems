@@ -151,7 +151,7 @@ export async function preCacheProductImages(
 ) {
   if (typeof window === "undefined" || !("caches" in window)) return;
   try {
-    const cache = await caches.open("pms-shop-cache-v2");
+    const cache = await caches.open("pms-shop-cache-v3");
     const uniqueUrls = Array.from(new Set(images.filter(Boolean)));
     const batchSize = 6;
     let completed = 0;
