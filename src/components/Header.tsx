@@ -2,8 +2,9 @@
 
 import { useState, useEffect } from "react";
 import { useSession, signOut } from "next-auth/react";
-import { User, LogOut, Wifi, WifiOff } from "lucide-react";
+import { User, LogOut, Wifi, WifiOff, Loader2, CheckCircle2 } from "lucide-react";
 import { ThemeToggle } from "@/components/ThemeToggle";
+import { getShopOfflineMeta } from "@/lib/offlineShopDb";
 
 export function Header({ title, description }: { title: string; description?: string }) {
   const { data: session } = useSession();
@@ -11,16 +12,41 @@ export function Header({ title, description }: { title: string; description?: st
   const isShop = role === "SHOP";
 
   const [isOnline, setIsOnline] = useState(true);
+  const [syncStatus, setSyncStatus] = useState<"idle" | "syncing" | "synced" | "offline">("idle");
+  const [offlineCount, setOfflineCount] = useState<number>(0);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
     setIsOnline(navigator.onLine);
 
-    const handleOnline = () => setIsOnline(true);
-    const handleOffline = () => setIsOnline(false);
+    const handleOnline = () => {
+      setIsOnline(true);
+      setSyncStatus("idle");
+    };
+    const handleOffline = () => {
+      setIsOnline(false);
+      setSyncStatus("offline");
+    };
 
     window.addEventListener("online", handleOnline);
     window.addEventListener("offline", handleOffline);
+
+    // Initial load of cached product count
+    if (isShop) {
+      getShopOfflineMeta().then((meta) => {
+        if (meta.count > 0) setOfflineCount(meta.count);
+      });
+    }
+
+    // Listen to real-time sync events from offline catalog manager
+    const handleStatusEvent = (e: any) => {
+      const detail = e.detail;
+      if (detail?.status) {
+        setSyncStatus(detail.status);
+        if (detail.count > 0) setOfflineCount(detail.count);
+      }
+    };
+    window.addEventListener("pms_shop_offline_status", handleStatusEvent);
 
     // Register Service Worker for SHOP role
     if (isShop && "serviceWorker" in navigator) {
@@ -32,6 +58,7 @@ export function Header({ title, description }: { title: string; description?: st
     return () => {
       window.removeEventListener("online", handleOnline);
       window.removeEventListener("offline", handleOffline);
+      window.removeEventListener("pms_shop_offline_status", handleStatusEvent);
     };
   }, [isShop]);
 
@@ -64,24 +91,31 @@ export function Header({ title, description }: { title: string; description?: st
       <div className="flex items-center gap-3 sm:gap-4">
         <ThemeToggle />
 
-        {/* Live Network & System Status Indicator */}
+        {/* Live Network & Offline Sync Status Indicator for Shop */}
         {isShop ? (
           <div
-            className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-xs font-semibold transition-all ${
-              isOnline
-                ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/30"
-                : "bg-amber-500/15 text-amber-300 border-amber-500/40 animate-pulse"
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-semibold transition-all ${
+              syncStatus === "syncing"
+                ? "bg-sky-500/10 text-sky-300 border-sky-500/30"
+                : !isOnline || syncStatus === "offline"
+                ? "bg-amber-500/15 text-amber-300 border-amber-500/40 animate-pulse"
+                : "bg-emerald-500/10 text-emerald-400 border-emerald-500/30"
             }`}
           >
-            {isOnline ? (
+            {syncStatus === "syncing" ? (
               <>
-                <Wifi className="w-3.5 h-3.5 text-emerald-400" />
-                <span className="hidden sm:inline">Online</span>
+                <Loader2 className="w-3.5 h-3.5 animate-spin text-sky-400" />
+                <span>Syncing catalog...</span>
+              </>
+            ) : !isOnline || syncStatus === "offline" ? (
+              <>
+                <WifiOff className="w-3.5 h-3.5 text-amber-400" />
+                <span>⚡ Offline Ready {offlineCount > 0 ? `(${offlineCount})` : ""}</span>
               </>
             ) : (
               <>
-                <WifiOff className="w-3.5 h-3.5 text-amber-400" />
-                <span>⚡ Offline Ready</span>
+                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                <span>Synced {offlineCount > 0 ? `(${offlineCount})` : ""}</span>
               </>
             )}
           </div>

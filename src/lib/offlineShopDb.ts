@@ -72,10 +72,23 @@ function openDb(): Promise<IDBDatabase> {
   });
 }
 
+export function notifyShopSyncStatus(
+  status: "idle" | "syncing" | "synced" | "offline",
+  count?: number
+) {
+  if (typeof window === "undefined") return;
+  window.dispatchEvent(
+    new CustomEvent("pms_shop_offline_status", {
+      detail: { status, count: count ?? 0, timestamp: new Date().toISOString() },
+    })
+  );
+}
+
 /**
  * Downloads latest product catalog from server and persists into browser's IndexedDB.
  */
 export async function syncShopCatalogToIndexedDb(): Promise<{ count: number; timestamp: string }> {
+  notifyShopSyncStatus("syncing");
   try {
     const res = await fetch("/api/shop/offline-catalog", {
       cache: "no-store",
@@ -109,9 +122,26 @@ export async function syncShopCatalogToIndexedDb(): Promise<{ count: number; tim
       tx.onerror = () => reject(tx.error || new Error("Failed to write to IndexedDB"));
     });
 
+    notifyShopSyncStatus("synced", products.length);
+
+    // Pre-cache product thumbnails into browser cache in the background
+    if (typeof window !== "undefined") {
+      setTimeout(() => {
+        products.slice(0, 150).forEach((p) => {
+          if (p.imagePath) {
+            const img = new Image();
+            img.src = p.imagePath;
+          }
+        });
+      }, 500);
+    }
+
     return { count: products.length, timestamp };
   } catch (err) {
     console.warn("Shop offline sync warning (will use existing cached data):", err);
+    getShopOfflineMeta().then((meta) => {
+      notifyShopSyncStatus("offline", meta.count);
+    });
     throw err;
   }
 }
