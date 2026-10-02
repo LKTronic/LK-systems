@@ -194,8 +194,10 @@ export async function syncShopCatalogToIndexedDb(): Promise<{ count: number; tim
 export async function preCacheProductImages(
   images: string[],
   onProgress?: (cachedCount: number, total: number) => void
-) {
-  if (typeof window === "undefined" || !("caches" in window)) return;
+): Promise<{ cachedCount: number; total: number }> {
+  if (typeof window === "undefined" || !("caches" in window)) {
+    return { cachedCount: 0, total: images.length };
+  }
   try {
     const cache = await caches.open("pms-shop-cache-v3");
     const validUrls = images
@@ -205,10 +207,10 @@ export async function preCacheProductImages(
 
     const uniqueUrls = Array.from(new Set(validUrls));
     const total = uniqueUrls.length;
-    if (total === 0) return;
+    if (total === 0) return { cachedCount: 0, total: 0 };
 
     let completed = 0;
-    const batchSize = 10;
+    const batchSize = 12;
 
     for (let i = 0; i < uniqueUrls.length; i += batchSize) {
       const batch = uniqueUrls.slice(i, i + batchSize);
@@ -217,8 +219,8 @@ export async function preCacheProductImages(
           try {
             const absoluteUrl = url.startsWith("/") ? window.location.origin + url : url;
             const existing =
-              (await cache.match(url, { ignoreVary: true })) ||
-              (await cache.match(absoluteUrl, { ignoreVary: true }));
+              (await cache.match(url, { ignoreVary: true, ignoreSearch: true })) ||
+              (await cache.match(absoluteUrl, { ignoreVary: true, ignoreSearch: true }));
 
             if (!existing) {
               const req = new Request(absoluteUrl, { mode: "no-cors", credentials: "omit" });
@@ -236,16 +238,129 @@ export async function preCacheProductImages(
             // Soft-fail individual image fetch error without interrupting overall sync
           } finally {
             completed++;
-            if (onProgress && (completed % 4 === 0 || completed === total)) {
+            if (onProgress && (completed % 5 === 0 || completed === total)) {
               onProgress(completed, total);
             }
           }
         })
       );
     }
+    return { cachedCount: completed, total };
   } catch (err) {
     console.warn("Image pre-caching warning:", err);
+    return { cachedCount: 0, total: images.length };
   }
+}
+
+/**
+ * Detailed status of local offline database and cached images.
+ */
+export interface ShopCacheDetailedStatus {
+  totalProducts: number;
+  totalImages: number;
+  cachedImages: number;
+  lastSyncTime: string | null;
+}
+
+/**
+ * Checks exact count of products and images stored in IndexedDB and Service Worker Cache Storage.
+ */
+export async function getShopCacheDetails(): Promise<ShopCacheDetailedStatus> {
+  try {
+    const db = await openDb();
+    const products: ShopOfflineProduct[] = await new Promise((resolve) => {
+      const tx = db.transaction([STORE_PRODUCTS], "readonly");
+      const store = tx.objectStore(STORE_PRODUCTS);
+      const req = store.getAll();
+      req.onsuccess = () => resolve(req.result || []);
+      req.onerror = () => resolve([]);
+    });
+
+    const meta = await getShopOfflineMeta();
+    const imageUrls = Array.from(
+      new Set(products.map((p) => p.imagePath).filter(Boolean) as string[])
+    );
+
+    let cachedCount = 0;
+    if (typeof window !== "undefined" && "caches" in window) {
+      const cache = await caches.open("pms-shop-cache-v3");
+      const batchSize = 25;
+      for (let i = 0; i < imageUrls.length; i += batchSize) {
+        const batch = imageUrls.slice(i, i + batchSize);
+        const matchResults = await Promise.all(
+          batch.map(async (url) => {
+            try {
+              const absoluteUrl = url.startsWith("/") ? window.location.origin + url : url;
+              const match =
+                (await cache.match(url, { ignoreVary: true, ignoreSearch: true })) ||
+                (await cache.match(absoluteUrl, { ignoreVary: true, ignoreSearch: true }));
+              return match ? 1 : 0;
+            } catch {
+              return 0;
+            }
+          })
+        );
+        cachedCount += matchResults.reduce((sum: number, val: number) => sum + val, 0);
+      }
+    }
+
+    return {
+      totalProducts: products.length,
+      totalImages: imageUrls.length,
+      cachedImages: cachedCount,
+      lastSyncTime: meta.lastSyncTime,
+    };
+  } catch (err) {
+    return {
+      totalProducts: 0,
+      totalImages: 0,
+      cachedImages: 0,
+      lastSyncTime: null,
+    };
+  }
+}
+
+/**
+ * Manually forces re-downloading and caching of all catalog images.
+ */
+export async function forceSyncShopImages(
+  onProgress?: (done: number, total: number) => void
+): Promise<{ done: number; total: number }> {
+  const db = await openDb();
+  const products: ShopOfflineProduct[] = await new Promise((resolve) => {
+    const tx = db.transaction([STORE_PRODUCTS], "readonly");
+    const store = tx.objectStore(STORE_PRODUCTS);
+    const req = store.getAll();
+    req.onsuccess = () => resolve(req.result || []);
+    req.onerror = () => resolve([]);
+  });
+
+  const imageUrls = Array.from(
+    new Set(products.map((p) => p.imagePath).filter(Boolean) as string[])
+  );
+
+  notifyShopSyncStatus("downloading_images", {
+    count: products.length,
+    doneImages: 0,
+    totalImages: imageUrls.length,
+  });
+
+  const result = await preCacheProductImages(imageUrls, (done, total) => {
+    notifyShopSyncStatus("downloading_images", {
+      count: products.length,
+      doneImages: done,
+      totalImages: total,
+    });
+    if (onProgress) onProgress(done, total);
+  });
+
+  notifyShopSyncStatus("synced", {
+    count: products.length,
+    doneImages: result.cachedCount,
+    totalImages: result.total,
+  });
+
+  return { done: result.cachedCount, total: result.total };
 }
 
 /**
