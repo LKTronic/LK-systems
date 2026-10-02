@@ -23,6 +23,8 @@ export function AppLayout({
   const { data: session, status } = useSession();
   const router = useRouter();
   const [isMounted, setIsMounted] = useState(false);
+  const role = (session?.user as any)?.role || "STAFF";
+  const isShop = role === "SHOP";
 
   useEffect(() => {
     setIsMounted(true);
@@ -33,13 +35,12 @@ export function AppLayout({
 
     if (status === "unauthenticated") {
       router.push("/login");
-    } else if (status === "authenticated" && requireAdmin) {
-      const userRole = (session?.user as any)?.role;
-      if (userRole !== "ADMIN" && userRole !== "SUPERADMIN") {
-        router.push("/dashboard");
+    } else if (status === "authenticated") {
+      if (requireAdmin && role !== "ADMIN" && role !== "SUPERADMIN") {
+        router.push(isShop ? "/products" : "/dashboard");
       }
     }
-  }, [isMounted, status, session, router, requireAdmin]);
+  }, [isMounted, status, session, router, requireAdmin, role, isShop]);
 
   // Safety timer: prevent getting permanently stuck on loading screen
   useEffect(() => {
@@ -77,8 +78,8 @@ export function AppLayout({
 
   return (
     <div suppressHydrationWarning className="flex min-h-screen bg-slate-950 text-slate-100">
-      <Sidebar />
-      <div suppressHydrationWarning className="flex-1 flex flex-col min-w-0">
+      {!isShop && <Sidebar />}
+      <div suppressHydrationWarning className="flex-1 flex flex-col min-w-0 w-full">
         <Header title={title} description={description} />
         <main suppressHydrationWarning className="flex-1 p-4 sm:p-6 lg:p-8 overflow-y-auto max-w-[1600px] w-full mx-auto">
           {children}

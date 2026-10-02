@@ -27,10 +27,11 @@ export default withAuth(
 
     // Role-based route protection for SHOP role:
     // SHOP users only use the Product Repository to search and request price.
-    // Restrict access to /supply, /products/pending-download, /products/:id/edit, and import/supply APIs.
+    // Restrict access to /dashboard, /supply, /products/pending-download, /products/:id/edit, and import/supply APIs.
     const userRole = token?.role as string | undefined;
     if (userRole === "SHOP") {
       if (
+        pathname.startsWith("/dashboard") ||
         pathname.startsWith("/supply") ||
         pathname.startsWith("/api/supply") ||
         pathname.startsWith("/products/pending-download") ||

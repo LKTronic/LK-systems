@@ -1,24 +1,43 @@
 "use client";
 
-import { useSession } from "next-auth/react";
-import { Bell, ShieldCheck, User } from "lucide-react";
+import { useSession, signOut } from "next-auth/react";
+import { User, LogOut } from "lucide-react";
 import { ThemeToggle } from "@/components/ThemeToggle";
 
 export function Header({ title, description }: { title: string; description?: string }) {
   const { data: session } = useSession();
+  const role = (session?.user as any)?.role || "STAFF";
+  const isShop = role === "SHOP";
 
   return (
-    <header className="h-16 bg-slate-900/60 backdrop-blur-md border-b border-slate-800 px-8 flex items-center justify-between sticky top-0 z-10 transition-colors">
-      <div>
-        <h2 className="text-lg font-bold text-white tracking-tight">{title}</h2>
-        {description && (
-          <p className="text-xs text-slate-400 mt-0.5">{description}</p>
+    <header className="h-16 bg-slate-900/60 backdrop-blur-md border-b border-slate-800 px-6 sm:px-8 flex items-center justify-between sticky top-0 z-10 transition-colors">
+      <div className="flex items-center gap-4">
+        {isShop && (
+          <div className="flex items-center gap-3 pr-4 border-r border-slate-800">
+            <div className="w-8 h-8 rounded-lg bg-emerald-600 flex items-center justify-center text-white font-bold shadow-md shadow-emerald-600/30">
+              S
+            </div>
+            <div>
+              <h1 className="font-bold text-sm text-white tracking-wide leading-tight">
+                PMS Enterprise
+              </h1>
+              <p className="text-[10px] text-emerald-400 font-semibold tracking-wider uppercase">
+                Shop Counter
+              </p>
+            </div>
+          </div>
         )}
+        <div>
+          <h2 className="text-lg font-bold text-white tracking-tight">{title}</h2>
+          {description && (
+            <p className="text-xs text-slate-400 mt-0.5">{description}</p>
+          )}
+        </div>
       </div>
 
-      <div className="flex items-center gap-4">
+      <div className="flex items-center gap-3 sm:gap-4">
         <ThemeToggle />
-        <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-slate-800/80 border border-slate-700/60 text-xs text-slate-300">
+        <div className="hidden md:flex items-center gap-2 px-3 py-1.5 rounded-lg bg-slate-800/80 border border-slate-700/60 text-xs text-slate-300">
           <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
           <span>System Active</span>
         </div>
@@ -31,11 +50,37 @@ export function Header({ title, description }: { title: string; description?: st
             <div className="text-xs font-semibold text-slate-200">
               {session?.user?.name || "User"}
             </div>
-            <div className="text-[10px] text-slate-400">
-              @{(session?.user as any)?.username || "staff"}
+            <div className="flex items-center gap-1.5">
+              <span
+                className={`text-[9px] font-bold px-1.5 py-0.2 rounded uppercase ${
+                  isShop
+                    ? "bg-emerald-500/15 text-emerald-400 border border-emerald-500/30"
+                    : role === "SUPERADMIN"
+                    ? "bg-purple-500/15 text-purple-400 border border-purple-500/30"
+                    : role === "ADMIN"
+                    ? "bg-amber-500/15 text-amber-400 border border-amber-500/30"
+                    : "bg-indigo-500/15 text-indigo-400 border border-indigo-500/30"
+                }`}
+              >
+                {role}
+              </span>
+              <span className="text-[10px] text-slate-400">
+                @{(session?.user as any)?.username || "user"}
+              </span>
             </div>
           </div>
         </div>
+
+        {isShop && (
+          <button
+            onClick={() => signOut({ callbackUrl: "/login" })}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-rose-300 hover:bg-rose-500/15 hover:text-rose-200 border border-rose-500/25 transition-all cursor-pointer"
+            title="Sign Out"
+          >
+            <LogOut className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">Sign Out</span>
+          </button>
+        )}
       </div>
     </header>
   );
