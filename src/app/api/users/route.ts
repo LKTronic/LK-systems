@@ -101,7 +101,7 @@ export async function POST(request: NextRequest) {
         name,
         username,
         passwordHash,
-        role,
+        role: role as any,
         status,
       },
       select: {
