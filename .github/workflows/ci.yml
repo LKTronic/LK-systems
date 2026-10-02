@@ -1,4 +1,4 @@
-name: CI - Test & Auto-Promote to Main
+name: CI - Comprehensive Quality Checks & Auto-Promote
 
 on:
   push:
@@ -11,10 +11,10 @@ permissions:
 
 jobs:
   test-and-build:
-    name: Run Tests & Build
+    name: Validate All Checks & Build
     runs-on: ubuntu-latest
 
-    # Build-time environment variables so CI builds cleanly without exposing production secrets
+    # Build-time environment variables for headless validation
     env:
       DATABASE_URL: "mysql://dummy:dummy@localhost:3306/pms"
       AUTH_SECRET: "ci-dummy-auth-secret-minimum-32-chars-long"
@@ -23,25 +23,31 @@ jobs:
       WC_CONSUMER_SECRET: "cs_ci_mock_test_secret"
 
     steps:
-      - name: Checkout Code
+      - name: 1. Checkout Code
         uses: actions/checkout@v4
 
-      - name: Setup Node.js 20
+      - name: 2. Setup Node.js 20
         uses: actions/setup-node@v4
         with:
           node-version: 20
           cache: 'npm'
 
-      - name: Install Dependencies
+      - name: 3. Verify Dependencies (npm ci)
         run: npm ci
 
-      - name: Generate Prisma Client
+      - name: 4. Validate Prisma Schema
+        run: npx prisma validate
+
+      - name: 5. Generate Prisma Client
         run: npx prisma generate
 
-      - name: Run Automated Tests
+      - name: 6. Run Strict TypeScript Type Check
+        run: npx tsc --noEmit
+
+      - name: 7. Run Automated Regression & Security Tests
         run: npm test
 
-      - name: Validate Next.js Production Build
+      - name: 8. Validate Next.js Production Build
         run: npm run build
 
   promote-to-main:
