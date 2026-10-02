@@ -72,7 +72,24 @@ export function Header({ title, description }: { title: string; description?: st
   }, [isShop]);
 
   return (
-    <header className="h-16 bg-slate-900/60 backdrop-blur-md border-b border-slate-800 px-6 sm:px-8 flex items-center justify-between sticky top-0 z-10 transition-colors">
+    <header className="relative h-16 bg-slate-900/60 backdrop-blur-md border-b border-slate-800 px-6 sm:px-8 flex items-center justify-between sticky top-0 z-10 transition-colors">
+      {/* Top Edge Glowing Progress Bar for Download/Sync */}
+      {(syncStatus === "syncing" || syncStatus === "downloading_images") && (
+        <div className="absolute top-0 left-0 right-0 h-1 bg-slate-800/80 overflow-hidden z-20">
+          <div
+            className={`h-full bg-gradient-to-r from-cyan-400 via-sky-400 to-indigo-500 shadow-md shadow-sky-400/50 transition-all duration-300 ${
+              syncStatus === "syncing" ? "w-1/3 animate-pulse" : ""
+            }`}
+            style={{
+              width:
+                syncStatus === "downloading_images" && imageProgress.total > 0
+                  ? `${Math.max(4, Math.round((imageProgress.done / imageProgress.total) * 100))}%`
+                  : undefined,
+            }}
+          />
+        </div>
+      )}
+
       <div className="flex items-center gap-4">
         {isShop && (
           <div className="flex items-center gap-3 pr-4 border-r border-slate-800">
@@ -103,34 +120,59 @@ export function Header({ title, description }: { title: string; description?: st
         {/* Live Network & Offline Sync Status Indicator for Shop */}
         {isShop ? (
           <div
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-semibold transition-all ${
+            className={`flex items-center gap-2 px-3 py-1.5 rounded-xl border text-xs font-semibold transition-all ${
               syncStatus === "syncing" || syncStatus === "downloading_images"
-                ? "bg-sky-500/10 text-sky-300 border-sky-500/30"
+                ? "bg-sky-950/40 text-sky-300 border-sky-500/40 shadow-sm shadow-sky-950/50"
                 : !isOnline || syncStatus === "offline"
                 ? "bg-amber-500/15 text-amber-300 border-amber-500/40"
                 : "bg-emerald-500/10 text-emerald-400 border-emerald-500/30"
             }`}
           >
             {syncStatus === "syncing" ? (
-              <>
-                <Loader2 className="w-3.5 h-3.5 animate-spin text-sky-400" />
-                <span>Syncing catalog...</span>
-              </>
+              <div className="flex items-center gap-2">
+                <Loader2 className="w-3.5 h-3.5 animate-spin text-sky-400 shrink-0" />
+                <span className="font-medium text-slate-200">Syncing catalog...</span>
+              </div>
             ) : syncStatus === "downloading_images" ? (
-              <>
-                <Loader2 className="w-3.5 h-3.5 animate-spin text-sky-400" />
-                <span>
-                  Downloading Images ({imageProgress.done}/{imageProgress.total})
-                </span>
-              </>
+              <div className="flex flex-col gap-1 min-w-[170px]">
+                <div className="flex items-center justify-between gap-2 text-[11px]">
+                  <span className="flex items-center gap-1.5 font-bold text-sky-300">
+                    <Loader2 className="w-3 h-3 animate-spin text-sky-400 shrink-0" />
+                    Caching Images
+                  </span>
+                  <span className="font-mono font-bold text-sky-400 text-[10px]">
+                    {Math.round(
+                      (imageProgress.done / Math.max(1, imageProgress.total)) * 100
+                    )}
+                    %
+                  </span>
+                </div>
+                {/* Mini Progress Bar */}
+                <div className="w-full bg-slate-800 rounded-full h-1.5 overflow-hidden">
+                  <div
+                    className="bg-gradient-to-r from-sky-400 to-indigo-400 h-full rounded-full transition-all duration-200 shadow-sm shadow-sky-400/50"
+                    style={{
+                      width: `${Math.round(
+                        (imageProgress.done / Math.max(1, imageProgress.total)) * 100
+                      )}%`,
+                    }}
+                  />
+                </div>
+                <div className="flex items-center justify-between text-[9px] text-slate-400 font-mono">
+                  <span>Progress</span>
+                  <span>
+                    {imageProgress.done} / {imageProgress.total}
+                  </span>
+                </div>
+              </div>
             ) : !isOnline || syncStatus === "offline" ? (
               <>
-                <WifiOff className="w-3.5 h-3.5 text-amber-400" />
+                <WifiOff className="w-3.5 h-3.5 text-amber-400 shrink-0" />
                 <span>⚡ Offline Ready {offlineCount > 0 ? `(${offlineCount})` : ""}</span>
               </>
             ) : (
               <>
-                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
                 <span>⚡ Offline Ready ({offlineCount > 0 ? offlineCount : "All"})</span>
               </>
             )}
