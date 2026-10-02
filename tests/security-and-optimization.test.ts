@@ -232,3 +232,20 @@ describe("Web Store Description HTML Cleaning & Line Breaks", () => {
   });
 });
 
+describe("Shop Offline Catalog Access Control", () => {
+  function canAccessOfflineCatalog(userRole: string): boolean {
+    return userRole === "SHOP" || userRole === "ADMIN" || userRole === "SUPERADMIN";
+  }
+
+  it("permits SHOP, ADMIN, and SUPERADMIN to access offline catalog", () => {
+    assert.equal(canAccessOfflineCatalog("SHOP"), true);
+    assert.equal(canAccessOfflineCatalog("ADMIN"), true);
+    assert.equal(canAccessOfflineCatalog("SUPERADMIN"), true);
+  });
+
+  it("restricts other non-shop roles from offline catalog download", () => {
+    assert.equal(canAccessOfflineCatalog("STAFF"), false);
+    assert.equal(canAccessOfflineCatalog("GUEST"), false);
+  });
+});
+

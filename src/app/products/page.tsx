@@ -7,6 +7,7 @@ import { useSession } from "next-auth/react";
 import { AppLayout } from "@/components/AppLayout";
 import { CategorySearchDropdown } from "@/components/CategorySearchDropdown";
 import { formatLKR, formatDateDMY } from "@/lib/formatters";
+import { syncShopCatalogToIndexedDb, searchShopIndexedDb } from "@/lib/offlineShopDb";
 import {
   Search,
   Filter,
@@ -381,6 +382,24 @@ export default function ProductsPage() {
       if (categoryId !== "ALL") params.set("categoryId", categoryId);
       if (addedBy !== "ALL") params.set("createdBy", addedBy);
 
+      // In offline mode for shop users, query local IndexedDB directly
+      if (isShop && typeof navigator !== "undefined" && !navigator.onLine) {
+        const localResult = await searchShopIndexedDb({
+          search: debouncedSearch,
+          status,
+          source: sourceFilter,
+          categoryId,
+          page,
+          limit,
+        });
+        setProducts(localResult.products as any);
+        setTotal(localResult.pagination.total);
+        setTotalPages(localResult.pagination.totalPages);
+        setDidYouMean(null);
+        setIsLoading(false);
+        return;
+      }
+
       const res = await fetch(`/api/products?${params.toString()}`);
       if (res.ok) {
         const data = await res.json();
@@ -388,9 +407,38 @@ export default function ProductsPage() {
         setTotal(data.pagination?.total || 0);
         setTotalPages(data.pagination?.totalPages || 1);
         setDidYouMean(data.didYouMean || null);
+      } else if (isShop) {
+        const localResult = await searchShopIndexedDb({
+          search: debouncedSearch,
+          status,
+          source: sourceFilter,
+          categoryId,
+          page,
+          limit,
+        });
+        setProducts(localResult.products as any);
+        setTotal(localResult.pagination.total);
+        setTotalPages(localResult.pagination.totalPages);
       }
     } catch (err) {
-      console.error("Failed to fetch products:", err);
+      console.warn("Network request failed, falling back to offline IndexedDB:", err);
+      if (isShop) {
+        try {
+          const localResult = await searchShopIndexedDb({
+            search: debouncedSearch,
+            status,
+            source: sourceFilter,
+            categoryId,
+            page,
+            limit,
+          });
+          setProducts(localResult.products as any);
+          setTotal(localResult.pagination.total);
+          setTotalPages(localResult.pagination.totalPages);
+        } catch (dbErr) {
+          console.error("Failed to read from local offline store:", dbErr);
+        }
+      }
     } finally {
       setIsLoading(false);
     }
@@ -449,8 +497,16 @@ export default function ProductsPage() {
 
   useEffect(() => {
     fetchFiltersAndSettings();
-    fetchStoreStats();
-  }, []);
+    if (!isShop && isAdmin) {
+      fetchStoreStats();
+    }
+    // Background sync of IndexedDB catalog for SHOP users
+    if (isShop) {
+      syncShopCatalogToIndexedDb().catch((err) => {
+        console.warn("Background catalog sync failed (using offline store):", err);
+      });
+    }
+  }, [isShop, isAdmin]);
 
   // Persist filter state to sessionStorage and URL query params
   useEffect(() => {

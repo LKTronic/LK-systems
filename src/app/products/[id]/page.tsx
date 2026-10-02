@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { AppLayout } from "@/components/AppLayout";
 import { formatDateDMY, formatLKR } from "@/lib/formatters";
+import { getShopProductFromIndexedDb } from "@/lib/offlineShopDb";
 import {
   ArrowLeft,
   Edit2,
@@ -59,13 +60,43 @@ export default function ProductDetailPage({
 
   const loadProduct = async () => {
     try {
+      if (isShop && typeof navigator !== "undefined" && !navigator.onLine) {
+        const local = await getShopProductFromIndexedDb(Number(resolvedParams.id));
+        if (local) {
+          setProduct(local);
+          setError(null);
+          setIsLoading(false);
+          return;
+        }
+      }
+
       const res = await fetch(`/api/products/${resolvedParams.id}`);
       if (!res.ok) {
+        if (isShop) {
+          const local = await getShopProductFromIndexedDb(Number(resolvedParams.id));
+          if (local) {
+            setProduct(local);
+            setError(null);
+            setIsLoading(false);
+            return;
+          }
+        }
         throw new Error("Product not found");
       }
       const data = await res.json();
       setProduct(data);
     } catch (err: any) {
+      if (isShop) {
+        try {
+          const local = await getShopProductFromIndexedDb(Number(resolvedParams.id));
+          if (local) {
+            setProduct(local);
+            setError(null);
+            setIsLoading(false);
+            return;
+          }
+        } catch {}
+      }
       setError(err.message || "Failed to load product details");
     } finally {
       setIsLoading(false);

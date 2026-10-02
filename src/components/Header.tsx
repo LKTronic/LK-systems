@@ -1,13 +1,39 @@
 "use client";
 
+import { useState, useEffect } from "react";
 import { useSession, signOut } from "next-auth/react";
-import { User, LogOut } from "lucide-react";
+import { User, LogOut, Wifi, WifiOff } from "lucide-react";
 import { ThemeToggle } from "@/components/ThemeToggle";
 
 export function Header({ title, description }: { title: string; description?: string }) {
   const { data: session } = useSession();
   const role = (session?.user as any)?.role || "STAFF";
   const isShop = role === "SHOP";
+
+  const [isOnline, setIsOnline] = useState(true);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    setIsOnline(navigator.onLine);
+
+    const handleOnline = () => setIsOnline(true);
+    const handleOffline = () => setIsOnline(false);
+
+    window.addEventListener("online", handleOnline);
+    window.addEventListener("offline", handleOffline);
+
+    // Register Service Worker for SHOP role
+    if (isShop && "serviceWorker" in navigator) {
+      navigator.serviceWorker.register("/sw.js").catch((err) => {
+        console.warn("ServiceWorker registration:", err);
+      });
+    }
+
+    return () => {
+      window.removeEventListener("online", handleOnline);
+      window.removeEventListener("offline", handleOffline);
+    };
+  }, [isShop]);
 
   return (
     <header className="h-16 bg-slate-900/60 backdrop-blur-md border-b border-slate-800 px-6 sm:px-8 flex items-center justify-between sticky top-0 z-10 transition-colors">
@@ -37,10 +63,34 @@ export function Header({ title, description }: { title: string; description?: st
 
       <div className="flex items-center gap-3 sm:gap-4">
         <ThemeToggle />
-        <div className="hidden md:flex items-center gap-2 px-3 py-1.5 rounded-lg bg-slate-800/80 border border-slate-700/60 text-xs text-slate-300">
-          <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-          <span>System Active</span>
-        </div>
+
+        {/* Live Network & System Status Indicator */}
+        {isShop ? (
+          <div
+            className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-xs font-semibold transition-all ${
+              isOnline
+                ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/30"
+                : "bg-amber-500/15 text-amber-300 border-amber-500/40 animate-pulse"
+            }`}
+          >
+            {isOnline ? (
+              <>
+                <Wifi className="w-3.5 h-3.5 text-emerald-400" />
+                <span className="hidden sm:inline">Online</span>
+              </>
+            ) : (
+              <>
+                <WifiOff className="w-3.5 h-3.5 text-amber-400" />
+                <span>⚡ Offline Ready</span>
+              </>
+            )}
+          </div>
+        ) : (
+          <div className="hidden md:flex items-center gap-2 px-3 py-1.5 rounded-lg bg-slate-800/80 border border-slate-700/60 text-xs text-slate-300">
+            <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+            <span>System Active</span>
+          </div>
+        )}
 
         <div className="flex items-center gap-2 pl-2 border-l border-slate-800">
           <div className="w-8 h-8 rounded-full bg-slate-800 border border-slate-700 flex items-center justify-center text-slate-300">
