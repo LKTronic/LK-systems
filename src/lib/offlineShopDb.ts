@@ -13,6 +13,7 @@ const DB_NAME = "PMS_SHOP_OFFLINE_DB";
 const DB_VERSION = 1;
 const STORE_PRODUCTS = "products";
 const STORE_META = "metadata";
+export const IMAGE_CACHE_NAME = "pms-shop-cache-v4";
 
 export interface ShopOfflineProduct {
   id: number;
@@ -215,7 +216,7 @@ export async function preCacheProductImages(
     return { cachedCount: 0, total: images.length };
   }
   try {
-    const cache = await caches.open("pms-shop-cache-v3");
+    const cache = await caches.open(IMAGE_CACHE_NAME);
     // Filter strictly to external Web Store URLs (http:// or https://)
     const validUrls = images
       .filter(Boolean)
@@ -336,7 +337,7 @@ export async function getShopCacheDetails(): Promise<ShopCacheDetailedStatus> {
 
     let cachedCount = 0;
     if (typeof window !== "undefined" && "caches" in window) {
-      const cache = await caches.open("pms-shop-cache-v3");
+      const cache = await caches.open(IMAGE_CACHE_NAME);
       const batchSize = 40;
       for (let i = 0; i < imageUrls.length; i += batchSize) {
         const batch = imageUrls.slice(i, i + batchSize);

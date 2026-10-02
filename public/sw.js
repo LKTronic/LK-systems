@@ -1,5 +1,5 @@
 // PMS Shop Offline Service Worker
-const CACHE_NAME = "pms-shop-cache-v3";
+const CACHE_NAME = "pms-shop-cache-v4";
 const STATIC_ASSETS = [
   "/",
   "/products",
@@ -76,7 +76,7 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
-  // Handle Images (both local and cross-origin like lk-tronics.com): Cache-first with network fallback
+  // Handle Images: Cache-first with network fallback
   const isImage =
     event.request.destination === "image" ||
     url.pathname.match(/\.(webp|png|jpg|jpeg|svg|gif|avif|ico)$/i) ||
@@ -85,35 +85,38 @@ self.addEventListener("fetch", (event) => {
   if (isImage) {
     event.respondWith(
       caches.open(CACHE_NAME).then(async (cache) => {
-        let cached = await cache.match(event.request, { ignoreVary: true });
+        let cached = await cache.match(event.request, { ignoreVary: true, ignoreSearch: true });
         if (!cached) {
-          cached = await cache.match(event.request.url, { ignoreVary: true });
+          cached = await cache.match(event.request.url, { ignoreVary: true, ignoreSearch: true });
         }
         if (!cached) {
-          cached = await cache.match(url.href, { ignoreVary: true });
+          cached = await cache.match(url.href, { ignoreVary: true, ignoreSearch: true });
         }
         if (cached) return cached;
 
         try {
-          // Fetch with no-cors if cross-origin to ensure opaque image responses can be cached
-          const networkRes = await fetch(event.request);
-          if (
-            networkRes &&
-            (networkRes.status === 200 || networkRes.type === "opaque" || networkRes.status === 0)
-          ) {
-            cache.put(event.request, networkRes.clone());
-            cache.put(event.request.url, networkRes.clone());
+          let networkRes;
+          try {
+            networkRes = await fetch(event.request);
+          } catch {
+            networkRes = await fetch(
+              new Request(event.request.url, { mode: "no-cors", credentials: "omit" })
+            );
           }
-          return networkRes;
+
+          if (networkRes) {
+            try {
+              const clone = networkRes.clone();
+              cache.put(event.request.url, clone).catch(() => {});
+              cache.put(url.href, networkRes.clone()).catch(() => {});
+            } catch (e) {}
+            return networkRes;
+          }
         } catch (err) {
-          return (
-            cached ||
-            new Response(
-              '<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="1.5"><rect width="18" height="18" x="3" y="3" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></svg>',
-              { headers: { "Content-Type": "image/svg+xml" } }
-            )
-          );
+          if (cached) return cached;
         }
+
+        return fetch(event.request);
       })
     );
     return;
