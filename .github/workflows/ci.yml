@@ -1,0 +1,42 @@
+name: CI - Test & Build
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  test-and-build:
+    name: Run Tests & Build
+    runs-on: ubuntu-latest
+
+    # Build-time environment variables so CI builds cleanly without exposing production secrets
+    env:
+      DATABASE_URL: "mysql://dummy:dummy@localhost:3306/pms"
+      AUTH_SECRET: "ci-dummy-auth-secret-minimum-32-chars-long"
+      WC_STORE_URL: "https://lk-tronics.com"
+      WC_CONSUMER_KEY: "ck_ci_mock_test_key"
+      WC_CONSUMER_SECRET: "cs_ci_mock_test_secret"
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Install Dependencies
+        run: npm ci
+
+      - name: Generate Prisma Client
+        run: npx prisma generate
+
+      - name: Run Automated Tests
+        run: npm test
+
+      - name: Validate Next.js Production Build
+        run: npm run build
