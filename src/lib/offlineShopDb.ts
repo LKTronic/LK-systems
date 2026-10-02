@@ -184,7 +184,7 @@ export async function syncShopCatalogToIndexedDb(): Promise<{ count: number; tim
 }
 
 /**
- * Pre-caches all image URLs into browser Cache Storage in controlled batches of 8.
+ * Pre-caches all image URLs into browser Cache Storage in controlled batches of 10.
  */
 export async function preCacheProductImages(
   images: string[],
@@ -193,31 +193,46 @@ export async function preCacheProductImages(
   if (typeof window === "undefined" || !("caches" in window)) return;
   try {
     const cache = await caches.open("pms-shop-cache-v3");
-    const uniqueUrls = Array.from(new Set(images.filter(Boolean)));
-    const batchSize = 8;
+    const validUrls = images
+      .filter(Boolean)
+      .map((u) => u.trim())
+      .filter((u) => u.startsWith("http://") || u.startsWith("https://") || u.startsWith("/"));
+
+    const uniqueUrls = Array.from(new Set(validUrls));
+    const total = uniqueUrls.length;
+    if (total === 0) return;
+
     let completed = 0;
+    const batchSize = 10;
 
     for (let i = 0; i < uniqueUrls.length; i += batchSize) {
       const batch = uniqueUrls.slice(i, i + batchSize);
       await Promise.all(
         batch.map(async (url) => {
           try {
-            const existing = await cache.match(url);
+            const absoluteUrl = url.startsWith("/") ? window.location.origin + url : url;
+            const existing =
+              (await cache.match(url, { ignoreVary: true })) ||
+              (await cache.match(absoluteUrl, { ignoreVary: true }));
+
             if (!existing) {
-              const res = await fetch(url, { mode: "no-cors" });
+              const req = new Request(absoluteUrl, { mode: "no-cors", credentials: "omit" });
+              const res = await fetch(req);
               if (
                 res &&
                 (res.status === 200 || res.type === "opaque" || res.status === 0)
               ) {
-                await cache.put(url, res);
+                await cache.put(url, res.clone());
+                await cache.put(absoluteUrl, res.clone());
+                await cache.put(req, res);
               }
             }
           } catch (e) {
-            // Soft-fail individual images without halting sync
+            // Soft-fail individual image fetch error without interrupting overall sync
           } finally {
             completed++;
-            if (onProgress && (completed % 5 === 0 || completed === uniqueUrls.length)) {
-              onProgress(completed, uniqueUrls.length);
+            if (onProgress && (completed % 4 === 0 || completed === total)) {
+              onProgress(completed, total);
             }
           }
         })

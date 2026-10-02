@@ -85,7 +85,13 @@ self.addEventListener("fetch", (event) => {
   if (isImage) {
     event.respondWith(
       caches.open(CACHE_NAME).then(async (cache) => {
-        const cached = await cache.match(event.request);
+        let cached = await cache.match(event.request, { ignoreVary: true });
+        if (!cached) {
+          cached = await cache.match(event.request.url, { ignoreVary: true });
+        }
+        if (!cached) {
+          cached = await cache.match(url.href, { ignoreVary: true });
+        }
         if (cached) return cached;
 
         try {
@@ -96,6 +102,7 @@ self.addEventListener("fetch", (event) => {
             (networkRes.status === 200 || networkRes.type === "opaque" || networkRes.status === 0)
           ) {
             cache.put(event.request, networkRes.clone());
+            cache.put(event.request.url, networkRes.clone());
           }
           return networkRes;
         } catch (err) {
