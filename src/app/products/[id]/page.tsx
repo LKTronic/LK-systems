@@ -185,7 +185,7 @@ export default function ProductDetailPage({
 
           <div className="flex items-center gap-3">
             {/* Request Price Button */}
-            {product && (isShop || canRequestPrice(product)) && (
+            {product && !isShop && canRequestPrice(product) && (
               <button
                 onClick={handleRequestPrice}
                 disabled={isRequestingPrice}

@@ -823,13 +823,15 @@ export default function ProductsPage() {
             )}
 
             {/* Add Product Request */}
-            <Link
-              href="/products/add"
-              className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold shadow-lg shadow-indigo-600/25 transition-all"
-            >
-              <Plus className="w-4 h-4" />
-              PMS Data Adding
-            </Link>
+            {!isShop && (
+              <Link
+                href="/products/add"
+                className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold shadow-lg shadow-indigo-600/25 transition-all"
+              >
+                <Plus className="w-4 h-4" />
+                PMS Data Adding
+              </Link>
+            )}
           </div>
         </div>
 
@@ -1155,29 +1157,29 @@ export default function ProductsPage() {
                           </div>
                         </div>
 
-                        {/* Actions */}
-                        <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
-                          {(isShop || canRequestPrice(p)) && (
-                            <button
-                              onClick={() => handleRequestPrice(p.id, nameDisplay)}
-                              disabled={requestingPriceId === p.id}
-                              className={`px-2 py-1 rounded-lg border text-[11px] font-semibold transition-all flex items-center gap-1 ${
-                                p.status === "PENDING"
-                                  ? "bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 border-amber-500/40"
-                                  : "bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 border-amber-500/30"
-                              } ${requestingPriceId === p.id ? "opacity-60 cursor-not-allowed" : "cursor-pointer"}`}
-                              title="Request updated price quote"
-                            >
-                              {requestingPriceId === p.id ? (
-                                <Loader2 className="w-3 h-3 animate-spin" />
-                              ) : (
-                                <RotateCcw className="w-3 h-3" />
-                              )}
-                              <span>{isShop ? "Request Price" : "Quote"}</span>
-                            </button>
-                          )}
+                        {/* Actions (Hidden for SHOP) */}
+                        {!isShop && (
+                          <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+                            {canRequestPrice(p) && (
+                              <button
+                                onClick={() => handleRequestPrice(p.id, nameDisplay)}
+                                disabled={requestingPriceId === p.id}
+                                className={`px-2 py-1 rounded-lg border text-[11px] font-semibold transition-all flex items-center gap-1 ${
+                                  p.status === "PENDING"
+                                    ? "bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 border-amber-500/40"
+                                    : "bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 border-amber-500/30"
+                                } ${requestingPriceId === p.id ? "opacity-60 cursor-not-allowed" : "cursor-pointer"}`}
+                                title="Request updated price quote"
+                              >
+                                {requestingPriceId === p.id ? (
+                                  <Loader2 className="w-3 h-3 animate-spin" />
+                                ) : (
+                                  <RotateCcw className="w-3 h-3" />
+                                )}
+                                <span>Quote</span>
+                              </button>
+                            )}
 
-                          {!isShop && (
                             <Link
                               href={`/products/${p.id}/edit`}
                               onClick={() => saveScrollState(p.id)}
@@ -1186,37 +1188,37 @@ export default function ProductsPage() {
                             >
                               <Edit2 className="w-3.5 h-3.5" />
                             </Link>
-                          )}
 
-                          {!isShop && (() => {
-                            const isPmsModified = Boolean(
-                              p.supplierId ||
-                              (p.supplier && p.supplier.name) ||
-                              p.additionalNote?.includes("PMS Updated") ||
-                              p.status === "PENDING"
-                            );
+                            {(() => {
+                              const isPmsModified = Boolean(
+                                p.supplierId ||
+                                (p.supplier && p.supplier.name) ||
+                                p.additionalNote?.includes("PMS Updated") ||
+                                p.status === "PENDING"
+                              );
 
-                            if (isOnlineWeb && !isPmsModified) return null;
+                              if (isOnlineWeb && !isPmsModified) return null;
 
-                            return (
-                              <button
-                                onClick={() => handleDelete(p.id, nameDisplay, isOnlineWeb)}
-                                className={`p-1.5 rounded-lg transition-colors cursor-pointer ${
-                                  isOnlineWeb
-                                    ? "text-amber-400 hover:text-amber-300 hover:bg-amber-950/40"
-                                    : "text-slate-400 hover:text-rose-400 hover:bg-slate-800"
-                                }`}
-                                title={isOnlineWeb ? "Revert to web" : "Delete Product"}
-                              >
-                                {isOnlineWeb ? (
-                                  <RotateCcw className="w-3.5 h-3.5" />
-                                ) : (
-                                  <Trash2 className="w-3.5 h-3.5" />
-                                )}
-                              </button>
-                            );
-                          })()}
-                        </div>
+                              return (
+                                <button
+                                  onClick={() => handleDelete(p.id, nameDisplay, isOnlineWeb)}
+                                  className={`p-1.5 rounded-lg transition-colors cursor-pointer ${
+                                    isOnlineWeb
+                                      ? "text-amber-400 hover:text-amber-300 hover:bg-amber-950/40"
+                                      : "text-slate-400 hover:text-rose-400 hover:bg-slate-800"
+                                  }`}
+                                  title={isOnlineWeb ? "Revert to web" : "Delete Product"}
+                                >
+                                  {isOnlineWeb ? (
+                                    <RotateCcw className="w-3.5 h-3.5" />
+                                  ) : (
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                  )}
+                                </button>
+                              );
+                            })()}
+                          </div>
+                        )}
                       </div>
                     </div>
                   );
@@ -1271,20 +1273,20 @@ export default function ProductsPage() {
                     <th className="px-2.5 py-3 text-right w-[105px]">Price (LKR)</th>
                     <th className="px-2 py-3 text-center w-[95px]">Date</th>
                     <th className={`px-1.5 py-3 text-center ${isShop ? "w-[84px]" : "w-[52px]"}`}>Image</th>
-                    <th className={`px-2.5 py-3 text-right ${isShop ? "w-[130px]" : "w-[85px]"}`}>Actions</th>
+                    {!isShop && <th className="px-2.5 py-3 text-right w-[85px]">Actions</th>}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-800/60">
                   {isLoading ? (
                     <tr>
-                      <td colSpan={isShop ? 7 : 9} className="py-16 text-center">
+                      <td colSpan={isShop ? 6 : 9} className="py-16 text-center">
                         <Loader2 className="w-6 h-6 animate-spin text-indigo-500 mx-auto" />
                         <p className="text-xs text-slate-400 mt-2">Loading products...</p>
                       </td>
                     </tr>
                   ) : products.length === 0 ? (
                     <tr>
-                      <td colSpan={isShop ? 7 : 9} className="py-16 text-center text-slate-400">
+                      <td colSpan={isShop ? 6 : 9} className="py-16 text-center text-slate-400">
                         No products found matching the criteria.
                       </td>
                     </tr>
@@ -1552,43 +1554,34 @@ export default function ProductsPage() {
                           )}
                         </td>
 
-                        {/* 9. Actions */}
-                        <td
-                          className="px-2 py-2 text-right whitespace-nowrap"
-                          onClick={(e) => e.stopPropagation()}
-                        >
-                          <div className="inline-flex items-center justify-end gap-1">
-                            {/* Request Price Button */}
-                            {(isShop || canRequestPrice(p)) && (
-                              <button
-                                onClick={() => handleRequestPrice(p.id, nameDisplay)}
-                                disabled={requestingPriceId === p.id}
-                                className={`${
-                                  isShop
-                                    ? "inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-semibold"
-                                    : "p-1.5"
-                                } rounded-lg border transition-all ${
-                                  p.status === "PENDING"
-                                    ? "bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 border-amber-500/40"
-                                    : "bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 border-amber-500/30"
-                                } ${requestingPriceId === p.id ? "opacity-60 cursor-not-allowed" : "cursor-pointer"}`}
-                                title={
-                                  p.status === "PENDING"
-                                    ? "Product is currently Pending: Click to re-request supplier quote"
-                                    : "Request Price (moves to Pending)"
-                                }
-                              >
-                                {requestingPriceId === p.id ? (
-                                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                                ) : (
-                                  <RotateCcw className="w-3.5 h-3.5" />
-                                )}
-                                {isShop && <span>Request Price</span>}
-                              </button>
-                            )}
+                        {/* 9. Actions (Hidden for SHOP) */}
+                        {!isShop && (
+                          <td
+                            className="px-2 py-2 text-right whitespace-nowrap"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            <div className="inline-flex items-center justify-end gap-1">
+                              {/* Request Price Button */}
+                              {canRequestPrice(p) && (
+                                <button
+                                  onClick={() => handleRequestPrice(p.id, nameDisplay)}
+                                  disabled={requestingPriceId === p.id}
+                                  className="p-1.5 rounded-lg border transition-all bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 border-amber-500/30 cursor-pointer"
+                                  title={
+                                    p.status === "PENDING"
+                                      ? "Product is currently Pending: Click to re-request supplier quote"
+                                      : "Request Price (moves to Pending)"
+                                  }
+                                >
+                                  {requestingPriceId === p.id ? (
+                                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                  ) : (
+                                    <RotateCcw className="w-3.5 h-3.5" />
+                                  )}
+                                </button>
+                              )}
 
-                            {/* Edit (Hidden for SHOP) */}
-                            {!isShop && (
+                              {/* Edit (Hidden for SHOP) */}
                               <Link
                                 href={`/products/${p.id}/edit`}
                                 onClick={() => saveScrollState(p.id)}
@@ -1597,45 +1590,45 @@ export default function ProductsPage() {
                               >
                                 <Edit2 className="w-3.5 h-3.5" />
                               </Link>
-                            )}
 
-                            {/* Delete (Staff & Admin, Hidden for SHOP) */}
-                            {!isShop && (() => {
-                              const isPmsModified = Boolean(
-                                p.supplierId ||
-                                (p.supplier && p.supplier.name) ||
-                                p.additionalNote?.includes("PMS Updated") ||
-                                p.status === "PENDING"
-                              );
+                              {/* Delete (Staff & Admin, Hidden for SHOP) */}
+                              {(() => {
+                                const isPmsModified = Boolean(
+                                  p.supplierId ||
+                                  (p.supplier && p.supplier.name) ||
+                                  p.additionalNote?.includes("PMS Updated") ||
+                                  p.status === "PENDING"
+                                );
 
-                              if (isOnlineWeb && !isPmsModified) {
-                                return null;
-                              }
+                                if (isOnlineWeb && !isPmsModified) {
+                                  return null;
+                                }
 
-                              return (
-                                <button
-                                  onClick={() => handleDelete(p.id, nameDisplay, isOnlineWeb)}
-                                  className={`p-1.5 rounded-lg transition-colors cursor-pointer ${
-                                    isOnlineWeb
-                                      ? "text-amber-400 hover:text-amber-300 hover:bg-amber-950/40"
-                                      : "text-slate-400 hover:text-rose-400 hover:bg-slate-800"
-                                  }`}
-                                  title={
-                                    isOnlineWeb
-                                      ? "Remove PMS quotation & modifications (reverts to standard web product)"
-                                      : "Delete Product"
-                                  }
-                                >
-                                  {isOnlineWeb ? (
-                                    <RotateCcw className="w-3.5 h-3.5" />
-                                  ) : (
-                                    <Trash2 className="w-3.5 h-3.5" />
-                                  )}
-                                </button>
-                              );
-                            })()}
-                          </div>
-                        </td>
+                                return (
+                                  <button
+                                    onClick={() => handleDelete(p.id, nameDisplay, isOnlineWeb)}
+                                    className={`p-1.5 rounded-lg transition-colors cursor-pointer ${
+                                      isOnlineWeb
+                                        ? "text-amber-400 hover:text-amber-300 hover:bg-amber-950/40"
+                                        : "text-slate-400 hover:text-rose-400 hover:bg-slate-800"
+                                    }`}
+                                    title={
+                                      isOnlineWeb
+                                        ? "Remove PMS quotation & modifications (reverts to standard web product)"
+                                        : "Delete Product"
+                                    }
+                                  >
+                                    {isOnlineWeb ? (
+                                      <RotateCcw className="w-3.5 h-3.5" />
+                                    ) : (
+                                      <Trash2 className="w-3.5 h-3.5" />
+                                    )}
+                                  </button>
+                                );
+                              })()}
+                            </div>
+                          </td>
+                        )}
                       </tr>
                     );
                   })
