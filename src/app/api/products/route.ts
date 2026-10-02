@@ -2,9 +2,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { syncWebStoreBatch, getWooCommerceConfig } from "@/lib/webStoreAutoSync";
+import { productSchema } from "@/lib/validations/product";
 
-// GET /api/products/sync-web-store (Get sync status and store info)
+import { getNextRecordNo, getNextSku, withSequenceLock } from "@/lib/recordNo";
+
+// GET /api/products (List products with search, pagination, category, supplier, and status filters)
 export async function GET(request: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
@@ -12,82 +14,173 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    let config;
-    try {
-      config = getWooCommerceConfig();
-    } catch (cfgErr: any) {
-      return NextResponse.json(
-        { error: cfgErr?.message || "WooCommerce configuration missing." },
-        { status: 503 }
-      );
+    const { searchParams } = new URL(request.url);
+    const search = searchParams.get("search")?.trim() || "";
+    const status = searchParams.get("status") || "ALL"; // ALL, PENDING, ACTIVE, EXPIRED, PRICE_NOT_AVAILABLE, NOT_REQUESTED
+    const source = searchParams.get("source") || "ALL"; // ALL, PMS, ONLINE_WEB
+    const categoryId = searchParams.get("categoryId");
+    const supplierId = searchParams.get("supplierId");
+    const createdBy = searchParams.get("createdBy") || searchParams.get("addedBy");
+    const fromDate = searchParams.get("fromDate");
+    const toDate = searchParams.get("toDate");
+    const page = Math.max(1, parseInt(searchParams.get("page") || "1", 10));
+    const limit = Math.max(1, Math.min(1000, parseInt(searchParams.get("limit") || "50", 10)));
+    const skip = (page - 1) * limit;
+
+    const where: any = {};
+    const andConditions: any[] = [];
+
+    // Filter by source: ALL, PMS, ONLINE_WEB (or LK_TRONICS)
+    if (source && source !== "ALL") {
+      if (source === "PMS") {
+        andConditions.push({
+          source: { notIn: ["ONLINE_WEB", "LK_TRONICS"] },
+          externalId: null,
+        });
+      } else {
+        andConditions.push({
+          OR: [
+            { source: "ONLINE_WEB" },
+            { source: "LK_TRONICS" },
+            { externalId: { not: null } },
+          ],
+        });
+      }
     }
 
-    const { storeUrl, authHeader } = config;
-
-    // Fetch total products count from WooCommerce
-    const res = await fetch(
-      `${storeUrl}/wp-json/wc/v3/products?per_page=1&status=publish`,
-      {
-        headers: {
-          Authorization: authHeader,
-        },
-        cache: "no-store",
+    // Filter by status unless "ALL" is specified
+    if (status && status !== "ALL") {
+      if (status === "PRICE_NOT_AVAILABLE") {
+        andConditions.push({
+          OR: [
+            { status: "PRICE_NOT_AVAILABLE" },
+            { price: 0 },
+            { priceLKR: 0 },
+          ],
+        });
+      } else if (status === "ACTIVE") {
+        andConditions.push({
+          status: "ACTIVE",
+          price: { gt: 0 },
+        });
+      } else {
+        andConditions.push({ status });
       }
-    );
+    }
 
-    const totalStoreProducts = parseInt(
-      res.headers.get("x-wp-total") || "0",
-      10
-    );
-    const totalPages = parseInt(
-      res.headers.get("x-wp-totalpages") || "0",
-      10
-    );
+    // Filter by category (matches primary categoryId or secondary categories in categoryNames)
+    if (categoryId && categoryId !== "ALL") {
+      const parsedCatId = parseInt(categoryId, 10);
+      if (!isNaN(parsedCatId)) {
+        const catRecord = await prisma.category.findUnique({
+          where: { id: parsedCatId },
+          select: { name: true },
+        });
+        if (catRecord) {
+          andConditions.push({
+            OR: [
+              { categoryId: parsedCatId },
+              { categoryNames: { contains: `"${catRecord.name}"` } },
+              { categoryNames: { contains: catRecord.name } },
+            ],
+          });
+        } else {
+          andConditions.push({ categoryId: parsedCatId });
+        }
+      }
+    }
 
-    // Get count of products already synced in PMS as ONLINE_WEB / LK_TRONICS
-    const [syncedCount, pmsTotalCount, lastSyncedProduct] = await Promise.all([
-      prisma.product.count({
-        where: {
-          OR: [
-            { source: "ONLINE_WEB" },
-            { source: "LK_TRONICS" },
-            { externalId: { not: null } },
-          ],
+    // Filter by supplier ("ALL", "NONE", "UNASSIGNED", or supplier ID)
+    if (supplierId === "NONE" || supplierId === "UNASSIGNED") {
+      andConditions.push({ supplierId: null });
+    } else if (supplierId && supplierId !== "ALL") {
+      const parsedSup = parseInt(supplierId, 10);
+      if (!isNaN(parsedSup)) {
+        andConditions.push({ supplierId: parsedSup });
+      }
+    }
+
+    // Filter by user who added the product
+    if (createdBy && createdBy !== "ALL") {
+      const parsedCreator = parseInt(createdBy, 10);
+      if (!isNaN(parsedCreator)) {
+        andConditions.push({ createdBy: parsedCreator });
+      }
+    }
+
+    // Search matches on modelAndName, productName, referenceNo, sku, or recordNo
+    if (search) {
+      andConditions.push({
+        OR: [
+          { modelAndName: { contains: search } },
+          { productName: { contains: search } },
+          { referenceNo: { contains: search } },
+          { sku: { contains: search } },
+          { recordNo: { contains: search } },
+        ],
+      });
+    }
+
+    // Date range filter
+    if (fromDate || toDate) {
+      const dateCond: any = {};
+      if (fromDate) dateCond.gte = new Date(fromDate);
+      if (toDate) {
+        const endDate = new Date(toDate);
+        endDate.setHours(23, 59, 59, 999);
+        dateCond.lte = endDate;
+      }
+      andConditions.push({ productDate: dateCond });
+    }
+
+    if (andConditions.length > 0) {
+      where.AND = andConditions;
+    }
+
+    const [products, total] = await Promise.all([
+      prisma.product.findMany({
+        where,
+        skip,
+        take: limit,
+        orderBy: { id: "desc" },
+        include: {
+          category: {
+            select: { id: true, name: true },
+          },
+          supplier: {
+            select: { id: true, name: true },
+          },
+          author: {
+            select: {
+              id: true,
+              name: true,
+              username: true,
+            },
+          },
         },
       }),
-      prisma.product.count(),
-      prisma.product.findFirst({
-        where: {
-          OR: [
-            { source: "ONLINE_WEB" },
-            { source: "LK_TRONICS" },
-            { externalId: { not: null } },
-          ],
-        },
-        orderBy: { updatedAt: "desc" },
-        select: { updatedAt: true },
-      }),
+      prisma.product.count({ where }),
     ]);
 
     return NextResponse.json({
-      connected: res.ok,
-      storeUrl,
-      totalStoreProducts,
-      totalPages,
-      syncedInPms: syncedCount,
-      pmsTotalCount,
-      lastSyncedAt: lastSyncedProduct?.updatedAt || null,
+      products,
+      pagination: {
+        total,
+        page,
+        limit,
+        totalPages: Math.ceil(total / limit),
+      },
     });
-  } catch (error: any) {
-    console.error("Error getting web store status:", error);
+  } catch (error) {
+    console.error("Error fetching products:", error);
     return NextResponse.json(
-      { error: error?.message || "Failed to fetch store status" },
+      { error: "Failed to fetch products" },
       { status: 500 }
     );
   }
 }
 
-// POST /api/products/sync-web-store (Sync / import products from lk-tronics.com - Admin/Superadmin only)
+// POST /api/products (Create product / PMS Data Adding request)
 export async function POST(request: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
@@ -95,34 +188,117 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
+    const userId = parseInt((session.user as any).id, 10);
     const userRole = (session.user as any).role;
-    if (userRole !== "ADMIN" && userRole !== "SUPERADMIN") {
+    const isPrivileged = userRole === "ADMIN" || userRole === "SUPERADMIN";
+
+    const body = await request.json();
+    const parseResult = productSchema.safeParse(body);
+
+    if (!parseResult.success) {
+      const errorMsg = parseResult.error.issues.map((e: any) => e.message).join(", ");
+      return NextResponse.json({ error: errorMsg }, { status: 400 });
+    }
+
+    const data = parseResult.data;
+    const modelAndName = data.modelAndName;
+    const productName = data.productName || modelAndName;
+    const productDate = data.productDate ? new Date(data.productDate) : new Date();
+
+    // Check duplicate referenceNo if provided
+    if (data.referenceNo) {
+      const existingRef = await prisma.product.findFirst({
+        where: { referenceNo: { equals: data.referenceNo.trim() } },
+      });
+      if (existingRef) {
+        return NextResponse.json(
+          { error: `Reference number '${data.referenceNo}' already exists.` },
+          { status: 409 }
+        );
+      }
+    }
+
+    // Create product inside transaction with sequence lock to prevent race conditions & duplicate SKUs
+    const newProduct = await prisma.$transaction(
+      async (tx) => {
+        return await withSequenceLock(tx, async () => {
+          const recordNo = await getNextRecordNo(tx);
+          const referenceNo = data.referenceNo ? data.referenceNo.trim() : `REF-${recordNo}`;
+          const sku = await getNextSku(tx);
+
+          const created = await tx.product.create({
+            data: {
+              recordNo,
+              referenceNo,
+              productName,
+              modelAndName,
+              sku,
+              productDate,
+              price: data.priceLKR || data.price || 0,
+              priceUSD: data.priceUSD || null,
+              priceLKR: data.priceLKR || null,
+              description: data.description || null,
+              quantity: data.quantity || 1,
+              weight: data.weight || null,
+              referenceLink: data.referenceLink || null,
+              additionalNote: data.additionalNote || null,
+              imagePath: data.imagePath || null,
+              categoryId: data.categoryId || null,
+              supplierId: data.supplierId ? Number(data.supplierId) : null,
+              createdBy: userId,
+              status: isPrivileged && data.status ? data.status : "PENDING",
+            },
+            include: {
+              category: true,
+              author: {
+                select: { name: true, username: true },
+              },
+            },
+          });
+
+          // Record audit history
+          await tx.productHistory.create({
+            data: {
+              productId: created.id,
+              userId,
+              action: "CREATED",
+              newData: {
+                recordNo,
+                referenceNo,
+                modelAndName,
+                quantity: created.quantity,
+                status: created.status,
+              },
+            },
+          });
+
+          return created;
+        });
+      },
+      {
+        maxWait: 15000,
+        timeout: 15000,
+      }
+    );
+
+
+    return NextResponse.json(newProduct, { status: 201 });
+  } catch (error: any) {
+    console.error("Error creating product:", error);
+
+    if (error.code === "P2002") {
+      const target = error.meta?.target;
+      if (typeof target === "string" && target.includes("referenceNo")) {
+        return NextResponse.json({ error: "Reference number already exists." }, { status: 409 });
+      }
       return NextResponse.json(
-        { error: "Forbidden: Only administrators can trigger web store synchronization." },
-        { status: 403 }
+        { error: "A unique constraint violation occurred." },
+        { status: 409 }
       );
     }
 
-    const userId = parseInt((session.user as any).id, 10);
-    const body = await request.json().catch(() => ({}));
-
-    const page = Math.max(1, parseInt(body.page || "1", 10));
-    const perPage = Math.min(100, Math.max(1, parseInt(body.perPage || "50", 10)));
-    const maxPages = Math.min(20, Math.max(1, parseInt(body.maxPages || "15", 10)));
-
-    const result = await syncWebStoreBatch({
-      page,
-      perPage,
-      syncAll: Boolean(body.syncAll),
-      maxPages,
-      userId,
-    });
-
-    return NextResponse.json(result);
-  } catch (error: any) {
-    console.error("Error in sync-web-store:", error);
     return NextResponse.json(
-      { error: error?.message || "Failed to sync products from web store" },
+      { error: "Failed to create product request. Please try again." },
       { status: 500 }
     );
   }

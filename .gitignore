@@ -43,9 +43,9 @@ claude.md
 .vscode/
 .idea/
 
-# env files (explicitly allow .env and .env.example)
+# env files
+.env
 .env*.local
-!.env
 !.env.example
 
 # vercel

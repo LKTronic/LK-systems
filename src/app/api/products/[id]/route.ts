@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { productSchema } from "@/lib/validations/product";
+import { fetchOriginalWebProduct } from "@/lib/webStoreAutoSync";
 
 // GET /api/products/:id
 export async function GET(
@@ -236,6 +237,173 @@ export async function DELETE(
 
     if (!existingProduct) {
       return NextResponse.json({ error: "Product not found" }, { status: 404 });
+    }
+
+    const userRole = (session.user as any).role;
+    const isPrivileged = userRole === "ADMIN" || userRole === "SUPERADMIN";
+
+    const isOnlineWeb =
+      existingProduct.source === "ONLINE_WEB" ||
+      existingProduct.source === "LK_TRONICS" ||
+      Boolean(existingProduct.externalId);
+
+    // Business Rule: Do not allow deleting Online Web products.
+    // If an Online Web product has PMS modifications, deleting it removes the PMS modified data only,
+    // retaining the product in the PMS repository.
+    if (isOnlineWeb) {
+      // SEC-03 Authorization: Only ADMIN / SUPERADMIN can reverse Online Web product changes
+      if (!isPrivileged) {
+        return NextResponse.json(
+          { error: "Forbidden: Only administrators can reverse online web product changes." },
+          { status: 403 }
+        );
+      }
+
+      const isPmsModified = Boolean(
+        existingProduct.supplierId ||
+        existingProduct.priceUpdatedAt ||
+        existingProduct.status === "PENDING" ||
+        existingProduct.supplierNote ||
+        existingProduct.priceUSD ||
+        existingProduct.additionalNote?.includes("PMS Updated")
+      );
+
+      if (!isPmsModified) {
+        return NextResponse.json(
+          { error: "Online Web products cannot be deleted." },
+          { status: 400 }
+        );
+      }
+
+      // Clean out PMS update note tag if present
+      let cleanNote = existingProduct.additionalNote || "";
+      cleanNote = cleanNote.replace(/\[PMS Updated Price[^\]]*\]\s*/g, "").trim();
+
+      // Retrieve original web data directly from WooCommerce store if available
+      let originalWebData: any = null;
+      if (existingProduct.externalId) {
+        originalWebData = await fetchOriginalWebProduct(existingProduct.externalId);
+      }
+
+      const originalPrice =
+        originalWebData?.price !== undefined
+          ? originalWebData.price
+          : Number(existingProduct.price);
+
+      const resetStatus =
+        originalPrice === 0 ? "PRICE_NOT_AVAILABLE" : "ACTIVE";
+
+      await prisma.$transaction(async (tx) => {
+        // Clear supplier quotation price history
+        await tx.productPriceHistory.deleteMany({
+          where: { productId: id },
+        });
+
+        // Record audit history
+        await tx.productHistory.create({
+          data: {
+            productId: id,
+            userId,
+            action: "PMS_DATA_REMOVED",
+            oldData: {
+              id: existingProduct.id,
+              sku: existingProduct.sku,
+              modelAndName: existingProduct.modelAndName,
+              supplierId: existingProduct.supplierId,
+              status: existingProduct.status,
+              price: existingProduct.price,
+              priceLKR: existingProduct.priceLKR,
+              priceUpdatedAt: existingProduct.priceUpdatedAt,
+              additionalNote: existingProduct.additionalNote,
+            },
+            newData: {
+              status: resetStatus,
+              price: originalPrice,
+              message: "Removed all PMS modifications; restored original web store data",
+            },
+          },
+        });
+
+        // Reset PMS-specific quotation fields and restore original web data
+        await tx.product.update({
+          where: { id },
+          data: {
+            // Restore original web data from WooCommerce
+            ...(originalWebData?.name
+              ? {
+                  productName: originalWebData.name,
+                  modelAndName: originalWebData.name,
+                }
+              : {}),
+            ...(originalWebData?.sku ? { sku: originalWebData.sku } : {}),
+            ...(originalWebData?.price !== undefined
+              ? {
+                  price: originalWebData.price,
+                  priceLKR: originalWebData.price,
+                }
+              : {}),
+            ...(originalWebData?.quantity !== undefined
+              ? { quantity: originalWebData.quantity }
+              : {}),
+            ...(originalWebData?.stockStatus
+              ? { stockStatus: originalWebData.stockStatus }
+              : {}),
+            ...(originalWebData?.shippingClass !== undefined
+              ? { shippingClass: originalWebData.shippingClass }
+              : {}),
+            ...(originalWebData?.imageUrl
+              ? { imagePath: originalWebData.imageUrl }
+              : {}),
+            ...(originalWebData?.description
+              ? { description: originalWebData.description }
+              : {}),
+            ...(originalWebData?.weight !== undefined
+              ? { weight: originalWebData.weight }
+              : {}),
+            ...(originalWebData?.permalink
+              ? {
+                  referenceLink: originalWebData.permalink,
+                  externalUrl: originalWebData.permalink,
+                }
+              : {}),
+
+            // Remove all PMS-specific quotation data
+            supplierId: null,
+            priceUpdatedAt: null,
+            priceUSD: null,
+            warrantyPeriod: null,
+            priceValidity: null,
+            leadTime: null,
+            isBrandNewOriginal: null,
+            supplierImage: null,
+            supplierNote: null,
+            additionalNote: cleanNote || null,
+            status: resetStatus,
+          },
+        });
+      });
+
+      return NextResponse.json({
+        message: "Removed PMS modifications. Restored original web store data.",
+        reverted: true,
+      });
+    }
+
+    // Standard PMS Local Product: permanently delete
+    // SEC-03 Authorization: STAFF can only delete products they created, and only while PENDING
+    if (!isPrivileged) {
+      if (existingProduct.createdBy !== userId) {
+        return NextResponse.json(
+          { error: "Forbidden: You do not have permission to delete products created by other users." },
+          { status: 403 }
+        );
+      }
+      if (existingProduct.status !== "PENDING") {
+        return NextResponse.json(
+          { error: "Forbidden: Staff members can only delete pending products. Please contact an administrator." },
+          { status: 403 }
+        );
+      }
     }
 
     await prisma.$transaction(async (tx) => {

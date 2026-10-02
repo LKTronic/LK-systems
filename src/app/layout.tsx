@@ -18,14 +18,6 @@ import { ExtensionErrorSilencer } from "@/components/ExtensionErrorSilencer";
 export const metadata: Metadata = {
   title: "Product Management System",
   description: "Enterprise Product Management System (PMS)",
-  icons: {
-    icon: [
-      { url: "/favicon.ico" },
-      { url: "/logo.png", type: "image/png" },
-    ],
-    shortcut: "/logo.png",
-    apple: "/logo.png",
-  },
 };
 
 export default function RootLayout({

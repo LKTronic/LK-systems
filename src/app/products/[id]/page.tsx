@@ -72,6 +72,24 @@ export default function ProductDetailPage({
     loadProduct();
   }, [resolvedParams.id]);
 
+  const canRequestPrice = (p: any) => {
+    if (!p) return false;
+    const isOnlineWeb =
+      p.source === "ONLINE_WEB" ||
+      p.source === "LK_TRONICS" ||
+      Boolean(p.externalId);
+    if (!isOnlineWeb) return true; // PMS products can always request price
+    const isOverTheSea =
+      p.shippingClass === "over-the-sea" || p.shippingClass === "Over the Sea";
+    const isPna =
+      p.status === "PRICE_NOT_AVAILABLE" || !p.price || Number(p.price) === 0;
+    const isPmsUpdated = Boolean(
+      p.supplierId ||
+        (p.additionalNote && p.additionalNote.includes("PMS Updated"))
+    );
+    return isOverTheSea || isPna || isPmsUpdated;
+  };
+
   const handleRequestPrice = async () => {
     if (!confirm("Request updated price quotation for this product? Status will become Pending.")) {
       return;
@@ -146,21 +164,28 @@ export default function ProductDetailPage({
       <div className="max-w-5xl mx-auto space-y-6">
         {/* Navigation & Action Bar */}
         <div className="flex items-center justify-between">
-          <Link
-            href="/products"
-            className="flex items-center gap-2 text-xs font-semibold text-slate-400 hover:text-white transition-colors"
+          <button
+            type="button"
+            onClick={() => {
+              if (window.history.length > 1) {
+                router.back();
+              } else {
+                router.push("/products");
+              }
+            }}
+            className="flex items-center gap-2 text-xs font-semibold text-slate-400 hover:text-white transition-colors cursor-pointer"
           >
             <ArrowLeft className="w-4 h-4" />
             Back to Products
-          </Link>
+          </button>
 
           <div className="flex items-center gap-3">
             {/* Request Price Button */}
-            {product && (
+            {product && canRequestPrice(product) && (
               <button
                 onClick={handleRequestPrice}
                 disabled={isRequestingPrice}
-                className="flex items-center gap-2 px-4 py-2 bg-amber-600 hover:bg-amber-500 text-white rounded-xl text-xs font-bold shadow-lg shadow-amber-600/20 transition-all"
+                className="flex items-center gap-2 px-4 py-2 bg-amber-600 hover:bg-amber-500 text-white rounded-xl text-xs font-bold shadow-lg shadow-amber-600/20 transition-all cursor-pointer"
                 title={
                   product.status === "PENDING"
                     ? "Currently Pending: Click to re-request quote"
@@ -206,6 +231,11 @@ export default function ProductDetailPage({
                     product.source === "ONLINE_WEB" ||
                     product.source === "LK_TRONICS" ||
                     Boolean(product.externalId);
+                  const isPmsUpdated = Boolean(
+                    product.supplierId ||
+                      (product.additionalNote &&
+                        product.additionalNote.includes("PMS Updated"))
+                  );
                   return (
                     <div className="flex flex-wrap items-center gap-3">
                       <span
@@ -226,6 +256,11 @@ export default function ProductDetailPage({
                           PMS
                         </span>
                       )}
+                      {isOnlineWeb && isPmsUpdated && (
+                        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-indigo-500/15 text-indigo-300 border border-indigo-500/30">
+                          PMS Updated
+                        </span>
+                      )}
                     </div>
                   );
                 })()}
@@ -233,14 +268,45 @@ export default function ProductDetailPage({
                   {product.modelAndName || product.productName}
                 </h2>
                 <div className="flex flex-wrap items-center gap-3 mt-1">
-                  <p className="text-xs text-slate-400">
-                    Requested by {product.author?.name || "System"} on {formatDateDMY(product.productDate || product.createdAt)}
-                    {product.priceUpdatedAt && (
-                      <span className="ml-2 text-slate-500">
-                        • Last Quoted: {formatDateDMY(product.priceUpdatedAt)}
-                      </span>
-                    )}
-                  </p>
+                  {(() => {
+                    const isOnlineWeb =
+                      product.source === "ONLINE_WEB" ||
+                      product.source === "LK_TRONICS" ||
+                      Boolean(product.externalId);
+                    const isPmsUpdated = Boolean(
+                      product.supplierId ||
+                        (product.additionalNote &&
+                          product.additionalNote.includes("PMS Updated"))
+                    );
+
+                    if (isOnlineWeb && !isPmsUpdated && product.status !== "PENDING") {
+                      return null;
+                    }
+
+                    return (
+                      <p className="text-xs text-slate-400">
+                        {isOnlineWeb ? (
+                          product.status === "PENDING" ? (
+                            <>Requested on {formatDateDMY(product.updatedAt || product.createdAt)}</>
+                          ) : (
+                            <>
+                              PMS Price Uploaded on {formatDateDMY(product.priceUpdatedAt || product.updatedAt)}
+                              {product.supplier?.name && ` via ${product.supplier.name}`}
+                            </>
+                          )
+                        ) : (
+                          <>
+                            Requested by {product.author?.name || "System"} on {formatDateDMY(product.productDate || product.createdAt)}
+                            {product.priceUpdatedAt && (
+                              <span className="ml-2 text-slate-500">
+                                • Last Quoted: {formatDateDMY(product.priceUpdatedAt)}
+                              </span>
+                            )}
+                          </>
+                        )}
+                      </p>
+                    );
+                  })()}
                   {(product.referenceLink || product.externalUrl) && (
                     <a
                       href={product.referenceLink || product.externalUrl}

@@ -2,13 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { syncWebStoreBatch } from "@/lib/webStoreAutoSync";
-
-const STORE_URL = process.env.WC_STORE_URL || "https://lk-tronics.com";
-const CONSUMER_KEY =
-  process.env.WC_CONSUMER_KEY || "ck_22b402285407603fe1525f48e8bd6adcfb06f3a0";
-const CONSUMER_SECRET =
-  process.env.WC_CONSUMER_SECRET || "cs_2c1aa243a6bb144fa71c13072a7d067318ac90ac";
+import { syncWebStoreBatch, getWooCommerceConfig } from "@/lib/webStoreAutoSync";
 
 // GET /api/products/sync-web-store (Get sync status and store info)
 export async function GET(request: NextRequest) {
@@ -18,13 +12,21 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const authHeader =
-      "Basic " +
-      Buffer.from(`${CONSUMER_KEY}:${CONSUMER_SECRET}`).toString("base64");
+    let config;
+    try {
+      config = getWooCommerceConfig();
+    } catch (cfgErr: any) {
+      return NextResponse.json(
+        { error: cfgErr?.message || "WooCommerce configuration missing." },
+        { status: 503 }
+      );
+    }
+
+    const { storeUrl, authHeader } = config;
 
     // Fetch total products count from WooCommerce
     const res = await fetch(
-      `${STORE_URL}/wp-json/wc/v3/products?per_page=1&status=publish`,
+      `${storeUrl}/wp-json/wc/v3/products?per_page=1&status=publish`,
       {
         headers: {
           Authorization: authHeader,
@@ -69,7 +71,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({
       connected: res.ok,
-      storeUrl: STORE_URL,
+      storeUrl,
       totalStoreProducts,
       totalPages,
       syncedInPms: syncedCount,
@@ -85,7 +87,7 @@ export async function GET(request: NextRequest) {
   }
 }
 
-// POST /api/products/sync-web-store (Sync / import products from lk-tronics.com)
+// POST /api/products/sync-web-store (Sync / import products from lk-tronics.com - Admin/Superadmin only)
 export async function POST(request: NextRequest) {
   try {
     const session = await getServerSession(authOptions);
@@ -93,14 +95,26 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
+    const userRole = (session.user as any).role;
+    if (userRole !== "ADMIN" && userRole !== "SUPERADMIN") {
+      return NextResponse.json(
+        { error: "Forbidden: Only administrators can trigger web store synchronization." },
+        { status: 403 }
+      );
+    }
+
     const userId = parseInt((session.user as any).id, 10);
     const body = await request.json().catch(() => ({}));
 
+    const page = Math.max(1, parseInt(body.page || "1", 10));
+    const perPage = Math.min(100, Math.max(1, parseInt(body.perPage || "50", 10)));
+    const maxPages = Math.min(20, Math.max(1, parseInt(body.maxPages || "15", 10)));
+
     const result = await syncWebStoreBatch({
-      page: body.page,
-      perPage: body.perPage || 100,
+      page,
+      perPage,
       syncAll: Boolean(body.syncAll),
-      maxPages: body.maxPages || 15,
+      maxPages,
       userId,
     });
 

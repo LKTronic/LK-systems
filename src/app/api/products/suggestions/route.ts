@@ -19,19 +19,41 @@ export async function GET(request: NextRequest) {
 
     const products = await prisma.product.findMany({
       where: {
-        productName: {
-          contains: query,
-        },
+        OR: [
+          { productName: { contains: query } },
+          { modelAndName: { contains: query } },
+          { sku: { contains: query } },
+          { referenceNo: { contains: query } },
+        ],
       },
       select: {
         id: true,
         productName: true,
+        modelAndName: true,
         sku: true,
+        referenceNo: true,
         price: true,
+        priceLKR: true,
+        priceUSD: true,
+        status: true,
+        weight: true,
+        imagePath: true,
+        category: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
+        supplier: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
       },
-      take: 8,
+      take: 10,
       orderBy: {
-        productName: "asc",
+        createdAt: "desc",
       },
     });
 
@@ -44,3 +66,4 @@ export async function GET(request: NextRequest) {
     );
   }
 }
+

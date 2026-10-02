@@ -29,6 +29,30 @@ export async function POST(
       return NextResponse.json({ error: "Product not found" }, { status: 404 });
     }
 
+    const isOnlineWeb = product.source !== "PMS" || Boolean(product.externalId);
+    if (isOnlineWeb) {
+      const isOverTheSea =
+        product.shippingClass === "over-the-sea" ||
+        product.shippingClass === "Over the Sea";
+      const isPriceNotAvailable =
+        product.status === "PRICE_NOT_AVAILABLE" ||
+        Number(product.priceLKR || product.price) === 0;
+      const isPmsUpdated = Boolean(
+        product.supplierId ||
+        product.additionalNote?.includes("PMS Updated")
+      );
+
+      if (!isOverTheSea && !isPriceNotAvailable && !isPmsUpdated) {
+        return NextResponse.json(
+          {
+            error:
+              "For online web products, price requests are only allowed for 'Over the Sea', 'Price Not Available', or PMS-quoted products.",
+          },
+          { status: 400 }
+        );
+      }
+    }
+
     const previousStatus = product.status;
 
     const updated = await prisma.$transaction(async (tx) => {

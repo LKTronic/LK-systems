@@ -473,21 +473,24 @@ export async function POST(request: NextRequest) {
           : Math.max(recordNum + 1, lastProduct.id + 1);
       }
 
-      // Find starting SKU number
-      const productsWithSku = await tx.product.findMany({
-        where: {
-          sku: { startsWith: "LKREQ" },
-        },
-        select: { sku: true },
-      });
-
+      // Find starting SKU number atomically
       let currentSkuNum = 0;
-      for (const p of productsWithSku) {
-        if (!p.sku) continue;
-        const numPart = p.sku.replace(/^LKREQ/i, "").trim();
-        const parsed = parseInt(numPart, 10);
-        if (!isNaN(parsed) && parsed > currentSkuNum) {
-          currentSkuNum = parsed;
+      try {
+        const skuRows = (await tx.$queryRawUnsafe(
+          "SELECT MAX(CAST(SUBSTRING(sku, 6) AS UNSIGNED)) as maxSku FROM Product WHERE sku LIKE 'LKREQ%' FOR UPDATE"
+        )) as any[];
+        if (Array.isArray(skuRows) && skuRows.length > 0 && skuRows[0]?.maxSku != null) {
+          currentSkuNum = Number(skuRows[0].maxSku) || 0;
+        }
+      } catch (e) {
+        const lastSkuProd = await tx.product.findFirst({
+          where: { sku: { startsWith: "LKREQ" } },
+          orderBy: { id: "desc" },
+          select: { sku: true },
+        });
+        if (lastSkuProd?.sku) {
+          const parsed = parseInt(lastSkuProd.sku.replace(/^LKREQ/i, "").trim(), 10);
+          if (!isNaN(parsed)) currentSkuNum = parsed;
         }
       }
       currentSkuNum++;
