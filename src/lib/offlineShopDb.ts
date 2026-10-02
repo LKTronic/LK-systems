@@ -72,20 +72,38 @@ function openDb(): Promise<IDBDatabase> {
   });
 }
 
+export type ShopOfflineSyncStatus =
+  | "idle"
+  | "syncing"
+  | "downloading_images"
+  | "synced"
+  | "offline";
+
 export function notifyShopSyncStatus(
-  status: "idle" | "syncing" | "synced" | "offline",
-  count?: number
+  status: ShopOfflineSyncStatus,
+  detail?: { count?: number; doneImages?: number; totalImages?: number } | number
 ) {
   if (typeof window === "undefined") return;
+  const count = typeof detail === "number" ? detail : detail?.count ?? 0;
+  const doneImages = typeof detail === "object" ? detail.doneImages ?? 0 : 0;
+  const totalImages = typeof detail === "object" ? detail.totalImages ?? 0 : 0;
+
   window.dispatchEvent(
     new CustomEvent("pms_shop_offline_status", {
-      detail: { status, count: count ?? 0, timestamp: new Date().toISOString() },
+      detail: {
+        status,
+        count,
+        doneImages,
+        totalImages,
+        timestamp: new Date().toISOString(),
+      },
     })
   );
 }
 
 /**
- * Downloads latest product catalog from server and persists into browser's IndexedDB.
+ * Downloads latest product catalog from server and persists into browser's IndexedDB,
+ * and caches all product images locally for 100% offline image viewing.
  */
 export async function syncShopCatalogToIndexedDb(): Promise<{ count: number; timestamp: string }> {
   notifyShopSyncStatus("syncing");
@@ -122,28 +140,51 @@ export async function syncShopCatalogToIndexedDb(): Promise<{ count: number; tim
       tx.onerror = () => reject(tx.error || new Error("Failed to write to IndexedDB"));
     });
 
-    notifyShopSyncStatus("synced", products.length);
+    const imageUrls = Array.from(
+      new Set(products.map((p) => p.imagePath).filter(Boolean) as string[])
+    );
 
-    // Pre-cache product images into browser Cache Storage in the background
-    if (typeof window !== "undefined" && "caches" in window) {
-      const imageUrls = products.map((p) => p.imagePath).filter(Boolean) as string[];
+    if (imageUrls.length > 0 && typeof window !== "undefined" && "caches" in window) {
+      notifyShopSyncStatus("downloading_images", {
+        count: products.length,
+        doneImages: 0,
+        totalImages: imageUrls.length,
+      });
+
+      // Download and cache all product images in controlled background batches
       setTimeout(() => {
-        preCacheProductImages(imageUrls);
-      }, 100);
+        preCacheProductImages(imageUrls, (done, total) => {
+          if (done < total) {
+            notifyShopSyncStatus("downloading_images", {
+              count: products.length,
+              doneImages: done,
+              totalImages: total,
+            });
+          } else {
+            notifyShopSyncStatus("synced", {
+              count: products.length,
+              doneImages: total,
+              totalImages: total,
+            });
+          }
+        });
+      }, 50);
+    } else {
+      notifyShopSyncStatus("synced", { count: products.length });
     }
 
     return { count: products.length, timestamp };
   } catch (err) {
     console.warn("Shop offline sync warning (will use existing cached data):", err);
     getShopOfflineMeta().then((meta) => {
-      notifyShopSyncStatus("offline", meta.count);
+      notifyShopSyncStatus("offline", { count: meta.count });
     });
     throw err;
   }
 }
 
 /**
- * Pre-caches an array of image URLs into browser Cache Storage in controlled batches.
+ * Pre-caches all image URLs into browser Cache Storage in controlled batches of 8.
  */
 export async function preCacheProductImages(
   images: string[],
@@ -153,7 +194,7 @@ export async function preCacheProductImages(
   try {
     const cache = await caches.open("pms-shop-cache-v3");
     const uniqueUrls = Array.from(new Set(images.filter(Boolean)));
-    const batchSize = 6;
+    const batchSize = 8;
     let completed = 0;
 
     for (let i = 0; i < uniqueUrls.length; i += batchSize) {
@@ -175,7 +216,7 @@ export async function preCacheProductImages(
             // Soft-fail individual images without halting sync
           } finally {
             completed++;
-            if (onProgress) {
+            if (onProgress && (completed % 5 === 0 || completed === uniqueUrls.length)) {
               onProgress(completed, uniqueUrls.length);
             }
           }

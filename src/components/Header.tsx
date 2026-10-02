@@ -12,8 +12,14 @@ export function Header({ title, description }: { title: string; description?: st
   const isShop = role === "SHOP";
 
   const [isOnline, setIsOnline] = useState(true);
-  const [syncStatus, setSyncStatus] = useState<"idle" | "syncing" | "synced" | "offline">("idle");
+  const [syncStatus, setSyncStatus] = useState<
+    "idle" | "syncing" | "downloading_images" | "synced" | "offline"
+  >("idle");
   const [offlineCount, setOfflineCount] = useState<number>(0);
+  const [imageProgress, setImageProgress] = useState<{ done: number; total: number }>({
+    done: 0,
+    total: 0,
+  });
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -44,6 +50,9 @@ export function Header({ title, description }: { title: string; description?: st
       if (detail?.status) {
         setSyncStatus(detail.status);
         if (detail.count > 0) setOfflineCount(detail.count);
+        if (detail.totalImages > 0) {
+          setImageProgress({ done: detail.doneImages || 0, total: detail.totalImages });
+        }
       }
     };
     window.addEventListener("pms_shop_offline_status", handleStatusEvent);
@@ -95,10 +104,10 @@ export function Header({ title, description }: { title: string; description?: st
         {isShop ? (
           <div
             className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl border text-xs font-semibold transition-all ${
-              syncStatus === "syncing"
+              syncStatus === "syncing" || syncStatus === "downloading_images"
                 ? "bg-sky-500/10 text-sky-300 border-sky-500/30"
                 : !isOnline || syncStatus === "offline"
-                ? "bg-amber-500/15 text-amber-300 border-amber-500/40 animate-pulse"
+                ? "bg-amber-500/15 text-amber-300 border-amber-500/40"
                 : "bg-emerald-500/10 text-emerald-400 border-emerald-500/30"
             }`}
           >
@@ -106,6 +115,13 @@ export function Header({ title, description }: { title: string; description?: st
               <>
                 <Loader2 className="w-3.5 h-3.5 animate-spin text-sky-400" />
                 <span>Syncing catalog...</span>
+              </>
+            ) : syncStatus === "downloading_images" ? (
+              <>
+                <Loader2 className="w-3.5 h-3.5 animate-spin text-sky-400" />
+                <span>
+                  Downloading Images ({imageProgress.done}/{imageProgress.total})
+                </span>
               </>
             ) : !isOnline || syncStatus === "offline" ? (
               <>
@@ -115,7 +131,7 @@ export function Header({ title, description }: { title: string; description?: st
             ) : (
               <>
                 <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
-                <span>Synced {offlineCount > 0 ? `(${offlineCount})` : ""}</span>
+                <span>⚡ Offline Ready ({offlineCount > 0 ? offlineCount : "All"})</span>
               </>
             )}
           </div>

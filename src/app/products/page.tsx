@@ -110,7 +110,11 @@ export default function ProductsPage() {
 
   useEffect(() => {
     const updateOnlineStatus = () => {
-      setIsOffline(typeof navigator !== "undefined" ? !navigator.onLine : false);
+      const offline = typeof navigator !== "undefined" ? !navigator.onLine : false;
+      setIsOffline(offline);
+      if (!offline && isShop) {
+        syncShopCatalogToIndexedDb().catch(() => {});
+      }
     };
     updateOnlineStatus();
     window.addEventListener("online", updateOnlineStatus);
@@ -119,7 +123,7 @@ export default function ProductsPage() {
       window.removeEventListener("online", updateOnlineStatus);
       window.removeEventListener("offline", updateOnlineStatus);
     };
-  }, []);
+  }, [isShop]);
 
   useEffect(() => {
     try {
