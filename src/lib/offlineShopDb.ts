@@ -124,16 +124,12 @@ export async function syncShopCatalogToIndexedDb(): Promise<{ count: number; tim
 
     notifyShopSyncStatus("synced", products.length);
 
-    // Pre-cache product thumbnails into browser cache in the background
-    if (typeof window !== "undefined") {
+    // Pre-cache product images into browser Cache Storage in the background
+    if (typeof window !== "undefined" && "caches" in window) {
+      const imageUrls = products.map((p) => p.imagePath).filter(Boolean) as string[];
       setTimeout(() => {
-        products.slice(0, 150).forEach((p) => {
-          if (p.imagePath) {
-            const img = new Image();
-            img.src = p.imagePath;
-          }
-        });
-      }, 500);
+        preCacheProductImages(imageUrls);
+      }, 100);
     }
 
     return { count: products.length, timestamp };
@@ -143,6 +139,51 @@ export async function syncShopCatalogToIndexedDb(): Promise<{ count: number; tim
       notifyShopSyncStatus("offline", meta.count);
     });
     throw err;
+  }
+}
+
+/**
+ * Pre-caches an array of image URLs into browser Cache Storage in controlled batches.
+ */
+export async function preCacheProductImages(
+  images: string[],
+  onProgress?: (cachedCount: number, total: number) => void
+) {
+  if (typeof window === "undefined" || !("caches" in window)) return;
+  try {
+    const cache = await caches.open("pms-shop-cache-v2");
+    const uniqueUrls = Array.from(new Set(images.filter(Boolean)));
+    const batchSize = 6;
+    let completed = 0;
+
+    for (let i = 0; i < uniqueUrls.length; i += batchSize) {
+      const batch = uniqueUrls.slice(i, i + batchSize);
+      await Promise.all(
+        batch.map(async (url) => {
+          try {
+            const existing = await cache.match(url);
+            if (!existing) {
+              const res = await fetch(url, { mode: "no-cors" });
+              if (
+                res &&
+                (res.status === 200 || res.type === "opaque" || res.status === 0)
+              ) {
+                await cache.put(url, res);
+              }
+            }
+          } catch (e) {
+            // Soft-fail individual images without halting sync
+          } finally {
+            completed++;
+            if (onProgress) {
+              onProgress(completed, uniqueUrls.length);
+            }
+          }
+        })
+      );
+    }
+  } catch (err) {
+    console.warn("Image pre-caching warning:", err);
   }
 }
 

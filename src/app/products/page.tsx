@@ -227,8 +227,9 @@ export default function ProductsPage() {
     }
   }, [importPreview]);
 
-  // Image preview modal state
+  // Image and Product Instant Preview Modal States
   const [previewImage, setPreviewImage] = useState<string | null>(null);
+  const [previewProduct, setPreviewProduct] = useState<any | null>(null);
 
   // Admin Price Validity Period Modal State
   const [isValidityModalOpen, setIsValidityModalOpen] = useState(false);
@@ -1101,8 +1102,12 @@ export default function ProductsPage() {
                       key={p.id}
                       id={`product-card-${p.id}`}
                       onClick={() => {
-                        saveScrollState(p.id);
-                        router.push(`/products/${p.id}`);
+                        if (isShop) {
+                          setPreviewProduct(p);
+                        } else {
+                          saveScrollState(p.id);
+                          router.push(`/products/${p.id}`);
+                        }
                       }}
                       className={`bg-slate-900 border rounded-2xl p-3.5 flex flex-col justify-between transition-all duration-200 shadow-lg hover:shadow-indigo-950/40 group cursor-pointer relative overflow-hidden ${
                         isOnlineWeb
@@ -1361,8 +1366,12 @@ export default function ProductsPage() {
                           key={p.id}
                           id={`product-row-${p.id}`}
                           onClick={() => {
-                            saveScrollState(p.id);
-                            router.push(`/products/${p.id}`);
+                            if (isShop) {
+                              setPreviewProduct(p);
+                            } else {
+                              saveScrollState(p.id);
+                              router.push(`/products/${p.id}`);
+                            }
                           }}
                           className={`cursor-pointer transition-colors group ${
                             isOnlineWeb
@@ -1796,6 +1805,166 @@ export default function ProductsPage() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Instant Product Preview Modal (0ms Offline Preview for Shop) */}
+      {previewProduct && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/85 backdrop-blur-md animate-in fade-in duration-200">
+          <div className="bg-slate-900 border border-slate-700/80 rounded-3xl max-w-3xl w-full p-6 shadow-2xl shadow-black/80 relative max-h-[90vh] flex flex-col overflow-hidden animate-in zoom-in-95 duration-200">
+            {/* Header */}
+            <div className="flex items-start justify-between gap-4 pb-4 border-b border-slate-800">
+              <div className="space-y-1.5 pr-6">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="font-mono font-bold text-xs text-orange-400 bg-orange-950/60 px-2.5 py-1 rounded-lg border border-orange-500/40">
+                    SKU: {previewProduct.sku || previewProduct.recordNo || "—"}
+                  </span>
+                  {previewProduct.shippingClass === "over-the-sea" || previewProduct.shippingClass === "Over the Sea" ? (
+                    <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold bg-cyan-950/80 text-cyan-300 border border-cyan-500/40">
+                      🚢 Over the Sea
+                    </span>
+                  ) : null}
+                  {previewProduct.stockStatus === "outofstock" || previewProduct.quantity === 0 ? (
+                    <span className="inline-flex items-center px-2.5 py-1 rounded-lg text-xs font-bold bg-rose-500/15 text-rose-400 border border-rose-500/30">
+                      Out of Stock
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center px-2.5 py-1 rounded-lg font-mono text-xs font-bold bg-slate-800 text-emerald-400 border border-slate-700">
+                      Qty: {previewProduct.quantity}
+                    </span>
+                  )}
+                </div>
+                <h3 className="text-lg font-bold text-white leading-snug pt-1">
+                  {previewProduct.modelAndName || previewProduct.productName}
+                </h3>
+              </div>
+              <button
+                onClick={() => setPreviewProduct(null)}
+                className="p-2 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 transition-colors shrink-0"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Content Body */}
+            <div className="py-4 space-y-5 overflow-y-auto max-h-[calc(85vh-160px)] pr-2">
+              <div className="grid grid-cols-1 md:grid-cols-12 gap-6 items-start">
+                {/* Image Section */}
+                <div className="md:col-span-5 bg-slate-950 rounded-2xl p-3 border border-slate-800 flex flex-col items-center justify-center min-h-[220px]">
+                  {previewProduct.imagePath ? (
+                    <div className="relative group/modalimg w-full flex items-center justify-center">
+                      <img
+                        src={previewProduct.imagePath}
+                        alt={previewProduct.productName}
+                        referrerPolicy="no-referrer"
+                        className="max-h-56 w-auto object-contain rounded-xl"
+                      />
+                      <button
+                        onClick={() => setPreviewImage(previewProduct.imagePath!)}
+                        className="absolute bottom-2 right-2 p-1.5 rounded-lg bg-slate-900/80 backdrop-blur-sm border border-slate-700 text-slate-300 hover:text-white transition-opacity"
+                        title="Zoom Image"
+                      >
+                        <ImageIcon className="w-4 h-4" />
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="text-slate-600 flex flex-col items-center gap-2 py-8">
+                      <ImageIcon className="w-12 h-12 stroke-1" />
+                      <span className="text-xs">No image available</span>
+                    </div>
+                  )}
+                </div>
+
+                {/* Details Section */}
+                <div className="md:col-span-7 space-y-4">
+                  {/* Selling Price Box */}
+                  <div className="p-4 rounded-2xl bg-gradient-to-br from-emerald-950/40 to-slate-900 border border-emerald-500/30">
+                    <span className="text-[11px] font-bold uppercase tracking-wider text-emerald-400/90 block mb-1">
+                      Selling Price (LKR)
+                    </span>
+                    <span className="text-2xl font-black text-emerald-400 font-mono">
+                      {previewProduct.status === "NOT_REQUESTED"
+                        ? "Not Requested"
+                        : previewProduct.status === "PRICE_NOT_AVAILABLE" ||
+                          Number(previewProduct.priceLKR || previewProduct.price) === 0
+                        ? "Price Not Available"
+                        : formatLKR(previewProduct.priceLKR || previewProduct.price)}
+                    </span>
+                  </div>
+
+                  {/* Categories */}
+                  {previewProduct.categoryNames && (
+                    <div className="space-y-1.5">
+                      <span className="text-[11px] font-semibold text-slate-400">Categories</span>
+                      <div className="flex flex-wrap gap-1.5">
+                        {previewProduct.categoryNames
+                          .replace(/[\[\]"]/g, "")
+                          .split(",")
+                          .map((cat: string, i: number) => (
+                            <span
+                              key={i}
+                              className="px-2.5 py-1 rounded-lg text-xs bg-slate-800 text-slate-300 border border-slate-700 font-medium"
+                            >
+                              {cat.trim()}
+                            </span>
+                          ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Description / Specifications */}
+                  {previewProduct.description && (
+                    <div className="space-y-1.5">
+                      <span className="text-[11px] font-semibold text-slate-400">
+                        Specifications & Details
+                      </span>
+                      <div className="p-3.5 rounded-xl bg-slate-950/70 border border-slate-800 text-xs text-slate-300 max-h-48 overflow-y-auto whitespace-pre-line leading-relaxed">
+                        {previewProduct.description}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="pt-4 border-t border-slate-800 flex items-center justify-between gap-3">
+              <div>
+                {(previewProduct.referenceLink || previewProduct.externalUrl) && (
+                  <a
+                    href={previewProduct.referenceLink || previewProduct.externalUrl!}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1.5 text-xs text-violet-400 hover:text-violet-300 font-medium"
+                  >
+                    <span>View on Website</span>
+                    <ExternalLink className="w-3.5 h-3.5" />
+                  </a>
+                )}
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setPreviewProduct(null)}
+                  className="px-4 py-2 rounded-xl border border-slate-700 hover:bg-slate-800 text-slate-300 text-xs font-semibold transition-colors"
+                >
+                  Close
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const id = previewProduct.id;
+                    setPreviewProduct(null);
+                    saveScrollState(id);
+                    router.push(`/products/${id}`);
+                  }}
+                  className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold shadow-lg shadow-indigo-600/20 transition-all"
+                >
+                  Full Page View
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}

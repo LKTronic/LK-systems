@@ -60,13 +60,16 @@ export default function ProductDetailPage({
 
   const loadProduct = async () => {
     try {
-      if (isShop && typeof navigator !== "undefined" && !navigator.onLine) {
+      if (isShop) {
+        // Instant load from IndexedDB for shop users
         const local = await getShopProductFromIndexedDb(Number(resolvedParams.id));
         if (local) {
           setProduct(local);
           setError(null);
           setIsLoading(false);
-          return;
+          if (typeof navigator !== "undefined" && !navigator.onLine) {
+            return;
+          }
         }
       }
 
