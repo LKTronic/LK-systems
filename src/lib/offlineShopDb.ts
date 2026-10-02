@@ -146,35 +146,49 @@ export async function syncShopCatalogToIndexedDb(): Promise<{ count: number; tim
       tx.onerror = () => reject(tx.error || new Error("Failed to write to IndexedDB"));
     });
 
+    // Filter strictly to Web Store products (ONLINE_WEB / LK_TRONICS)
+    // Do not download internal PMS-added product images
+    const webProducts = products.filter(
+      (p) => p.source === "ONLINE_WEB" || p.source === "LK_TRONICS" || Boolean(p.externalId)
+    );
     const imageUrls = Array.from(
-      new Set(products.map((p) => p.imagePath).filter(Boolean) as string[])
+      new Set(
+        webProducts
+          .map((p) => p.imagePath)
+          .filter(
+            (u): u is string =>
+              Boolean(u && (u.startsWith("http://") || u.startsWith("https://")))
+          )
+      )
     );
 
     if (imageUrls.length > 0 && typeof window !== "undefined" && "caches" in window) {
-      notifyShopSyncStatus("downloading_images", {
-        count: products.length,
-        doneImages: 0,
-        totalImages: imageUrls.length,
-      });
-
-      // Download and cache all product images in controlled background batches
-      setTimeout(() => {
-        preCacheProductImages(imageUrls, (done, total) => {
-          if (done < total) {
-            notifyShopSyncStatus("downloading_images", {
-              count: products.length,
-              doneImages: done,
-              totalImages: total,
-            });
-          } else {
-            notifyShopSyncStatus("synced", {
-              count: products.length,
-              doneImages: total,
-              totalImages: total,
-            });
-          }
+      // Check and download only missing images in the background without blocking
+      preCacheProductImages(imageUrls, (done, total) => {
+        if (done < total) {
+          notifyShopSyncStatus("downloading_images", {
+            count: products.length,
+            doneImages: done,
+            totalImages: total,
+          });
+        } else {
+          notifyShopSyncStatus("synced", {
+            count: products.length,
+            doneImages: total,
+            totalImages: total,
+          });
+        }
+      })
+        .then((result) => {
+          notifyShopSyncStatus("synced", {
+            count: products.length,
+            doneImages: result.cachedCount,
+            totalImages: result.total,
+          });
+        })
+        .catch(() => {
+          notifyShopSyncStatus("synced", { count: products.length });
         });
-      }, 50);
     } else {
       notifyShopSyncStatus("synced", { count: products.length });
     }
@@ -190,7 +204,8 @@ export async function syncShopCatalogToIndexedDb(): Promise<{ count: number; tim
 }
 
 /**
- * Pre-caches all image URLs into browser Cache Storage in controlled batches of 10.
+ * Pre-caches web image URLs into browser Cache Storage in controlled batches.
+ * Skips images that are already present in Cache Storage to minimize network usage and avoid re-downloading on refresh.
  */
 export async function preCacheProductImages(
   images: string[],
@@ -201,52 +216,78 @@ export async function preCacheProductImages(
   }
   try {
     const cache = await caches.open("pms-shop-cache-v3");
+    // Filter strictly to external Web Store URLs (http:// or https://)
     const validUrls = images
       .filter(Boolean)
       .map((u) => u.trim())
-      .filter((u) => u.startsWith("http://") || u.startsWith("https://") || u.startsWith("/"));
+      .filter((u) => u.startsWith("http://") || u.startsWith("https://"));
 
     const uniqueUrls = Array.from(new Set(validUrls));
     const total = uniqueUrls.length;
     if (total === 0) return { cachedCount: 0, total: 0 };
 
-    let completed = 0;
-    const batchSize = 12;
+    // Step 1: Fast parallel check to identify ONLY images not yet stored in cache
+    const missingUrls: string[] = [];
+    const checkBatchSize = 40;
+    for (let i = 0; i < uniqueUrls.length; i += checkBatchSize) {
+      const batch = uniqueUrls.slice(i, i + checkBatchSize);
+      const results = await Promise.all(
+        batch.map(async (url) => {
+          try {
+            const match = await cache.match(url, { ignoreVary: true, ignoreSearch: true });
+            return match ? null : url;
+          } catch {
+            return url;
+          }
+        })
+      );
+      for (const r of results) {
+        if (r) missingUrls.push(r);
+      }
+    }
 
-    for (let i = 0; i < uniqueUrls.length; i += batchSize) {
-      const batch = uniqueUrls.slice(i, i + batchSize);
+    const alreadyCachedCount = total - missingUrls.length;
+
+    // If all images are already cached (e.g. on page refresh), return immediately with 0 network calls!
+    if (missingUrls.length === 0) {
+      if (onProgress) onProgress(total, total);
+      return { cachedCount: total, total };
+    }
+
+    // Step 2: Download only the missing images in controlled batches of 10
+    if (onProgress) {
+      onProgress(alreadyCachedCount, total);
+    }
+
+    let newlyCached = 0;
+    const downloadBatchSize = 10;
+
+    for (let i = 0; i < missingUrls.length; i += downloadBatchSize) {
+      const batch = missingUrls.slice(i, i + downloadBatchSize);
       await Promise.all(
         batch.map(async (url) => {
           try {
-            const absoluteUrl = url.startsWith("/") ? window.location.origin + url : url;
-            const existing =
-              (await cache.match(url, { ignoreVary: true, ignoreSearch: true })) ||
-              (await cache.match(absoluteUrl, { ignoreVary: true, ignoreSearch: true }));
-
-            if (!existing) {
-              const req = new Request(absoluteUrl, { mode: "no-cors", credentials: "omit" });
-              const res = await fetch(req);
-              if (
-                res &&
-                (res.status === 200 || res.type === "opaque" || res.status === 0)
-              ) {
-                await cache.put(url, res.clone());
-                await cache.put(absoluteUrl, res.clone());
-                await cache.put(req, res);
-              }
+            const req = new Request(url, { mode: "no-cors", credentials: "omit" });
+            const res = await fetch(req);
+            if (
+              res &&
+              (res.status === 200 || res.type === "opaque" || res.status === 0)
+            ) {
+              await cache.put(url, res.clone());
+              await cache.put(req, res);
             }
           } catch (e) {
             // Soft-fail individual image fetch error without interrupting overall sync
           } finally {
-            completed++;
-            if (onProgress && (completed % 5 === 0 || completed === total)) {
-              onProgress(completed, total);
+            newlyCached++;
+            if (onProgress && (newlyCached % 4 === 0 || alreadyCachedCount + newlyCached === total)) {
+              onProgress(alreadyCachedCount + newlyCached, total);
             }
           }
         })
       );
     }
-    return { cachedCount: completed, total };
+    return { cachedCount: alreadyCachedCount + newlyCached, total };
   } catch (err) {
     console.warn("Image pre-caching warning:", err);
     return { cachedCount: 0, total: images.length };
@@ -264,7 +305,7 @@ export interface ShopCacheDetailedStatus {
 }
 
 /**
- * Checks exact count of products and images stored in IndexedDB and Service Worker Cache Storage.
+ * Checks exact count of products and web images stored in IndexedDB and Service Worker Cache Storage.
  */
 export async function getShopCacheDetails(): Promise<ShopCacheDetailedStatus> {
   try {
@@ -278,23 +319,31 @@ export async function getShopCacheDetails(): Promise<ShopCacheDetailedStatus> {
     });
 
     const meta = await getShopOfflineMeta();
+    // Count only Web Store product images
+    const webProducts = products.filter(
+      (p) => p.source === "ONLINE_WEB" || p.source === "LK_TRONICS" || Boolean(p.externalId)
+    );
     const imageUrls = Array.from(
-      new Set(products.map((p) => p.imagePath).filter(Boolean) as string[])
+      new Set(
+        webProducts
+          .map((p) => p.imagePath)
+          .filter(
+            (u): u is string =>
+              Boolean(u && (u.startsWith("http://") || u.startsWith("https://")))
+          )
+      )
     );
 
     let cachedCount = 0;
     if (typeof window !== "undefined" && "caches" in window) {
       const cache = await caches.open("pms-shop-cache-v3");
-      const batchSize = 25;
+      const batchSize = 40;
       for (let i = 0; i < imageUrls.length; i += batchSize) {
         const batch = imageUrls.slice(i, i + batchSize);
         const matchResults = await Promise.all(
           batch.map(async (url) => {
             try {
-              const absoluteUrl = url.startsWith("/") ? window.location.origin + url : url;
-              const match =
-                (await cache.match(url, { ignoreVary: true, ignoreSearch: true })) ||
-                (await cache.match(absoluteUrl, { ignoreVary: true, ignoreSearch: true }));
+              const match = await cache.match(url, { ignoreVary: true, ignoreSearch: true });
               return match ? 1 : 0;
             } catch {
               return 0;
@@ -322,7 +371,7 @@ export async function getShopCacheDetails(): Promise<ShopCacheDetailedStatus> {
 }
 
 /**
- * Manually forces re-downloading and caching of all catalog images.
+ * Manually forces re-downloading and caching of all web catalog images.
  */
 export async function forceSyncShopImages(
   onProgress?: (done: number, total: number) => void
@@ -336,15 +385,19 @@ export async function forceSyncShopImages(
     req.onerror = () => resolve([]);
   });
 
-  const imageUrls = Array.from(
-    new Set(products.map((p) => p.imagePath).filter(Boolean) as string[])
+  const webProducts = products.filter(
+    (p) => p.source === "ONLINE_WEB" || p.source === "LK_TRONICS" || Boolean(p.externalId)
   );
-
-  notifyShopSyncStatus("downloading_images", {
-    count: products.length,
-    doneImages: 0,
-    totalImages: imageUrls.length,
-  });
+  const imageUrls = Array.from(
+    new Set(
+      webProducts
+        .map((p) => p.imagePath)
+        .filter(
+          (u): u is string =>
+            Boolean(u && (u.startsWith("http://") || u.startsWith("https://")))
+        )
+    )
+  );
 
   const result = await preCacheProductImages(imageUrls, (done, total) => {
     notifyShopSyncStatus("downloading_images", {
