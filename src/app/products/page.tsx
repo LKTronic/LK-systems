@@ -929,23 +929,25 @@ export default function ProductsPage() {
             </div>
 
             {/* Added by Filter */}
-            <div className="w-44">
-              <select
-                value={addedBy}
-                onChange={(e) => {
-                  setAddedBy(e.target.value);
-                  setPage(1);
-                }}
-                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-200 focus:border-indigo-500 outline-none"
-              >
-                <option value="ALL">Added by: All</option>
-                {users.map((u) => (
-                  <option key={u.id} value={u.id.toString()}>
-                    {u.name}
-                  </option>
-                ))}
-              </select>
-            </div>
+            {!isShop && (
+              <div className="w-44">
+                <select
+                  value={addedBy}
+                  onChange={(e) => {
+                    setAddedBy(e.target.value);
+                    setPage(1);
+                  }}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-200 focus:border-indigo-500 outline-none"
+                >
+                  <option value="ALL">Added by: All</option>
+                  {users.map((u) => (
+                    <option key={u.id} value={u.id.toString()}>
+                      {u.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
 
             <button
               type="submit"
