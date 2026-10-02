@@ -115,10 +115,10 @@ export async function POST(request: NextRequest) {
     });
 
     return NextResponse.json(newUser, { status: 201 });
-  } catch (error) {
+  } catch (error: any) {
     console.error("Error creating user:", error);
     return NextResponse.json(
-      { error: "Failed to create user." },
+      { error: error?.message || "Failed to create user." },
       { status: 500 }
     );
   }
