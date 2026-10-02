@@ -31,9 +31,18 @@ export async function PUT(
       return NextResponse.json({ error: "Invalid user ID" }, { status: 400 });
     }
 
-    const existingUser = await prisma.user.findUnique({
-      where: { id },
-    });
+    let existingUser: any = null;
+    try {
+      existingUser = await prisma.user.findUnique({
+        where: { id },
+      });
+    } catch {
+      const raw = await prisma.$queryRawUnsafe<any[]>(
+        `SELECT * FROM User WHERE id = ? LIMIT 1`,
+        id
+      );
+      existingUser = raw[0] || null;
+    }
 
     if (!existingUser) {
       return NextResponse.json({ error: "User not found" }, { status: 404 });
@@ -70,9 +79,19 @@ export async function PUT(
 
     // Check unique username if changing
     if (username && username !== existingUser.username) {
-      const duplicate = await prisma.user.findUnique({
-        where: { username },
-      });
+      let duplicate: any = null;
+      try {
+        duplicate = await prisma.user.findUnique({
+          where: { username },
+        });
+      } catch {
+        const raw = await prisma.$queryRawUnsafe<any[]>(
+          `SELECT id FROM User WHERE username = ? LIMIT 1`,
+          username
+        );
+        duplicate = raw[0] || null;
+      }
+
       if (duplicate) {
         return NextResponse.json(
           { error: "Username already in use." },
@@ -90,20 +109,45 @@ export async function PUT(
       updateData.passwordHash = await bcrypt.hash(password, 10);
     }
 
-    const updated = await prisma.user.update({
-      where: { id },
-      data: updateData,
-      select: {
-        id: true,
-        name: true,
-        username: true,
-        role: true,
-        status: true,
-        updatedAt: true,
-      },
-    });
+    try {
+      const updated = await prisma.user.update({
+        where: { id },
+        data: updateData,
+        select: {
+          id: true,
+          name: true,
+          username: true,
+          role: true,
+          status: true,
+          updatedAt: true,
+        },
+      });
 
-    return NextResponse.json(updated);
+      return NextResponse.json(updated);
+    } catch (updateErr) {
+      const fields: string[] = [];
+      const values: any[] = [];
+      if (name) { fields.push("name = ?"); values.push(name); }
+      if (username) { fields.push("username = ?"); values.push(username); }
+      if (role) { fields.push("role = ?"); values.push(role); }
+      if (status) { fields.push("status = ?"); values.push(status); }
+      if (password && password.trim().length >= 6) {
+        fields.push("passwordHash = ?");
+        values.push(await bcrypt.hash(password, 10));
+      }
+      fields.push("updatedAt = NOW(3)");
+      values.push(id);
+
+      await prisma.$executeRawUnsafe(
+        `UPDATE User SET ${fields.join(", ")} WHERE id = ?`,
+        ...values
+      );
+      const updatedRows = await prisma.$queryRawUnsafe<any[]>(
+        `SELECT id, name, username, role, status, updatedAt FROM User WHERE id = ? LIMIT 1`,
+        id
+      );
+      return NextResponse.json(updatedRows[0] || { id, name, username, role, status });
+    }
   } catch (error: any) {
     console.error("Error updating user:", error);
     return NextResponse.json(

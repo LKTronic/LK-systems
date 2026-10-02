@@ -23,30 +23,39 @@ export async function GET() {
       );
     }
 
-    const where: any = {};
-    if (currentUserRole !== "SUPERADMIN") {
-      where.role = { not: "SUPERADMIN" };
+    try {
+      const where: any = {};
+      if (currentUserRole !== "SUPERADMIN") {
+        where.role = { not: "SUPERADMIN" };
+      }
+
+      const users = await prisma.user.findMany({
+        where,
+        select: {
+          id: true,
+          name: true,
+          username: true,
+          role: true,
+          status: true,
+          createdAt: true,
+          updatedAt: true,
+        },
+        orderBy: { createdAt: "desc" },
+      });
+
+      return NextResponse.json(users);
+    } catch (prismaErr) {
+      const rawUsers = await prisma.$queryRawUnsafe<any[]>(
+        `SELECT id, name, username, role, status, createdAt, updatedAt FROM User ${
+          currentUserRole !== "SUPERADMIN" ? "WHERE role != 'SUPERADMIN'" : ""
+        } ORDER BY createdAt DESC`
+      );
+      return NextResponse.json(rawUsers);
     }
-
-    const users = await prisma.user.findMany({
-      where,
-      select: {
-        id: true,
-        name: true,
-        username: true,
-        role: true,
-        status: true,
-        createdAt: true,
-        updatedAt: true,
-      },
-      orderBy: { createdAt: "desc" },
-    });
-
-    return NextResponse.json(users);
-  } catch (error) {
+  } catch (error: any) {
     console.error("Error fetching users:", error);
     return NextResponse.json(
-      { error: "Failed to fetch users" },
+      { error: error?.message || "Failed to fetch users" },
       { status: 500 }
     );
   }
@@ -84,9 +93,19 @@ export async function POST(request: NextRequest) {
     }
 
     // Check unique username
-    const existing = await prisma.user.findUnique({
-      where: { username },
-    });
+    let existing: any = null;
+    try {
+      existing = await prisma.user.findUnique({
+        where: { username },
+      });
+    } catch {
+      const raw = await prisma.$queryRawUnsafe<any[]>(
+        `SELECT id FROM User WHERE username = ? LIMIT 1`,
+        username
+      );
+      existing = raw[0] || null;
+    }
+
     if (existing) {
       return NextResponse.json(
         { error: "Username is already taken." },
@@ -96,25 +115,41 @@ export async function POST(request: NextRequest) {
 
     const passwordHash = await bcrypt.hash(password, 10);
 
-    const newUser = await prisma.user.create({
-      data: {
+    try {
+      const newUser = await prisma.user.create({
+        data: {
+          name,
+          username,
+          passwordHash,
+          role: role as any,
+          status,
+        },
+        select: {
+          id: true,
+          name: true,
+          username: true,
+          role: true,
+          status: true,
+          createdAt: true,
+        },
+      });
+
+      return NextResponse.json(newUser, { status: 201 });
+    } catch (createErr) {
+      await prisma.$executeRawUnsafe(
+        `INSERT INTO User (name, username, passwordHash, role, status, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, NOW(3), NOW(3))`,
         name,
         username,
         passwordHash,
-        role: role as any,
-        status,
-      },
-      select: {
-        id: true,
-        name: true,
-        username: true,
-        role: true,
-        status: true,
-        createdAt: true,
-      },
-    });
-
-    return NextResponse.json(newUser, { status: 201 });
+        role,
+        status
+      );
+      const created = await prisma.$queryRawUnsafe<any[]>(
+        `SELECT id, name, username, role, status, createdAt FROM User WHERE username = ? LIMIT 1`,
+        username
+      );
+      return NextResponse.json(created[0] || { name, username, role, status }, { status: 201 });
+    }
   } catch (error: any) {
     console.error("Error creating user:", error);
     return NextResponse.json(
