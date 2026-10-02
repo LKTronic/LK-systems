@@ -21,12 +21,17 @@ export function Sidebar() {
   const { data: session } = useSession();
   const role = (session?.user as any)?.role || "STAFF";
   const isAdmin = role === "ADMIN" || role === "SUPERADMIN";
+  const isShop = role === "SHOP";
 
   const navigation = [
     { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
     { name: "Product", href: "/products", icon: Package },
-    { name: "Download Pending Requests", href: "/products/pending-download", icon: Download },
-    { name: "Supply", href: "/supply", icon: Truck },
+    ...(!isShop
+      ? [
+          { name: "Download Pending Requests", href: "/products/pending-download", icon: Download },
+          { name: "Supply", href: "/supply", icon: Truck },
+        ]
+      : []),
   ];
 
   const adminNavigation = [
@@ -130,6 +135,8 @@ export function Sidebar() {
                     ? "bg-purple-500/10 text-purple-400 border border-purple-500/20"
                     : role === "ADMIN"
                     ? "bg-amber-500/10 text-amber-400 border border-amber-500/20"
+                    : role === "SHOP"
+                    ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
                     : "bg-indigo-500/10 text-indigo-400 border border-indigo-500/20"
                 }`}
               >

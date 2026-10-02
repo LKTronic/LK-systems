@@ -23,7 +23,7 @@ interface UserItem {
   id: number;
   name: string;
   username: string;
-  role: "SUPERADMIN" | "ADMIN" | "STAFF";
+  role: "SUPERADMIN" | "ADMIN" | "STAFF" | "SHOP";
   status: "ACTIVE" | "INACTIVE";
   createdAt: string;
 }
@@ -44,7 +44,7 @@ export default function UsersPage() {
   const [formName, setFormName] = useState("");
   const [formUsername, setFormUsername] = useState("");
   const [formPassword, setFormPassword] = useState("");
-  const [formRole, setFormRole] = useState<"SUPERADMIN" | "ADMIN" | "STAFF">("STAFF");
+  const [formRole, setFormRole] = useState<"SUPERADMIN" | "ADMIN" | "STAFF" | "SHOP">("STAFF");
   const [formStatus, setFormStatus] = useState<"ACTIVE" | "INACTIVE">("ACTIVE");
 
   const [modalError, setModalError] = useState<string | null>(null);
@@ -271,6 +271,8 @@ export default function UsersPage() {
                             ? "bg-purple-500/10 text-purple-400 border border-purple-500/20"
                             : user.role === "ADMIN"
                             ? "bg-amber-500/10 text-amber-400 border border-amber-500/20"
+                            : user.role === "SHOP"
+                            ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
                             : "bg-indigo-500/10 text-indigo-400 border border-indigo-500/20"
                         }`}
                       >
@@ -441,6 +443,7 @@ export default function UsersPage() {
                     className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-white focus:outline-none focus:ring-1 focus:ring-indigo-500"
                   >
                     <option value="STAFF">STAFF</option>
+                    <option value="SHOP">SHOP</option>
                     <option value="ADMIN">ADMIN</option>
                     {isSuperAdmin && <option value="SUPERADMIN">SUPERADMIN</option>}
                   </select>

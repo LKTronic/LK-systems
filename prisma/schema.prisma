@@ -147,6 +147,7 @@ enum Role {
   SUPERADMIN
   ADMIN
   STAFF
+  SHOP
 }
 
 enum UserStatus {

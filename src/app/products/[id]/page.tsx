@@ -3,6 +3,7 @@
 import { useEffect, useState, use } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { useSession } from "next-auth/react";
 import { AppLayout } from "@/components/AppLayout";
 import { formatDateDMY, formatLKR } from "@/lib/formatters";
 import {
@@ -47,6 +48,9 @@ export default function ProductDetailPage({
 }) {
   const resolvedParams = use(params);
   const router = useRouter();
+  const { data: session } = useSession();
+  const role = (session?.user as any)?.role || "STAFF";
+  const isShop = role === "SHOP";
 
   const [product, setProduct] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -181,7 +185,7 @@ export default function ProductDetailPage({
 
           <div className="flex items-center gap-3">
             {/* Request Price Button */}
-            {product && canRequestPrice(product) && (
+            {product && (isShop || canRequestPrice(product)) && (
               <button
                 onClick={handleRequestPrice}
                 disabled={isRequestingPrice}
@@ -201,7 +205,7 @@ export default function ProductDetailPage({
               </button>
             )}
 
-            {product && (
+            {product && !isShop && (
               <Link
                 href={`/products/${product.id}/edit`}
                 className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold shadow-lg shadow-indigo-600/20 transition-all"

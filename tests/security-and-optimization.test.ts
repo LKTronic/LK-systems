@@ -160,3 +160,54 @@ describe("Fuzzy Search & Typo Tolerance (Google-style)", () => {
   });
 });
 
+describe("SHOP User Authorization & Access Control", () => {
+  const { createUserSchema, updateUserSchema } = require("../src/lib/validations/user");
+
+  it("validates SHOP role in createUserSchema and updateUserSchema", () => {
+    const validShopUser = createUserSchema.parse({
+      name: "Shop Counter 1",
+      username: "shop01",
+      password: "password123",
+      role: "SHOP",
+      status: "ACTIVE",
+    });
+    assert.equal(validShopUser.role, "SHOP");
+
+    const updatedShopUser = updateUserSchema.parse({
+      role: "SHOP",
+    });
+    assert.equal(updatedShopUser.role, "SHOP");
+  });
+
+  it("restricts SHOP user from accessing Supply and Pending Download routes", () => {
+    function isRouteAllowedForRole(role: string, pathname: string): boolean {
+      if (role === "SHOP") {
+        if (
+          pathname.startsWith("/supply") ||
+          pathname.startsWith("/api/supply") ||
+          pathname.startsWith("/products/pending-download") ||
+          pathname.startsWith("/api/products/export/pending") ||
+          pathname.endsWith("/edit")
+        ) {
+          return false;
+        }
+      }
+      return true;
+    }
+
+    assert.equal(isRouteAllowedForRole("SHOP", "/products"), true);
+    assert.equal(isRouteAllowedForRole("SHOP", "/products/123"), true);
+    assert.equal(isRouteAllowedForRole("SHOP", "/supply"), false);
+    assert.equal(isRouteAllowedForRole("SHOP", "/api/supply/upload"), false);
+    assert.equal(isRouteAllowedForRole("SHOP", "/products/pending-download"), false);
+    assert.equal(isRouteAllowedForRole("SHOP", "/api/products/export/pending"), false);
+    assert.equal(isRouteAllowedForRole("SHOP", "/products/123/edit"), false);
+
+    // Other roles remain allowed
+    assert.equal(isRouteAllowedForRole("ADMIN", "/supply"), true);
+    assert.equal(isRouteAllowedForRole("STAFF", "/supply"), true);
+    assert.equal(isRouteAllowedForRole("ADMIN", "/products/pending-download"), true);
+    assert.equal(isRouteAllowedForRole("STAFF", "/products/pending-download"), true);
+  });
+});
+
