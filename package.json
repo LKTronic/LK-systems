@@ -10,7 +10,7 @@
     "prisma:generate": "prisma generate",
     "prisma:push": "prisma db push",
     "prisma:seed": "prisma db seed",
-    "test": "tsx --test tests/**/*.test.ts"
+    "test": "node --import tsx --test"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"
