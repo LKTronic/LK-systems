@@ -6,6 +6,12 @@ import { useEffect, useState } from "react";
 import { Sidebar } from "@/components/Sidebar";
 import { Header } from "@/components/Header";
 import { Loader2 } from "lucide-react";
+import {
+  getEffectiveRole,
+  isEffectiveShop,
+  persistAuthSession,
+  cacheCurrentPageAssets,
+} from "@/lib/offlineAuth";
 
 interface AppLayoutProps {
   children: React.ReactNode;
@@ -23,18 +29,31 @@ export function AppLayout({
   const { data: session, status } = useSession();
   const router = useRouter();
   const [isMounted, setIsMounted] = useState(false);
-  const role = (session?.user as any)?.role || "STAFF";
+
+  // Persistent role detection: keeps SHOP role stable even when offline or NextAuth session drops
+  const role = getEffectiveRole(session);
   const isShop = role === "SHOP";
 
   useEffect(() => {
     setIsMounted(true);
-  }, []);
+    if (session?.user) {
+      persistAuthSession(session);
+    }
+    // Pre-cache current page scripts and styles for offline stability
+    if (typeof window !== "undefined" && navigator.onLine) {
+      cacheCurrentPageAssets().catch(() => {});
+    }
+  }, [session]);
 
   useEffect(() => {
     if (!isMounted) return;
 
+    // SHOP users should NEVER be kicked to /login while operating the shop counter
+    if (isShop) return;
+
+    const isOffline = typeof navigator !== "undefined" && !navigator.onLine;
+
     if (status === "unauthenticated") {
-      const isOffline = typeof navigator !== "undefined" && !navigator.onLine;
       if (isOffline) {
         return;
       }
@@ -46,8 +65,9 @@ export function AppLayout({
     }
   }, [isMounted, status, session, router, requireAdmin, role, isShop]);
 
-  // Safety timer: prevent getting permanently stuck on loading screen
+  // Safety timer: prevent getting permanently stuck on loading screen (non-shop users only)
   useEffect(() => {
+    if (isShop) return; // Never auto-redirect shop users to login
     const timer = setTimeout(() => {
       if (status === "loading") {
         const isOffline = typeof navigator !== "undefined" && !navigator.onLine;
@@ -58,11 +78,12 @@ export function AppLayout({
       }
     }, 4000);
     return () => clearTimeout(timer);
-  }, [status, router]);
+  }, [status, router, isShop]);
 
   const isOffline = typeof navigator !== "undefined" && !navigator.onLine;
 
-  if (!isMounted || (status === "loading" && !isOffline)) {
+  // For Shop users, never show blocking loading screen if mounted
+  if (!isMounted || (status === "loading" && !isOffline && !isShop)) {
     return (
       <div
         suppressHydrationWarning
@@ -82,7 +103,7 @@ export function AppLayout({
     );
   }
 
-  if (status === "unauthenticated" && !isOffline) {
+  if (status === "unauthenticated" && !isOffline && !isShop) {
     return null;
   }
 

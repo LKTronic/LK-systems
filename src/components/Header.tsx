@@ -26,10 +26,11 @@ import {
   ShopCacheDetailedStatus,
 } from "@/lib/offlineShopDb";
 import { formatDateDMY } from "@/lib/formatters";
+import { getEffectiveRole, cacheCurrentPageAssets } from "@/lib/offlineAuth";
 
 export function Header({ title, description }: { title: string; description?: string }) {
   const { data: session } = useSession();
-  const role = (session?.user as any)?.role || "STAFF";
+  const role = getEffectiveRole(session);
   const isShop = role === "SHOP";
 
   const [isOnline, setIsOnline] = useState(true);
@@ -128,11 +129,18 @@ export function Header({ title, description }: { title: string; description?: st
     };
     window.addEventListener("pms_shop_offline_status", handleStatusEvent);
 
-    // Register Service Worker for SHOP role
-    if (isShop && "serviceWorker" in navigator) {
-      navigator.serviceWorker.register("/sw.js").catch((err) => {
-        console.warn("ServiceWorker registration:", err);
-      });
+    // Register Service Worker and cache page assets for offline resilience
+    if ("serviceWorker" in navigator) {
+      navigator.serviceWorker
+        .register("/sw.js")
+        .then(() => {
+          if (navigator.onLine) {
+            cacheCurrentPageAssets().catch(() => {});
+          }
+        })
+        .catch((err) => {
+          console.warn("ServiceWorker registration:", err);
+        });
     }
 
     return () => {

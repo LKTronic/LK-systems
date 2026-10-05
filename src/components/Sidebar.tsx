@@ -15,11 +15,12 @@ import {
   ShieldAlert,
 } from "lucide-react";
 import { ThemeToggle } from "@/components/ThemeToggle";
+import { getEffectiveRole } from "@/lib/offlineAuth";
 
 export function Sidebar() {
   const pathname = usePathname();
   const { data: session } = useSession();
-  const role = (session?.user as any)?.role || "STAFF";
+  const role = getEffectiveRole(session);
   const isAdmin = role === "ADMIN" || role === "SUPERADMIN";
   const isShop = role === "SHOP";
 

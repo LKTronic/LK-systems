@@ -8,6 +8,7 @@ import { AppLayout } from "@/components/AppLayout";
 import { CategorySearchDropdown } from "@/components/CategorySearchDropdown";
 import { formatLKR, formatDateDMY, extractStorageLocation } from "@/lib/formatters";
 import { syncShopCatalogToIndexedDb, searchShopIndexedDb } from "@/lib/offlineShopDb";
+import { getEffectiveRole, cacheCurrentPageAssets } from "@/lib/offlineAuth";
 import {
   Search,
   Filter,
@@ -85,7 +86,7 @@ interface Category {
 export default function ProductsPage() {
   const router = useRouter();
   const { data: session } = useSession();
-  const role = (session?.user as any)?.role || "STAFF";
+  const role = getEffectiveRole(session);
   const isAdmin = role === "ADMIN" || role === "SUPERADMIN";
   const isShop = role === "SHOP";
 
@@ -115,6 +116,7 @@ export default function ProductsPage() {
       setIsOffline(offline);
       if (!offline && isShop) {
         syncShopCatalogToIndexedDb().catch(() => {});
+        cacheCurrentPageAssets().catch(() => {});
       }
     };
     updateOnlineStatus();
@@ -420,8 +422,21 @@ export default function ProductsPage() {
         return;
       }
 
-      const res = await fetch(`/api/products?${params.toString()}`);
-      if (res.ok) {
+      // Fast network fetch with 2-second timeout so page never hangs on dead connection
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 2000);
+      let res: Response | null = null;
+      try {
+        res = await fetch(`/api/products?${params.toString()}`, {
+          signal: controller.signal,
+        });
+      } catch (fetchErr) {
+        // Network failed or timed out
+      } finally {
+        clearTimeout(timeoutId);
+      }
+
+      if (res && res.ok) {
         const data = await res.json();
         setProducts(data.products || []);
         setTotal(data.pagination?.total || 0);
@@ -1123,8 +1138,7 @@ export default function ProductsPage() {
                       key={p.id}
                       id={`product-card-${p.id}`}
                       onClick={() => {
-                        const offline = typeof navigator !== "undefined" && !navigator.onLine;
-                        if (isShop && offline) {
+                        if (isShop) {
                           setPreviewProduct(p);
                         } else {
                           saveScrollState(p.id);
@@ -1213,8 +1227,9 @@ export default function ProductsPage() {
                               Out of Stock
                             </span>
                           ) : (
-                            <span className="inline-flex items-center px-1.5 py-0.5 rounded-full font-mono text-[9.5px] font-bold bg-slate-800 text-slate-300 border border-slate-700">
-                              Qty: {p.quantity}
+                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[9.5px] font-bold bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 shadow-sm shadow-emerald-950/20">
+                              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+                              <span>In Stock: {p.quantity}</span>
                             </span>
                           )}
 
@@ -1388,8 +1403,7 @@ export default function ProductsPage() {
                           key={p.id}
                           id={`product-row-${p.id}`}
                           onClick={() => {
-                            const offline = typeof navigator !== "undefined" && !navigator.onLine;
-                            if (isShop && offline) {
+                            if (isShop) {
                               setPreviewProduct(p);
                             } else {
                               saveScrollState(p.id);

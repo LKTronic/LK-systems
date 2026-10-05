@@ -7,6 +7,7 @@ import {
   getDynamicVocabulary,
   getFuzzySuggestion,
   scoreProductRelevance,
+  isModifierToken,
 } from "@/lib/fuzzySearch";
 import { getNextRecordNo, getNextSku, withSequenceLock } from "@/lib/recordNo";
 
@@ -112,31 +113,49 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // Search matches on modelAndName, productName, referenceNo, sku, recordNo, or description
+    let products: any[] = [];
+    let total = 0;
+    let didYouMean: string | null = null;
+    let vocab: Set<string> | null = null;
+    let fuzzyCorrection: { correctedQuery: string; hasCorrection: boolean; tokens: string[]; correctedTokens: string[] } | null = null;
+
+    // Search matches on modelAndName, productName, referenceNo, sku, recordNo, categoryNames, or description
     if (search) {
-      const searchWords = search.split(/\s+/).filter(Boolean);
-      if (searchWords.length === 1) {
+      vocab = await getDynamicVocabulary(prisma);
+      fuzzyCorrection = getFuzzySuggestion(search, vocab);
+      if (fuzzyCorrection.hasCorrection) {
+        didYouMean = fuzzyCorrection.correctedQuery;
+      }
+
+      // If typo correction detected (e.g. "diplay" -> "display"), use corrected tokens for SQL query
+      const searchTerms = fuzzyCorrection.hasCorrection
+        ? fuzzyCorrection.correctedTokens
+        : search.split(/[\s,+/_\-:]+/).filter(Boolean);
+
+      if (searchTerms.length === 1) {
         andConditions.push({
           OR: [
-            { modelAndName: { contains: search } },
-            { productName: { contains: search } },
-            { sku: { contains: search } },
-            { referenceNo: { contains: search } },
-            { recordNo: { contains: search } },
-            { description: { contains: search } },
+            { modelAndName: { contains: searchTerms[0] } },
+            { productName: { contains: searchTerms[0] } },
+            { sku: { contains: searchTerms[0] } },
+            { referenceNo: { contains: searchTerms[0] } },
+            { recordNo: { contains: searchTerms[0] } },
+            { description: { contains: searchTerms[0] } },
+            { categoryNames: { contains: searchTerms[0] } },
           ],
         });
       } else {
-        // Multi-word search: all keywords must match within product metadata
-        for (const word of searchWords) {
+        // Multi-word search: all terms must match within product metadata
+        for (const term of searchTerms) {
           andConditions.push({
             OR: [
-              { modelAndName: { contains: word } },
-              { productName: { contains: word } },
-              { sku: { contains: word } },
-              { referenceNo: { contains: word } },
-              { recordNo: { contains: word } },
-              { description: { contains: word } },
+              { modelAndName: { contains: term } },
+              { productName: { contains: term } },
+              { sku: { contains: term } },
+              { referenceNo: { contains: term } },
+              { recordNo: { contains: term } },
+              { description: { contains: term } },
+              { categoryNames: { contains: term } },
             ],
           });
         }
@@ -175,72 +194,74 @@ export async function GET(request: NextRequest) {
       },
     };
 
-    let products: any[] = [];
-    let total = 0;
-    let didYouMean: string | null = null;
-
     if (search) {
-      // When searching: fetch candidates, score by relevance, and rank best matches first
-      const vocab = await getDynamicVocabulary(prisma);
-      const candidates = await prisma.product.findMany({
+      const activeVocab = vocab || (await getDynamicVocabulary(prisma));
+
+      let candidates = await prisma.product.findMany({
         where,
-        take: 200,
+        take: 300,
         orderBy: { id: "desc" },
         include: includeRelations,
       });
 
-      if (candidates.length > 0) {
-        const scored = candidates.map((p) => ({
-          product: p,
-          score: scoreProductRelevance(search, p as any, vocab),
-        }));
-        // Sort descending: highest relevance score first
-        scored.sort((a, b) => b.score - a.score);
-        total = scored.length;
-        products = scored.slice(skip, skip + limit).map((s) => s.product);
-      } else {
-        // Fallback: Check for typo suggestions (e.g. "arduno" -> "arduino")
-        const fuzzy = getFuzzySuggestion(search, vocab);
-        if (fuzzy.hasCorrection) {
-          const fuzzyAndConditions = andConditions.filter(
+      // If strict multi-word AND returned 0, fallback to matching core component nouns
+      if (candidates.length === 0 && fuzzyCorrection) {
+        const searchTerms = fuzzyCorrection.hasCorrection
+          ? fuzzyCorrection.correctedTokens
+          : search.split(/[\s,+/_\-:]+/).filter(Boolean);
+
+        const coreTerms = searchTerms.filter((t) => !isModifierToken(t));
+        if (coreTerms.length > 0) {
+          const fallbackAndConditions = andConditions.filter(
             (c) =>
               !c.OR ||
-              !c.OR.some(
-                (sub: any) =>
-                  sub.productName?.contains === search ||
-                  sub.modelAndName?.contains === search
+              !c.OR.some((sub: any) =>
+                searchTerms.some(
+                  (st) =>
+                    sub.productName?.contains === st ||
+                    sub.modelAndName?.contains === st
+                )
               )
           );
+          for (const ct of coreTerms) {
+            fallbackAndConditions.push({
+              OR: [
+                { modelAndName: { contains: ct } },
+                { productName: { contains: ct } },
+                { sku: { contains: ct } },
+                { referenceNo: { contains: ct } },
+                { recordNo: { contains: ct } },
+                { categoryNames: { contains: ct } },
+              ],
+            });
+          }
 
-          fuzzyAndConditions.push({
-            OR: [
-              { modelAndName: { contains: fuzzy.correctedQuery } },
-              { productName: { contains: fuzzy.correctedQuery } },
-              { referenceNo: { contains: fuzzy.correctedQuery } },
-              { sku: { contains: fuzzy.correctedQuery } },
-              { recordNo: { contains: fuzzy.correctedQuery } },
-            ],
-          });
-
-          const fuzzyWhere = { ...where, AND: fuzzyAndConditions };
-          const fuzzyCandidates = await prisma.product.findMany({
-            where: fuzzyWhere,
-            take: 200,
+          candidates = await prisma.product.findMany({
+            where: { ...where, AND: fallbackAndConditions },
+            take: 300,
             orderBy: { id: "desc" },
             include: includeRelations,
           });
-
-          if (fuzzyCandidates.length > 0) {
-            const scored = fuzzyCandidates.map((p) => ({
-              product: p,
-              score: scoreProductRelevance(fuzzy.correctedQuery, p as any, vocab),
-            }));
-            scored.sort((a, b) => b.score - a.score);
-            total = scored.length;
-            products = scored.slice(skip, skip + limit).map((s) => s.product);
-            didYouMean = fuzzy.correctedQuery;
-          }
         }
+      }
+
+      if (candidates.length > 0) {
+        const scored = candidates
+          .map((p) => {
+            const score = Math.max(
+              scoreProductRelevance(search, p as any, activeVocab),
+              fuzzyCorrection?.hasCorrection
+                ? scoreProductRelevance(fuzzyCorrection.correctedQuery, p as any, activeVocab)
+                : 0
+            );
+            return { product: p, score };
+          })
+          .filter((s) => s.score > 0);
+
+        // Sort descending: highest relevance score first (in-stock items naturally boosted)
+        scored.sort((a, b) => b.score - a.score);
+        total = scored.length;
+        products = scored.slice(skip, skip + limit).map((s) => s.product);
       }
     } else {
       [products, total] = await Promise.all([

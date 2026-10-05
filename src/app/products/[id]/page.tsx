@@ -7,6 +7,7 @@ import { useSession } from "next-auth/react";
 import { AppLayout } from "@/components/AppLayout";
 import { formatDateDMY, formatLKR, extractStorageLocation } from "@/lib/formatters";
 import { getShopProductFromIndexedDb } from "@/lib/offlineShopDb";
+import { getEffectiveRole } from "@/lib/offlineAuth";
 import {
   ArrowLeft,
   Edit2,
@@ -51,7 +52,7 @@ export default function ProductDetailPage({
   const resolvedParams = use(params);
   const router = useRouter();
   const { data: session } = useSession();
-  const role = (session?.user as any)?.role || "STAFF";
+  const role = getEffectiveRole(session);
   const isShop = role === "SHOP";
 
   const [product, setProduct] = useState<any>(null);
@@ -60,43 +61,57 @@ export default function ProductDetailPage({
   const [isRequestingPrice, setIsRequestingPrice] = useState(false);
 
   const loadProduct = async () => {
+    let localLoaded = false;
     try {
       if (isShop) {
         // Instant load from IndexedDB for shop users
         const local = await getShopProductFromIndexedDb(Number(resolvedParams.id));
         if (local) {
+          localLoaded = true;
           setProduct(local);
           setError(null);
           setIsLoading(false);
+          // If offline or already loaded locally, do not block on network
           if (typeof navigator !== "undefined" && !navigator.onLine) {
             return;
           }
         }
       }
 
-      const res = await fetch(`/api/products/${resolvedParams.id}`);
-      if (!res.ok) {
-        if (isShop) {
-          const local = await getShopProductFromIndexedDb(Number(resolvedParams.id));
-          if (local) {
-            setProduct(local);
-            setError(null);
-            setIsLoading(false);
-            return;
-          }
-        }
-        throw new Error("Product not found");
+      // Fast network fetch with 2-second timeout
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 2000);
+      const res = await fetch(`/api/products/${resolvedParams.id}`, {
+        signal: controller.signal,
+      }).catch(() => null);
+      clearTimeout(timeoutId);
+
+      if (res && res.ok) {
+        const data = await res.json();
+        setProduct(data);
+        setError(null);
+        return;
       }
-      const data = await res.json();
-      setProduct(data);
+
+      if (localLoaded) return;
+
+      if (isShop) {
+        const local = await getShopProductFromIndexedDb(Number(resolvedParams.id));
+        if (local) {
+          setProduct(local);
+          setError(null);
+          return;
+        }
+      }
+      throw new Error("Product not found");
     } catch (err: any) {
+      if (localLoaded) return;
       if (isShop) {
         try {
           const local = await getShopProductFromIndexedDb(Number(resolvedParams.id));
           if (local) {
             setProduct(local);
             setError(null);
-            setIsLoading(false);
             return;
           }
         } catch {}

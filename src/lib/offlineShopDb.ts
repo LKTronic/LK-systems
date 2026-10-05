@@ -14,7 +14,7 @@ const DB_NAME = "PMS_SHOP_OFFLINE_DB";
 const DB_VERSION = 1;
 const STORE_PRODUCTS = "products";
 const STORE_META = "metadata";
-export const IMAGE_CACHE_NAME = "pms-shop-cache-v4";
+export const IMAGE_CACHE_NAME = "pms-shop-cache-v5";
 
 export interface ShopOfflineProduct {
   id: number;
@@ -550,33 +550,27 @@ export async function searchShopIndexedDb(params: {
       if (search) {
         const offlineVocab = buildOfflineVocabulary(items);
 
-        // Check for typo correction suggestions (e.g. "arduno" -> "arduino", "omron prox" -> "proximity")
+        // Check for typo correction suggestions (e.g. "diplay" -> "display", "arduno" -> "arduino")
         const fuzzy = getFuzzySuggestion(search, offlineVocab);
         if (fuzzy.hasCorrection) {
           didYouMean = fuzzy.correctedQuery;
         }
 
         // Score candidate items using weighted electronics relevance engine
+        // Seamlessly evaluates both raw input and typo-corrected query, taking the best match
         let scoredItems: { product: ShopOfflineProduct; score: number }[] = [];
         for (const p of items) {
-          const score = scoreProductRelevance(search, p, offlineVocab);
-          if (score > 0) {
-            scoredItems.push({ product: p, score });
+          const directScore = scoreProductRelevance(search, p, offlineVocab);
+          const fuzzyScore = fuzzy.hasCorrection
+            ? scoreProductRelevance(fuzzy.correctedQuery, p, offlineVocab)
+            : 0;
+          const bestScore = Math.max(directScore, fuzzyScore);
+          if (bestScore > 0) {
+            scoredItems.push({ product: p, score: bestScore });
           }
         }
 
-        // If exact/direct search returns 0 results but we have a typo suggestion,
-        // automatically search using the corrected query so user gets instant results!
-        if (scoredItems.length === 0 && fuzzy.hasCorrection) {
-          for (const p of items) {
-            const score = scoreProductRelevance(fuzzy.correctedQuery, p, offlineVocab);
-            if (score > 0) {
-              scoredItems.push({ product: p, score });
-            }
-          }
-        }
-
-        // Sort descending: closest/best matches appear first
+        // Sort descending: closest/best matches appear first, with in-stock products boosted to top
         scoredItems.sort((a, b) => b.score - a.score);
         items = scoredItems.map((s) => s.product);
       }
