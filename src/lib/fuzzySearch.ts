@@ -191,7 +191,7 @@ export function getFuzzySuggestion(
     return { correctedQuery: query, hasCorrection: false, tokens: [], correctedTokens: [] };
   }
 
-  const rawTokens = trimmed.split(/[\s,+/_\-:]+/).filter(Boolean);
+  const rawTokens = trimmed.split(/\s+/).filter(Boolean);
   let hasCorrection = false;
 
   const correctedTokens = rawTokens.map((token) => {
@@ -209,7 +209,7 @@ export function getFuzzySuggestion(
   });
 
   return {
-    correctedQuery: correctedTokens.join(" "),
+    correctedQuery: hasCorrection ? correctedTokens.join(" ") : trimmed,
     hasCorrection,
     tokens: rawTokens,
     correctedTokens,
