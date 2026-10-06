@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { useSession } from "next-auth/react";
 import { AppLayout } from "@/components/AppLayout";
 import { formatDateDMY, formatLKR } from "@/lib/formatters";
 import {
@@ -45,6 +46,10 @@ interface DashboardStats {
 }
 
 export default function DashboardPage() {
+  const { data: session } = useSession();
+  const role = (session?.user as any)?.role || "STAFF";
+  const isShop = role === "SHOP";
+
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -136,26 +141,30 @@ export default function DashboardPage() {
             <div className="flex flex-wrap items-center gap-3">
               <Link
                 href="/products/add"
-                className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-xs shadow-lg shadow-indigo-600/25 transition-all"
+                className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-xs shadow-lg shadow-indigo-600/20 transition-all"
               >
                 <Plus className="w-4 h-4" />
                 PMS Data Adding
               </Link>
-              <a
-                href="/api/products/export/pending"
-                download
-                className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-xs shadow-lg shadow-emerald-600/20 transition-all"
-              >
-                <Download className="w-4 h-4" />
-                Download Pending (USD $)
-              </a>
-              <Link
-                href="/supply"
-                className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white hover:bg-slate-50 text-slate-800 dark:bg-slate-800 dark:hover:bg-slate-700 dark:text-white font-semibold text-xs border border-slate-300 dark:border-slate-700 shadow-sm transition-all"
-              >
-                <Upload className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
-                Supplier Sheet Upload (LKR)
-              </Link>
+              {!isShop && (
+                <>
+                  <a
+                    href="/api/products/export/pending"
+                    download
+                    className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-xs shadow-lg shadow-emerald-600/20 transition-all"
+                  >
+                    <Download className="w-4 h-4" />
+                    Download Pending (USD $)
+                  </a>
+                  <Link
+                    href="/supply"
+                    className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-white hover:bg-slate-50 text-slate-800 dark:bg-slate-800 dark:hover:bg-slate-700 dark:text-white font-semibold text-xs border border-slate-300 dark:border-slate-700 shadow-sm transition-all"
+                  >
+                    <Upload className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
+                    Supplier Sheet Upload (LKR)
+                  </Link>
+                </>
+              )}
             </div>
           </div>
 
@@ -260,12 +269,14 @@ export default function DashboardPage() {
               </div>
               <div className="mt-3 pt-3 border-t border-slate-800/80 flex items-center justify-between text-xs text-slate-400">
                 <span>DAN, Grace, Rainy...</span>
-                <Link
-                  href="/supply"
-                  className="text-indigo-400 hover:text-indigo-300 font-medium inline-flex items-center gap-1"
-                >
-                  Manage <ArrowRight className="w-3 h-3" />
-                </Link>
+                {!isShop && (
+                  <Link
+                    href="/supply"
+                    className="text-indigo-400 hover:text-indigo-300 font-medium inline-flex items-center gap-1"
+                  >
+                    Manage <ArrowRight className="w-3 h-3" />
+                  </Link>
+                )}
               </div>
             </div>
           </div>

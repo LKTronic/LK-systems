@@ -70,9 +70,18 @@ export const authOptions: NextAuthOptions = {
           throw new Error("Too many login attempts for this account. Please wait a minute before trying again.");
         }
 
-        const user = await prisma.user.findUnique({
-          where: { username },
-        });
+        let user: any = null;
+        try {
+          user = await prisma.user.findUnique({
+            where: { username },
+          });
+        } catch {
+          const raw = await prisma.$queryRawUnsafe<any[]>(
+            `SELECT * FROM User WHERE username = ? LIMIT 1`,
+            username
+          );
+          user = raw[0] || null;
+        }
 
         if (!user || user.status !== "ACTIVE") {
           throw new Error("Invalid credentials or account inactive");
@@ -112,10 +121,19 @@ export const authOptions: NextAuthOptions = {
         if (isNaN(userId)) return null as any;
 
         try {
-          const dbUser = await prisma.user.findUnique({
-            where: { id: userId },
-            select: { id: true, username: true, role: true, status: true },
-          });
+          let dbUser: any = null;
+          try {
+            dbUser = await prisma.user.findUnique({
+              where: { id: userId },
+              select: { id: true, username: true, role: true, status: true },
+            });
+          } catch {
+            const raw = await prisma.$queryRawUnsafe<any[]>(
+              `SELECT id, username, role, status FROM User WHERE id = ? LIMIT 1`,
+              userId
+            );
+            dbUser = raw[0] || null;
+          }
 
           // Invalidate session immediately if user deleted or deactivated
           if (!dbUser || dbUser.status !== "ACTIVE") {

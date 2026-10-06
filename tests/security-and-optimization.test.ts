@@ -1,5 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
+import { cleanHtml } from "../src/lib/webStoreAutoSync";
 
 describe("Security & Role Authorization Rules", () => {
   function canDeleteProduct(userRole: string, userId: number, product: { createdBy: number; status: string; isOnlineWeb: boolean }) {
@@ -157,6 +158,222 @@ describe("Fuzzy Search & Typo Tolerance (Google-style)", () => {
     const skuResult = getFuzzySuggestion("PMS-00123", vocab);
     assert.equal(skuResult.hasCorrection, false);
     assert.equal(skuResult.correctedQuery, "PMS-00123");
+  });
+});
+
+describe("SHOP User Authorization & Access Control", () => {
+  const { createUserSchema, updateUserSchema } = require("../src/lib/validations/user");
+
+  it("validates SHOP role in createUserSchema and updateUserSchema", () => {
+    const validShopUser = createUserSchema.parse({
+      name: "Shop Counter 1",
+      username: "shop01",
+      password: "password123",
+      role: "SHOP",
+      status: "ACTIVE",
+    });
+    assert.equal(validShopUser.role, "SHOP");
+
+    const updatedShopUser = updateUserSchema.parse({
+      role: "SHOP",
+    });
+    assert.equal(updatedShopUser.role, "SHOP");
+  });
+
+  it("restricts SHOP user from accessing Supply and Pending Download routes", () => {
+    function isRouteAllowedForRole(role: string, pathname: string): boolean {
+      if (role === "SHOP") {
+        if (
+          pathname.startsWith("/supply") ||
+          pathname.startsWith("/api/supply") ||
+          pathname.startsWith("/products/pending-download") ||
+          pathname.startsWith("/api/products/export/pending") ||
+          pathname.endsWith("/edit")
+        ) {
+          return false;
+        }
+      }
+      return true;
+    }
+
+    assert.equal(isRouteAllowedForRole("SHOP", "/products"), true);
+    assert.equal(isRouteAllowedForRole("SHOP", "/products/123"), true);
+    assert.equal(isRouteAllowedForRole("SHOP", "/supply"), false);
+    assert.equal(isRouteAllowedForRole("SHOP", "/api/supply/upload"), false);
+    assert.equal(isRouteAllowedForRole("SHOP", "/products/pending-download"), false);
+    assert.equal(isRouteAllowedForRole("SHOP", "/api/products/export/pending"), false);
+    assert.equal(isRouteAllowedForRole("SHOP", "/products/123/edit"), false);
+
+    // Other roles remain allowed
+    assert.equal(isRouteAllowedForRole("ADMIN", "/supply"), true);
+    assert.equal(isRouteAllowedForRole("STAFF", "/supply"), true);
+    assert.equal(isRouteAllowedForRole("ADMIN", "/products/pending-download"), true);
+    assert.equal(isRouteAllowedForRole("STAFF", "/products/pending-download"), true);
+  });
+});
+
+describe("Web Store Description HTML Cleaning & Line Breaks", () => {
+  it("preserves paragraphs, line breaks, and specifications without flattening into single line", () => {
+    const rawHtml = `<p>STM32F103C6T6 ARM Minimum System Board Embedded Microcomputer Core Module</p>
+<p>This is STM32F103C6T6 Development Board Minimum System STM32 ARM Core Board.</p>
+<p><strong>Specification:</strong></p>
+<ul>
+<li>Onboard Mini USB interface</li>
+<li>72MHz work frequency</li>
+<li>32KB flash memory, 20K SRAM</li>
+</ul>`;
+
+    const cleaned = cleanHtml(rawHtml);
+    assert.ok(cleaned.includes("STM32F103C6T6 ARM Minimum System Board Embedded Microcomputer Core Module\n\n"));
+    assert.ok(cleaned.includes("Specification:"));
+    assert.ok(cleaned.includes("Onboard Mini USB interface\n72MHz work frequency\n32KB flash memory, 20K SRAM"));
+    assert.equal(cleaned.includes("<p>"), false);
+    assert.equal(cleaned.includes("<li>"), false);
+  });
+});
+
+describe("Shop Offline Catalog Access Control", () => {
+  function canAccessOfflineCatalog(userRole: string): boolean {
+    return userRole === "SHOP" || userRole === "ADMIN" || userRole === "SUPERADMIN";
+  }
+
+  it("permits SHOP, ADMIN, and SUPERADMIN to access offline catalog", () => {
+    assert.equal(canAccessOfflineCatalog("SHOP"), true);
+    assert.equal(canAccessOfflineCatalog("ADMIN"), true);
+    assert.equal(canAccessOfflineCatalog("SUPERADMIN"), true);
+  });
+
+  it("restricts other non-shop roles from offline catalog download", () => {
+    assert.equal(canAccessOfflineCatalog("STAFF"), false);
+    assert.equal(canAccessOfflineCatalog("GUEST"), false);
+  });
+});
+
+describe("Smart Electronics Relevance Scoring & Ranking", () => {
+  const products = [
+    {
+      id: 1,
+      productName: "Omron E2B-M12KS04-WP-B1 2M Proximity Sensor",
+      modelAndName: "Omron E2B-M12KS04-WP-B1 2M Proximity Sensor",
+      sku: "LKSEN00111",
+      quantity: 10,
+    },
+    {
+      id: 2,
+      productName: "Samkoon EA-070B V4 7.0 inch HMI Touch Screen",
+      modelAndName: "Samkoon EA-070B V4 7.0 inch HMI Touch Screen",
+      sku: "LKIA00229",
+      quantity: 5,
+    },
+    {
+      id: 3,
+      productName: "Arduino Uno R3 ATmega328P Development Board",
+      modelAndName: "Arduino Uno R3",
+      sku: "LKMIC00010",
+      quantity: 20,
+    },
+  ];
+
+  it("ranks exact SKU match higher than unrelated products", async () => {
+    const { scoreProductRelevance, BASELINE_ELECTRONICS_VOCABULARY } = await import("../src/lib/fuzzySearch");
+    const s1 = scoreProductRelevance("LKSEN00111", products[0] as any, BASELINE_ELECTRONICS_VOCABULARY);
+    const s2 = scoreProductRelevance("LKSEN00111", products[1] as any, BASELINE_ELECTRONICS_VOCABULARY);
+    assert.ok(s1 > 100);
+    assert.equal(s2, 0);
+  });
+
+  it("ranks jumbled multi-word keywords correctly with high relevance", async () => {
+    const { scoreProductRelevance, BASELINE_ELECTRONICS_VOCABULARY } = await import("../src/lib/fuzzySearch");
+    const sSamkoon = scoreProductRelevance("touch screen samkoon 7 inch", products[1] as any, BASELINE_ELECTRONICS_VOCABULARY);
+    const sArduino = scoreProductRelevance("touch screen samkoon 7 inch", products[2] as any, BASELINE_ELECTRONICS_VOCABULARY);
+    assert.ok(sSamkoon > 100);
+    assert.equal(sArduino, 0);
+  });
+
+  it("handles typos for electronic components and ranks the intended product first", async () => {
+    const { scoreProductRelevance, BASELINE_ELECTRONICS_VOCABULARY } = await import("../src/lib/fuzzySearch");
+    const sArduino = scoreProductRelevance("arduno uno", products[2] as any, BASELINE_ELECTRONICS_VOCABULARY);
+    const sOmron = scoreProductRelevance("arduno uno", products[0] as any, BASELINE_ELECTRONICS_VOCABULARY);
+    assert.ok(sArduino > 50);
+    assert.equal(sOmron, 0);
+  });
+});
+
+describe("Warehouse Storage Location Extraction (Section & Rack)", () => {
+  it("extracts Section and Rack from LKDIS00015 format note", async () => {
+    const { extractStorageLocation } = await import("../src/lib/formatters");
+    const loc = extractStorageLocation("LKDIS00015\n\nSECTION: 3 RACK: E", "");
+    assert.ok(loc !== null);
+    assert.equal(loc?.section, "3");
+    assert.equal(loc?.rack, "E");
+  });
+
+  it("extracts Section and Rack with multiple spaces", async () => {
+    const { extractStorageLocation } = await import("../src/lib/formatters");
+    const loc = extractStorageLocation("SECTION: 6   RACK: C", "");
+    assert.ok(loc !== null);
+    assert.equal(loc?.section, "6");
+    assert.equal(loc?.rack, "C");
+  });
+
+  it("returns null when no storage location is present", async () => {
+    const { extractStorageLocation } = await import("../src/lib/formatters");
+    const loc = extractStorageLocation(null, "Just a standard product description without location");
+    assert.equal(loc, null);
+  });
+});
+
+describe("Offline Dynamic Vocabulary & Search Correction", () => {
+  const sampleOfflineProducts = [
+    {
+      id: 1,
+      recordNo: "001001",
+      productName: "Nextion NX3224T024 2.4 inch Resistive Touch Screen HMI Display",
+      modelAndName: "Nextion NX3224T024",
+      sku: "LKDIS00015",
+      price: 10500,
+      quantity: 2,
+      status: "ACTIVE",
+      categoryNames: '["Display"]',
+      createdAt: "2026-10-01T00:00:00.000Z",
+      updatedAt: "2026-10-01T00:00:00.000Z",
+    },
+    {
+      id: 2,
+      recordNo: "001002",
+      productName: "Omron E2B-M12KS04-WP-B1 Proximity Sensor",
+      modelAndName: "Omron E2B Proximity Sensor",
+      sku: "LKSEN00111",
+      price: 4500,
+      quantity: 10,
+      status: "ACTIVE",
+      categoryNames: '["Sensors"]',
+      createdAt: "2026-10-01T00:00:00.000Z",
+      updatedAt: "2026-10-01T00:00:00.000Z",
+    },
+  ];
+
+  it("builds offline vocabulary containing electronic keywords and model names", async () => {
+    const { buildOfflineVocabulary } = await import("../src/lib/offlineShopDb");
+    const vocab = buildOfflineVocabulary(sampleOfflineProducts as any);
+    assert.ok(vocab.has("nextion"));
+    assert.ok(vocab.has("sensor"));
+    assert.ok(vocab.has("display"));
+    assert.ok(vocab.has("omron"));
+  });
+
+  it("generates typo corrections for offline searches using offline vocabulary", async () => {
+    const { buildOfflineVocabulary } = await import("../src/lib/offlineShopDb");
+    const { getFuzzySuggestion } = await import("../src/lib/fuzzySearch");
+    const vocab = buildOfflineVocabulary(sampleOfflineProducts as any);
+
+    const res1 = getFuzzySuggestion("nexton display", vocab);
+    assert.equal(res1.hasCorrection, true);
+    assert.equal(res1.correctedQuery, "nextion display");
+
+    const res2 = getFuzzySuggestion("omrom senser", vocab);
+    assert.equal(res2.hasCorrection, true);
+    assert.equal(res2.correctedQuery, "omron sensor");
   });
 });
 

@@ -18,6 +18,7 @@ import { ExtensionErrorSilencer } from "@/components/ExtensionErrorSilencer";
 export const metadata: Metadata = {
   title: "Product Management System",
   description: "Enterprise Product Management System (PMS)",
+  manifest: "/manifest.json",
 };
 
 export default function RootLayout({

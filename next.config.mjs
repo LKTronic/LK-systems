@@ -1,11 +1,10 @@
-import type { NextConfig } from "next";
-
+/** @type {import('next').NextConfig} */
 const isDev = process.env.NODE_ENV !== "production";
 
-// SEC-06 Remediation: Restrict connect-src strictly to 'self' in production
+// SEC-06 Remediation: Restrict connect-src strictly to 'self' and https in production
 const connectSrc = isDev
   ? "connect-src 'self' ws: wss: http: https:;"
-  : "connect-src 'self';";
+  : "connect-src 'self' https:;";
 
 const cspHeader = `
   default-src 'self';
@@ -19,7 +18,7 @@ const cspHeader = `
   form-action 'self';
 `.replace(/\s{2,}/g, " ").trim();
 
-const nextConfig: NextConfig = {
+const nextConfig = {
   allowedDevOrigins: [
     "localhost:3000",
     "127.0.0.1:3000",

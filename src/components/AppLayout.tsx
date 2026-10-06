@@ -6,6 +6,12 @@ import { useEffect, useState } from "react";
 import { Sidebar } from "@/components/Sidebar";
 import { Header } from "@/components/Header";
 import { Loader2 } from "lucide-react";
+import {
+  getEffectiveRole,
+  isEffectiveShop,
+  persistAuthSession,
+  cacheCurrentPageAssets,
+} from "@/lib/offlineAuth";
 
 interface AppLayoutProps {
   children: React.ReactNode;
@@ -24,34 +30,60 @@ export function AppLayout({
   const router = useRouter();
   const [isMounted, setIsMounted] = useState(false);
 
+  // Persistent role detection: keeps SHOP role stable even when offline or NextAuth session drops
+  const role = getEffectiveRole(session);
+  const isShop = role === "SHOP";
+
   useEffect(() => {
     setIsMounted(true);
-  }, []);
+    if (session?.user) {
+      persistAuthSession(session);
+    }
+    // Pre-cache current page scripts and styles for offline stability
+    if (typeof window !== "undefined" && navigator.onLine) {
+      cacheCurrentPageAssets().catch(() => {});
+    }
+  }, [session]);
 
   useEffect(() => {
     if (!isMounted) return;
 
+    // SHOP users should NEVER be kicked to /login while operating the shop counter
+    if (isShop) return;
+
+    const isOffline = typeof navigator !== "undefined" && !navigator.onLine;
+
     if (status === "unauthenticated") {
+      if (isOffline) {
+        return;
+      }
       router.push("/login");
-    } else if (status === "authenticated" && requireAdmin) {
-      const userRole = (session?.user as any)?.role;
-      if (userRole !== "ADMIN" && userRole !== "SUPERADMIN") {
-        router.push("/dashboard");
+    } else if (status === "authenticated") {
+      if (requireAdmin && role !== "ADMIN" && role !== "SUPERADMIN") {
+        router.push(isShop ? "/products" : "/dashboard");
       }
     }
-  }, [isMounted, status, session, router, requireAdmin]);
+  }, [isMounted, status, session, router, requireAdmin, role, isShop]);
 
-  // Safety timer: prevent getting permanently stuck on loading screen
+  // Safety timer: prevent getting permanently stuck on loading screen (non-shop users only)
   useEffect(() => {
+    if (isShop) return; // Never auto-redirect shop users to login
     const timer = setTimeout(() => {
       if (status === "loading") {
+        const isOffline = typeof navigator !== "undefined" && !navigator.onLine;
+        if (isOffline) {
+          return;
+        }
         router.push("/login");
       }
     }, 4000);
     return () => clearTimeout(timer);
-  }, [status, router]);
+  }, [status, router, isShop]);
 
-  if (!isMounted || status === "loading") {
+  const isOffline = typeof navigator !== "undefined" && !navigator.onLine;
+
+  // For Shop users, never show blocking loading screen if mounted
+  if (!isMounted || (status === "loading" && !isOffline && !isShop)) {
     return (
       <div
         suppressHydrationWarning
@@ -71,14 +103,14 @@ export function AppLayout({
     );
   }
 
-  if (status === "unauthenticated") {
+  if (status === "unauthenticated" && !isOffline && !isShop) {
     return null;
   }
 
   return (
     <div suppressHydrationWarning className="flex min-h-screen bg-slate-950 text-slate-100">
-      <Sidebar />
-      <div suppressHydrationWarning className="flex-1 flex flex-col min-w-0">
+      {!isShop && <Sidebar />}
+      <div suppressHydrationWarning className="flex-1 flex flex-col min-w-0 w-full">
         <Header title={title} description={description} />
         <main suppressHydrationWarning className="flex-1 p-4 sm:p-6 lg:p-8 overflow-y-auto max-w-[1600px] w-full mx-auto">
           {children}

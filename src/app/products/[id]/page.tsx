@@ -3,8 +3,11 @@
 import { useEffect, useState, use } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { useSession } from "next-auth/react";
 import { AppLayout } from "@/components/AppLayout";
-import { formatDateDMY, formatLKR } from "@/lib/formatters";
+import { formatDateDMY, formatLKR, extractStorageLocation } from "@/lib/formatters";
+import { getShopProductFromIndexedDb } from "@/lib/offlineShopDb";
+import { getEffectiveRole } from "@/lib/offlineAuth";
 import {
   ArrowLeft,
   Edit2,
@@ -25,6 +28,7 @@ import {
   History,
   RotateCcw,
   Globe,
+  MapPin,
 } from "lucide-react";
 
 interface PriceHistoryEntry {
@@ -47,6 +51,9 @@ export default function ProductDetailPage({
 }) {
   const resolvedParams = use(params);
   const router = useRouter();
+  const { data: session } = useSession();
+  const role = getEffectiveRole(session);
+  const isShop = role === "SHOP";
 
   const [product, setProduct] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -54,14 +61,61 @@ export default function ProductDetailPage({
   const [isRequestingPrice, setIsRequestingPrice] = useState(false);
 
   const loadProduct = async () => {
+    let localLoaded = false;
     try {
-      const res = await fetch(`/api/products/${resolvedParams.id}`);
-      if (!res.ok) {
-        throw new Error("Product not found");
+      if (isShop) {
+        // Instant load from IndexedDB for shop users
+        const local = await getShopProductFromIndexedDb(Number(resolvedParams.id));
+        if (local) {
+          localLoaded = true;
+          setProduct(local);
+          setError(null);
+          setIsLoading(false);
+          // If offline or already loaded locally, do not block on network
+          if (typeof navigator !== "undefined" && !navigator.onLine) {
+            return;
+          }
+        }
       }
-      const data = await res.json();
-      setProduct(data);
+
+      // Fast network fetch with 2-second timeout
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 2000);
+      const res = await fetch(`/api/products/${resolvedParams.id}`, {
+        signal: controller.signal,
+      }).catch(() => null);
+      clearTimeout(timeoutId);
+
+      if (res && res.ok) {
+        const data = await res.json();
+        setProduct(data);
+        setError(null);
+        return;
+      }
+
+      if (localLoaded) return;
+
+      if (isShop) {
+        const local = await getShopProductFromIndexedDb(Number(resolvedParams.id));
+        if (local) {
+          setProduct(local);
+          setError(null);
+          return;
+        }
+      }
+      throw new Error("Product not found");
     } catch (err: any) {
+      if (localLoaded) return;
+      if (isShop) {
+        try {
+          const local = await getShopProductFromIndexedDb(Number(resolvedParams.id));
+          if (local) {
+            setProduct(local);
+            setError(null);
+            return;
+          }
+        } catch {}
+      }
       setError(err.message || "Failed to load product details");
     } finally {
       setIsLoading(false);
@@ -181,7 +235,7 @@ export default function ProductDetailPage({
 
           <div className="flex items-center gap-3">
             {/* Request Price Button */}
-            {product && canRequestPrice(product) && (
+            {product && !isShop && canRequestPrice(product) && (
               <button
                 onClick={handleRequestPrice}
                 disabled={isRequestingPrice}
@@ -201,7 +255,7 @@ export default function ProductDetailPage({
               </button>
             )}
 
-            {product && (
+            {product && !isShop && (
               <Link
                 href={`/products/${product.id}/edit`}
                 className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-bold shadow-lg shadow-indigo-600/20 transition-all"
@@ -340,18 +394,18 @@ export default function ProductDetailPage({
             </div>
 
             {/* Specifications and Image Grid */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-start">
               {/* Image Card */}
-              <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl flex flex-col items-center justify-center min-h-[340px]">
+              <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl flex flex-col items-center justify-start sticky top-6">
                 {product.imagePath ? (
                   <img
                     src={product.imagePath}
                     alt={product.modelAndName || product.productName}
                     referrerPolicy="no-referrer"
-                    className="max-h-[300px] w-full object-contain rounded-xl"
+                    className="max-h-[420px] w-full object-contain rounded-xl"
                   />
                 ) : (
-                  <div className="flex flex-col items-center gap-3 text-slate-600">
+                  <div className="flex flex-col items-center gap-3 text-slate-600 py-16">
                     <ImageIcon className="w-16 h-16 stroke-1" />
                     <span className="text-xs font-medium">No product image uploaded</span>
                   </div>
@@ -472,6 +526,48 @@ export default function ProductDetailPage({
                     )}
                   </div>
                 </div>
+
+                {/* Storage Warehouse Location (Section & Rack) - Shown before description for SHOP user */}
+                {isShop && (() => {
+                  const loc = extractStorageLocation(product.additionalNote, product.description);
+                  if (!loc) return null;
+                  return (
+                    <div className="pt-2 border-t border-slate-800">
+                      <div className="p-3.5 rounded-xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-between gap-3">
+                        <div className="flex items-center gap-3">
+                          <div className="p-2 rounded-lg bg-amber-500/20 text-amber-300 font-bold shrink-0">
+                            <MapPin className="w-4 h-4" />
+                          </div>
+                          <div>
+                            <span className="text-[10px] uppercase font-bold tracking-wider text-amber-400 block">
+                              Storage Warehouse Location
+                            </span>
+                            <div className="flex flex-wrap items-center gap-2.5 font-mono font-black text-sm text-white mt-1">
+                              {loc.section && (
+                                <span className="px-2.5 py-1 rounded-lg bg-slate-900 border border-amber-500/40 text-amber-300">
+                                  SECTION: <strong className="text-white font-bold">{loc.section}</strong>
+                                </span>
+                              )}
+                              {loc.rack && (
+                                <span className="px-2.5 py-1 rounded-lg bg-slate-900 border border-amber-500/40 text-amber-300">
+                                  RACK: <strong className="text-white font-bold">{loc.rack}</strong>
+                                </span>
+                              )}
+                              {loc.shelf && (
+                                <span className="px-2.5 py-1 rounded-lg bg-slate-900 border border-amber-500/40 text-amber-300">
+                                  SHELF: <strong className="text-white font-bold">{loc.shelf}</strong>
+                                </span>
+                              )}
+                              {!loc.section && !loc.rack && !loc.shelf && (
+                                <span className="text-slate-200">{loc.raw}</span>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })()}
 
                 {product.description && (
                   <div className="pt-2 border-t border-slate-800">

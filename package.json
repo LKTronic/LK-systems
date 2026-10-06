@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev -H 0.0.0.0 -p 3000",
-    "build": "prisma generate && next build",
+    "build": "prisma generate && next build --webpack",
     "postinstall": "prisma generate",
     "start": "next start",
     "lint": "eslint",
@@ -17,6 +17,7 @@
     "seed": "tsx prisma/seed.ts"
   },
   "dependencies": {
+    "@next/swc-wasm-nodejs": "16.3.8",
     "@prisma/client": "^5.22.0",
     "bcryptjs": "^3.0.3",
     "exceljs": "^4.4.0",

@@ -7,7 +7,7 @@ import { Lock, User, Loader2, AlertCircle } from "lucide-react";
 
 export default function LoginPage() {
   const router = useRouter();
-  const { status } = useSession();
+  const { data: session, status } = useSession();
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
@@ -20,9 +20,14 @@ export default function LoginPage() {
 
   useEffect(() => {
     if (status === "authenticated") {
-      router.replace("/dashboard");
+      const role = (session?.user as any)?.role;
+      if (role === "SHOP") {
+        router.replace("/products");
+      } else {
+        router.replace("/dashboard");
+      }
     }
-  }, [status, router]);
+  }, [status, session, router]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -39,7 +44,6 @@ export default function LoginPage() {
       if (res?.error) {
         setError(res.error || "Invalid username or password");
       } else {
-        router.push("/dashboard");
         router.refresh();
       }
     } catch (err) {

@@ -1,19 +1,35 @@
 import { prisma } from "@/lib/prisma";
 import { getNextRecordNo, withSequenceLock } from "@/lib/recordNo";
 
-function cleanHtml(html: string): string {
+export function cleanHtml(html: string): string {
   if (!html) return "";
   return html
     .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, "")
     .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, "")
-    .replace(/<[^>]*>/g, " ")
+    .replace(/<br\s*[\/]?>/gi, "\n")
+    .replace(/<\/(p|div|tr|h[1-6]|blockquote)>\s*/gi, "\n\n")
+    .replace(/<\/li>\s*<li[^>]*>/gi, "\n")
+    .replace(/<li[^>]*>/gi, "\n")
+    .replace(/<\/(li|ul|ol|table|thead|tbody)>/gi, "")
+    .replace(/<[^>]*>/g, "")
     .replace(/&nbsp;/gi, " ")
     .replace(/&amp;/gi, "&")
     .replace(/&lt;/gi, "<")
     .replace(/&gt;/gi, ">")
     .replace(/&quot;/gi, '"')
-    .replace(/&#039;/gi, "'")
-    .replace(/\s+/g, " ")
+    .replace(/&#039;|&#39;|&apos;/gi, "'")
+    .replace(/&bull;/gi, "•")
+    .replace(/&ndash;|&#8211;/gi, "–")
+    .replace(/&mdash;|&#8212;/gi, "—")
+    .replace(/&ldquo;|&#8220;|&rdquo;|&#8221;/gi, '"')
+    .replace(/&lsquo;|&#8216;|&rsquo;|&#8217;/gi, "'")
+    .replace(/&deg;/gi, "°")
+    .replace(/VISIT OUR (?:FACEBOOK PAGE|SHOP).*$/gim, "")
+    .replace(/[^\S\r\n]+/g, " ")
+    .replace(/^[ \t]+/gm, "")
+    .replace(/[ \t]+$/gm, "")
+    .replace(/\n{3,}/g, "\n\n")
+    .replace(/(\b(?:Specification|Specifications|Features|Package Included|Package Includes|Package Content|Pinout|Pinouts|Overview|Note|Description):\s*)\n\n+/gi, "$1\n")
     .trim();
 }
 
@@ -135,6 +151,7 @@ export async function syncWebStoreBatch(options: {
           // Web site permalink used as reference link
           const permalink = item.permalink || `${storeUrl}/?post_type=product&p=${item.id}`;
           const imageUrl = item.images?.[0]?.src || null;
+          const shortDescClean = cleanHtml(item.short_description || "").trim();
           const description = cleanHtml(item.description || item.short_description || "");
           const weightNum = item.weight ? parseFloat(item.weight) : null;
 
@@ -219,6 +236,7 @@ export async function syncWebStoreBatch(options: {
                 imagePath: imageUrl || existing.imagePath,
                 source: "ONLINE_WEB",
                 description: description || existing.description,
+                ...(shortDescClean ? { additionalNote: shortDescClean } : {}),
                 ...(existing.status !== "PENDING" ? { priceUpdatedAt: new Date() } : {}),
                 ...(primaryCategoryId ? { categoryId: primaryCategoryId } : {}),
                 ...(categoryNamesJson ? { categoryNames: categoryNamesJson } : {}),
@@ -242,6 +260,7 @@ export async function syncWebStoreBatch(options: {
                   quantity: qty,
                   weight: weightNum !== null && !isNaN(weightNum) ? weightNum : null,
                   description: description || null,
+                  additionalNote: shortDescClean || null,
                   referenceLink: permalink, // Product link on web site
                   imagePath: imageUrl,
                   source: "ONLINE_WEB",

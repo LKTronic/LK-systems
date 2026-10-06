@@ -6,7 +6,9 @@ import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { AppLayout } from "@/components/AppLayout";
 import { CategorySearchDropdown } from "@/components/CategorySearchDropdown";
-import { formatLKR, formatDateDMY } from "@/lib/formatters";
+import { formatLKR, formatDateDMY, extractStorageLocation } from "@/lib/formatters";
+import { syncShopCatalogToIndexedDb, searchShopIndexedDb } from "@/lib/offlineShopDb";
+import { getEffectiveRole, cacheCurrentPageAssets } from "@/lib/offlineAuth";
 import {
   Search,
   Filter,
@@ -35,6 +37,9 @@ import {
   ExternalLink,
   ShieldAlert,
   Sparkles,
+  LayoutGrid,
+  List,
+  MapPin,
 } from "lucide-react";
 
 interface Product {
@@ -81,8 +86,9 @@ interface Category {
 export default function ProductsPage() {
   const router = useRouter();
   const { data: session } = useSession();
-  const role = (session?.user as any)?.role || "STAFF";
+  const role = getEffectiveRole(session);
   const isAdmin = role === "ADMIN" || role === "SUPERADMIN";
+  const isShop = role === "SHOP";
 
   const [products, setProducts] = useState<Product[]>([]);
   const [total, setTotal] = useState(0);
@@ -93,14 +99,50 @@ export default function ProductsPage() {
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [didYouMean, setDidYouMean] = useState<string | null>(null);
   const [status, setStatus] = useState("ALL");
-  const [sourceFilter, setSourceFilter] = useState("ALL"); // ALL, PMS, LK_TRONICS
+  const [sourceFilter, setSourceFilter] = useState("ONLINE_WEB"); // ONLINE_WEB (default), ALL, PMS
   const [categoryId, setCategoryId] = useState("ALL");
   const [addedBy, setAddedBy] = useState("ALL");
   const [users, setUsers] = useState<{ id: number; name: string; username: string }[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isReady, setIsReady] = useState(false);
+  const [viewMode, setViewMode] = useState<"list" | "grid">("list");
+  const [isOffline, setIsOffline] = useState(false);
   const isInitialSearch = useRef(true);
   const hasRestoredScroll = useRef(false);
+
+  useEffect(() => {
+    const updateOnlineStatus = () => {
+      const offline = typeof navigator !== "undefined" ? !navigator.onLine : false;
+      setIsOffline(offline);
+      if (!offline && isShop) {
+        syncShopCatalogToIndexedDb().catch(() => {});
+        cacheCurrentPageAssets().catch(() => {});
+      }
+    };
+    updateOnlineStatus();
+    window.addEventListener("online", updateOnlineStatus);
+    window.addEventListener("offline", updateOnlineStatus);
+    return () => {
+      window.removeEventListener("online", updateOnlineStatus);
+      window.removeEventListener("offline", updateOnlineStatus);
+    };
+  }, [isShop]);
+
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem("pms_product_view_mode");
+      if (saved === "list" || saved === "grid") {
+        setViewMode(saved);
+      }
+    } catch (e) {}
+  }, []);
+
+  const handleToggleViewMode = (mode: "list" | "grid") => {
+    setViewMode(mode);
+    try {
+      localStorage.setItem("pms_product_view_mode", mode);
+    } catch (e) {}
+  };
 
   const saveScrollState = (productId?: number) => {
     try {
@@ -206,8 +248,9 @@ export default function ProductsPage() {
     }
   }, [importPreview]);
 
-  // Image preview modal state
+  // Image and Product Instant Preview Modal States
   const [previewImage, setPreviewImage] = useState<string | null>(null);
+  const [previewProduct, setPreviewProduct] = useState<any | null>(null);
 
   // Admin Price Validity Period Modal State
   const [isValidityModalOpen, setIsValidityModalOpen] = useState(false);
@@ -222,13 +265,13 @@ export default function ProductsPage() {
   const fetchFiltersAndSettings = async () => {
     try {
       const [catRes, setRes, usersRes, supRes] = await Promise.all([
-        fetch("/api/categories"),
-        fetch("/api/settings"),
-        fetch("/api/users/list"),
-        fetch("/api/suppliers"),
+        fetch("/api/categories").catch(() => null),
+        fetch("/api/settings").catch(() => null),
+        fetch("/api/users/list").catch(() => null),
+        fetch("/api/suppliers").catch(() => null),
       ]);
-      if (catRes.ok) {
-        const catData = await catRes.json();
+      if (catRes && catRes.ok) {
+        const catData = await catRes.json().catch(() => ({}));
         const raw: Category[] = catData.categories || [];
         const sorted = [...raw].sort((a, b) => {
           const aName = a.name.trim().toLowerCase();
@@ -241,34 +284,35 @@ export default function ProductsPage() {
         });
         setCategories(sorted);
       }
-      if (setRes.ok) {
-        const setData = await setRes.json();
+      if (setRes && setRes.ok) {
+        const setData = await setRes.json().catch(() => ({}));
         if (setData.priceValidityMonths) {
           setValidityMonths(setData.priceValidityMonths);
         }
       }
-      if (usersRes.ok) {
-        const uData = await usersRes.json();
+      if (usersRes && usersRes.ok) {
+        const uData = await usersRes.json().catch(() => ({}));
         setUsers(uData.users || []);
       }
       if (supRes && supRes.ok) {
-        const sData = await supRes.json();
+        const sData = await supRes.json().catch(() => ({}));
         setSuppliers(sData.suppliers || []);
       }
     } catch (e) {
-      console.error("Failed to load metadata:", e);
+      console.warn("Failed to load metadata:", e);
     }
   };
 
   const fetchStoreStats = async () => {
+    if (!isAdmin) return;
     try {
-      const res = await fetch("/api/products/sync-web-store");
-      if (res.ok) {
-        const data = await res.json();
-        setSyncStats(data);
+      const res = await fetch("/api/products/sync-web-store").catch(() => null);
+      if (res && res.ok) {
+        const data = await res.json().catch(() => null);
+        if (data) setSyncStats(data);
       }
     } catch (e) {
-      console.error("Failed to fetch web store stats", e);
+      console.warn("Failed to fetch web store stats (offline mode active)", e);
     }
   };
 
@@ -360,16 +404,78 @@ export default function ProductsPage() {
       if (categoryId !== "ALL") params.set("categoryId", categoryId);
       if (addedBy !== "ALL") params.set("createdBy", addedBy);
 
-      const res = await fetch(`/api/products?${params.toString()}`);
-      if (res.ok) {
+      // In offline mode for shop users, query local IndexedDB directly
+      if (isShop && typeof navigator !== "undefined" && !navigator.onLine) {
+        const localResult = await searchShopIndexedDb({
+          search: debouncedSearch,
+          status,
+          source: sourceFilter,
+          categoryId,
+          page,
+          limit,
+        });
+        setProducts(localResult.products as any);
+        setTotal(localResult.pagination.total);
+        setTotalPages(localResult.pagination.totalPages);
+        setDidYouMean(localResult.didYouMean || null);
+        setIsLoading(false);
+        return;
+      }
+
+      // Fast network fetch with 2-second timeout so page never hangs on dead connection
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 2000);
+      let res: Response | null = null;
+      try {
+        res = await fetch(`/api/products?${params.toString()}`, {
+          signal: controller.signal,
+        });
+      } catch (fetchErr) {
+        // Network failed or timed out
+      } finally {
+        clearTimeout(timeoutId);
+      }
+
+      if (res && res.ok) {
         const data = await res.json();
         setProducts(data.products || []);
         setTotal(data.pagination?.total || 0);
         setTotalPages(data.pagination?.totalPages || 1);
         setDidYouMean(data.didYouMean || null);
+      } else if (isShop) {
+        const localResult = await searchShopIndexedDb({
+          search: debouncedSearch,
+          status,
+          source: sourceFilter,
+          categoryId,
+          page,
+          limit,
+        });
+        setProducts(localResult.products as any);
+        setTotal(localResult.pagination.total);
+        setTotalPages(localResult.pagination.totalPages);
+        setDidYouMean(localResult.didYouMean || null);
       }
     } catch (err) {
-      console.error("Failed to fetch products:", err);
+      console.warn("Network request failed, falling back to offline IndexedDB:", err);
+      if (isShop) {
+        try {
+          const localResult = await searchShopIndexedDb({
+            search: debouncedSearch,
+            status,
+            source: sourceFilter,
+            categoryId,
+            page,
+            limit,
+          });
+          setProducts(localResult.products as any);
+          setTotal(localResult.pagination.total);
+          setTotalPages(localResult.pagination.totalPages);
+          setDidYouMean(localResult.didYouMean || null);
+        } catch (dbErr) {
+          console.error("Failed to read from local offline store:", dbErr);
+        }
+      }
     } finally {
       setIsLoading(false);
     }
@@ -390,14 +496,14 @@ export default function ProductsPage() {
       if (hasUrlParams) {
         const p = parseInt(urlParams.get("page") || "1", 10) || 1;
         const st = urlParams.get("status") || "ALL";
-        const sf = urlParams.get("source") || "ALL";
+        const sf = urlParams.get("source") || "ONLINE_WEB";
         const cat = urlParams.get("categoryId") || "ALL";
         const ab = urlParams.get("createdBy") || "ALL";
         const q = urlParams.get("search") || "";
 
         if (p !== 1) setPage(p);
         if (st !== "ALL") setStatus(st);
-        if (sf !== "ALL") setSourceFilter(sf);
+        if (sf) setSourceFilter(sf);
         if (cat !== "ALL") setCategoryId(cat);
         if (ab !== "ALL") setAddedBy(ab);
         if (q) {
@@ -410,7 +516,7 @@ export default function ProductsPage() {
           const parsed = JSON.parse(saved);
           if (parsed.page && parsed.page !== 1) setPage(parsed.page);
           if (parsed.status && parsed.status !== "ALL") setStatus(parsed.status);
-          if (parsed.sourceFilter && parsed.sourceFilter !== "ALL") setSourceFilter(parsed.sourceFilter);
+          if (parsed.sourceFilter) setSourceFilter(parsed.sourceFilter);
           if (parsed.categoryId && parsed.categoryId !== "ALL") setCategoryId(parsed.categoryId);
           if (parsed.addedBy && parsed.addedBy !== "ALL") setAddedBy(parsed.addedBy);
           if (parsed.search) {
@@ -428,8 +534,16 @@ export default function ProductsPage() {
 
   useEffect(() => {
     fetchFiltersAndSettings();
-    fetchStoreStats();
-  }, []);
+    if (!isShop && isAdmin) {
+      fetchStoreStats();
+    }
+    // Background sync of IndexedDB catalog for SHOP users
+    if (isShop) {
+      syncShopCatalogToIndexedDb().catch((err) => {
+        console.warn("Background catalog sync failed (using offline store):", err);
+      });
+    }
+  }, [isShop, isAdmin]);
 
   // Persist filter state to sessionStorage and URL query params
   useEffect(() => {
@@ -760,52 +874,58 @@ export default function ProductsPage() {
           </div>
 
           <div className="flex flex-wrap items-center gap-3">
-            {/* Download Pending Requests Page */}
-            <Link
-              href="/products/pending-download"
-              className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold shadow-lg shadow-emerald-600/20 transition-all"
-            >
-              <Download className="w-4 h-4" />
-              Download Pending Requests
-            </Link>
+            {!isShop && (
+              <>
+                {/* Download Pending Requests Page */}
+                <Link
+                  href="/products/pending-download"
+                  className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold shadow-lg shadow-emerald-600/20 transition-all"
+                >
+                  <Download className="w-4 h-4" />
+                  Download Pending Requests
+                </Link>
 
-            {/* Sync Web Store (lk-tronics.com) */}
-            <button
-              onClick={() => {
-                setIsSyncModalOpen(true);
-                setSyncResult(null);
-                setSyncError(null);
-                fetchStoreStats();
-              }}
-              className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 text-white text-xs font-bold shadow-lg shadow-violet-600/20 transition-all"
-              title="Import or synchronize products from https://lk-tronics.com"
-            >
-              <Globe className="w-4 h-4 text-violet-200" />
-              Sync Web Store
-            </button>
+                {/* Sync Web Store (lk-tronics.com) */}
+                <button
+                  onClick={() => {
+                    setIsSyncModalOpen(true);
+                    setSyncResult(null);
+                    setSyncError(null);
+                    fetchStoreStats();
+                  }}
+                  className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 text-white text-xs font-bold shadow-lg shadow-violet-600/20 transition-all"
+                  title="Import or synchronize products from https://lk-tronics.com"
+                >
+                  <Globe className="w-4 h-4 text-violet-200" />
+                  Sync Web Store
+                </button>
 
-            {/* Import Products from Excel */}
-            <button
-              onClick={() => {
-                setIsImportModalOpen(true);
-                setImportError(null);
-                setImportSuccess(null);
-                setImportPreview(null);
-              }}
-              className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 hover:border-slate-600 text-xs font-bold shadow-lg transition-all"
-            >
-              <Upload className="w-4 h-4 text-sky-400" />
-              Import Excel
-            </button>
+                {/* Import Products from Excel */}
+                <button
+                  onClick={() => {
+                    setIsImportModalOpen(true);
+                    setImportError(null);
+                    setImportSuccess(null);
+                    setImportPreview(null);
+                  }}
+                  className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 hover:border-slate-600 text-xs font-bold shadow-lg transition-all"
+                >
+                  <Upload className="w-4 h-4 text-sky-400" />
+                  Import Excel
+                </button>
+              </>
+            )}
 
             {/* Add Product Request */}
-            <Link
-              href="/products/add"
-              className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold shadow-lg shadow-indigo-600/25 transition-all"
-            >
-              <Plus className="w-4 h-4" />
-              PMS Data Adding
-            </Link>
+            {!isShop && (
+              <Link
+                href="/products/add"
+                className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold shadow-lg shadow-indigo-600/25 transition-all"
+              >
+                <Plus className="w-4 h-4" />
+                PMS Data Adding
+              </Link>
+            )}
           </div>
         </div>
 
@@ -856,7 +976,7 @@ export default function ProductsPage() {
               </div>
             )}
 
-            {/* Source Filter: ALL, PMS, ONLINE_WEB */}
+            {/* Source Filter: ONLINE_WEB (Default), ALL, PMS */}
             <div className="w-48">
               <select
                 value={sourceFilter}
@@ -866,9 +986,9 @@ export default function ProductsPage() {
                 }}
                 className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-200 focus:border-indigo-500 outline-none"
               >
+                <option value="ONLINE_WEB">🌐 Online Web</option>
                 <option value="ALL">All Sources (PMS + Web)</option>
                 <option value="PMS">PMS Products Only</option>
-                <option value="ONLINE_WEB">🌐 Online Web</option>
               </select>
             </div>
 
@@ -905,23 +1025,25 @@ export default function ProductsPage() {
             </div>
 
             {/* Added by Filter */}
-            <div className="w-44">
-              <select
-                value={addedBy}
-                onChange={(e) => {
-                  setAddedBy(e.target.value);
-                  setPage(1);
-                }}
-                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-200 focus:border-indigo-500 outline-none"
-              >
-                <option value="ALL">Added by: All</option>
-                {users.map((u) => (
-                  <option key={u.id} value={u.id.toString()}>
-                    {u.name}
-                  </option>
-                ))}
-              </select>
-            </div>
+            {!isShop && (
+              <div className="w-44">
+                <select
+                  value={addedBy}
+                  onChange={(e) => {
+                    setAddedBy(e.target.value);
+                    setPage(1);
+                  }}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-200 focus:border-indigo-500 outline-none"
+                >
+                  <option value="ALL">Added by: All</option>
+                  {users.map((u) => (
+                    <option key={u.id} value={u.id.toString()}>
+                      {u.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
 
             <button
               type="submit"
@@ -943,7 +1065,7 @@ export default function ProductsPage() {
                 setSearch("");
                 setDebouncedSearch("");
                 setStatus("ALL");
-                setSourceFilter("ALL");
+                setSourceFilter("ONLINE_WEB");
                 setCategoryId("ALL");
                 setAddedBy("ALL");
                 setPage(1);
@@ -956,185 +1078,469 @@ export default function ProductsPage() {
             >
               Reset
             </button>
+
+            {/* View Mode Toggle: List (Table) vs Grid (Cards) */}
+            <div className="flex items-center gap-1 p-1 bg-slate-950 border border-slate-800 rounded-xl sm:ml-auto">
+              <button
+                type="button"
+                onClick={() => handleToggleViewMode("list")}
+                className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer ${
+                  viewMode === "list"
+                    ? "bg-indigo-600 text-white shadow-md shadow-indigo-600/25"
+                    : "text-slate-400 hover:text-slate-200 hover:bg-slate-800/60"
+                }`}
+                title="List View (Table)"
+              >
+                <List className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline text-[11px]">List</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => handleToggleViewMode("grid")}
+                className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer ${
+                  viewMode === "grid"
+                    ? "bg-indigo-600 text-white shadow-md shadow-indigo-600/25"
+                    : "text-slate-400 hover:text-slate-200 hover:bg-slate-800/60"
+                }`}
+                title="Grid View (Cards)"
+              >
+                <LayoutGrid className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline text-[11px]">Grid</span>
+              </button>
+            </div>
           </form>
         </div>
 
-        {/* Product Table - Table layout:
-            Sku / Source | Name | Category | Status | Qty / Stock | Price (LKR) | Date | Image preview | Actions */}
-        <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-xl">
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs text-slate-300">
-              <thead className="bg-slate-950/80 text-slate-400 uppercase font-semibold text-[10px] tracking-wider border-b border-slate-800">
-                <tr>
-                  <th className="px-2.5 py-3 w-[110px]">Sku / Source</th>
-                  <th className="px-3 py-3 min-w-[180px] max-w-[280px]">Name</th>
-                  <th className="px-2 py-3 w-[120px]">Category</th>
-                  <th className="px-2 py-3 text-center w-[105px]">Status</th>
-                  <th className="px-2 py-3 text-center w-[90px]">Qty / Stock</th>
-                  <th className="px-2.5 py-3 text-right w-[105px]">Price (LKR)</th>
-                  <th className="px-2 py-3 text-center w-[95px]">Date</th>
-                  <th className="px-1.5 py-3 text-center w-[52px]">Image</th>
-                  <th className="px-2.5 py-3 text-right w-[85px]">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-800/60">
-                {isLoading ? (
-                  <tr>
-                    <td colSpan={9} className="py-16 text-center">
-                      <Loader2 className="w-6 h-6 animate-spin text-indigo-500 mx-auto" />
-                      <p className="text-xs text-slate-400 mt-2">Loading products...</p>
-                    </td>
-                  </tr>
-                ) : products.length === 0 ? (
-                  <tr>
-                    <td colSpan={9} className="py-16 text-center text-slate-400">
-                      No products found matching the criteria.
-                    </td>
-                  </tr>
-                ) : (
-                  products.map((p) => {
-                    const skuDisplay = p.sku ? p.sku : "—";
-                    const nameDisplay = p.modelAndName || p.productName;
-                    const isOnlineWeb =
-                      p.source === "ONLINE_WEB" ||
-                      p.source === "LK_TRONICS" ||
-                      Boolean(p.externalId);
+        {/* Product Display: Grid View vs List View */}
+        {viewMode === "grid" ? (
+          <div className="space-y-6">
+            {isLoading ? (
+              <div className="bg-slate-900 border border-slate-800 rounded-2xl p-16 text-center shadow-xl">
+                <Loader2 className="w-8 h-8 animate-spin text-indigo-500 mx-auto" />
+                <p className="text-xs text-slate-400 mt-2">Loading products...</p>
+              </div>
+            ) : products.length === 0 ? (
+              <div className="bg-slate-900 border border-slate-800 rounded-2xl p-16 text-center text-slate-400 shadow-xl">
+                No products found matching the criteria.
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
+                {products.map((p) => {
+                  const skuDisplay = p.sku ? p.sku : "—";
+                  const nameDisplay = p.modelAndName || p.productName;
+                  const isOnlineWeb =
+                    p.source === "ONLINE_WEB" ||
+                    p.source === "LK_TRONICS" ||
+                    Boolean(p.externalId);
 
-                    return (
-                      <tr
-                        key={p.id}
-                        id={`product-row-${p.id}`}
-                        onClick={() => {
+                  return (
+                    <div
+                      key={p.id}
+                      id={`product-card-${p.id}`}
+                      onClick={() => {
+                        if (isShop) {
+                          setPreviewProduct(p);
+                        } else {
                           saveScrollState(p.id);
                           router.push(`/products/${p.id}`);
-                        }}
-                        className={`cursor-pointer transition-colors group ${
-                          isOnlineWeb
-                            ? "border-l-4 border-l-orange-500 bg-orange-950/10 hover:bg-orange-950/20"
-                            : "border-l-4 border-l-blue-500/50 hover:bg-slate-800/60"
-                        }`}
-                        title="Click row to view product details"
-                      >
-                        {/* 1. Sku / Source */}
-                        <td className="px-2.5 py-2 font-mono whitespace-nowrap">
-                          <div className="flex flex-col gap-0.5 items-start">
+                        }
+                      }}
+                      className={`bg-slate-900 border rounded-2xl p-3.5 flex flex-col justify-between transition-all duration-200 shadow-lg hover:shadow-indigo-950/40 group cursor-pointer relative overflow-hidden ${
+                        isOnlineWeb
+                          ? "border-orange-500/30 hover:border-orange-400/70"
+                          : "border-slate-800 hover:border-indigo-500/60"
+                      }`}
+                    >
+                      <div>
+                        {/* Header: SKU / Source Badge */}
+                        <div className="flex items-center justify-between gap-1.5 mb-2.5">
+                          <div className="flex items-center gap-1.5 overflow-hidden">
                             <span
-                              className={`font-bold tracking-wide text-xs ${
+                              className={`font-mono font-bold text-xs truncate ${
                                 isOnlineWeb ? "text-orange-400" : "text-blue-400"
                               }`}
                             >
                               {skuDisplay}
                             </span>
                             {isOnlineWeb ? (
-                              <div className="flex flex-col gap-0.5 items-start">
-                                <span
-                                  className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[9px] font-bold bg-orange-500/15 text-orange-300 border border-orange-500/30 shadow-sm"
-                                  title="Product synced from Online Web (lk-tronics.com)"
-                                >
-                                  <Globe className="w-2.5 h-2.5 text-orange-400 shrink-0" />
-                                  Online Web
-                                </span>
-                                {(p.supplierId || (p.supplier && p.supplier.name) || p.additionalNote?.includes("PMS Updated")) && (
-                                  <span
-                                    className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[8.5px] font-bold bg-indigo-500/20 text-indigo-300 border border-indigo-500/35 shadow-sm"
-                                    title={`Price updated via PMS ${p.supplier ? `(Supplier: ${p.supplier.name})` : ""}`}
-                                  >
-                                    PMS Updated
-                                  </span>
-                                )}
-                              </div>
+                              <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full text-[8.5px] font-bold bg-orange-500/15 text-orange-300 border border-orange-500/30 shrink-0">
+                                <Globe className="w-2.5 h-2.5" />
+                                Web
+                              </span>
                             ) : (
-                              <span
-                                className="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-semibold bg-blue-500/15 text-blue-300 border border-blue-500/30"
-                                title="PMS local product"
-                              >
+                              <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[8.5px] font-semibold bg-blue-500/15 text-blue-300 border border-blue-500/30 shrink-0">
                                 PMS
                               </span>
                             )}
                           </div>
-                        </td>
 
-                        {/* 2. Name & Supply / Special Note */}
-                        <td className="px-3 py-2">
-                          <div className="font-semibold text-white group-hover:text-indigo-300 transition-colors max-w-[220px] lg:max-w-[280px] truncate text-xs">
-                            {nameDisplay}
-                          </div>
-                          {(p.referenceLink || p.externalUrl) && (
-                            <div className="mt-0.5">
-                              <a
-                                href={p.referenceLink || p.externalUrl!}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                onClick={(e) => e.stopPropagation()}
-                                className="inline-flex items-center gap-1 text-[10px] text-violet-400 hover:text-violet-300 hover:underline transition-colors"
-                                title="Open product on web site"
+                          {!isShop && <div>{getStatusBadge(p.status)}</div>}
+                        </div>
+
+                        {/* Image */}
+                        <div className="w-full h-40 bg-slate-950 rounded-xl overflow-hidden flex items-center justify-center border border-slate-800/80 relative group/img">
+                          {p.imagePath ? (
+                            <>
+                              <img
+                                src={p.imagePath}
+                                alt={nameDisplay}
+                                referrerPolicy="no-referrer"
+                                className="w-full h-full object-contain p-2 group-hover/img:scale-105 transition-transform duration-300"
+                              />
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setPreviewImage(p.imagePath!);
+                                }}
+                                className="absolute bottom-1.5 right-1.5 p-1 rounded-lg bg-slate-900/80 backdrop-blur-sm border border-slate-700 text-slate-300 hover:text-white opacity-0 group-hover/img:opacity-100 transition-opacity cursor-pointer"
+                                title="Zoom Image"
                               >
-                                <span>View on Web Site</span>
-                                <ExternalLink className="w-3 h-3 text-violet-400 shrink-0" />
-                              </a>
+                                <ImageIcon className="w-3.5 h-3.5" />
+                              </button>
+                            </>
+                          ) : (
+                            <div className="text-slate-600 flex flex-col items-center gap-1">
+                              <ImageIcon className="w-8 h-8 stroke-1" />
+                              <span className="text-[10px] text-slate-600">No image</span>
                             </div>
                           )}
-                          {(p.supplierNote || p.additionalNote) && (
-                            <div className="flex items-center gap-1.5 mt-0.5 text-[10px] text-amber-300/90 max-w-[220px] lg:max-w-[280px] truncate font-normal">
-                              <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[8.5px] uppercase font-bold tracking-wider bg-amber-500/15 text-amber-400 border border-amber-500/25 shrink-0">
-                                {p.supplierNote ? "Note" : "Note"}
-                              </span>
-                              <span className="truncate text-slate-300" title={p.supplierNote || p.additionalNote || ""}>
-                                {p.supplierNote || p.additionalNote}
-                              </span>
-                            </div>
+                        </div>
+
+                        {/* Title */}
+                        <h4
+                          className="font-semibold text-white group-hover:text-indigo-300 transition-colors text-xs line-clamp-2 leading-snug mt-2.5 min-h-[32px]"
+                          title={nameDisplay}
+                        >
+                          {nameDisplay}
+                        </h4>
+
+                        {/* Category & Stock Tag */}
+                        <div className="flex flex-wrap items-center gap-1.5 mt-2">
+                          {p.shippingClass === "over-the-sea" || p.shippingClass === "Over the Sea" ? (
+                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[9px] font-bold bg-cyan-950/80 text-cyan-300 border border-cyan-500/40">
+                              <span>🚢</span>
+                              <span>Over Sea</span>
+                            </span>
+                          ) : p.stockStatus === "outofstock" || p.quantity === 0 ? (
+                            <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold bg-rose-500/15 text-rose-400 border border-rose-500/30">
+                              Out of Stock
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[9.5px] font-bold bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 shadow-sm shadow-emerald-950/20">
+                              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+                              <span>In Stock: {p.quantity}</span>
+                            </span>
                           )}
-                        </td>
 
-                        {/* 3. Category (supports multiple categories, 2-line wrap for long names) */}
-                        <td className="px-2 py-2">
-                          {(() => {
-                            let catList: string[] = [];
-                            if (p.categoryNames) {
-                              try {
-                                const parsed = JSON.parse(p.categoryNames);
-                                if (Array.isArray(parsed)) {
-                                  catList = parsed.filter(Boolean);
-                                }
-                              } catch {
-                                catList = p.categoryNames
-                                  .split(",")
-                                  .map((s) => s.trim())
-                                  .filter(Boolean);
-                              }
-                            }
-                            if (catList.length === 0 && p.category?.name) {
-                              catList = [p.category.name];
-                            }
+                          {!isShop && (p.categoryNames || p.category?.name) && (
+                            <span className="px-1.5 py-0.5 rounded text-[9px] font-medium bg-slate-800 text-slate-300 border border-slate-700 truncate max-w-[120px]">
+                              {p.category?.name || "Category"}
+                            </span>
+                          )}
+                        </div>
+                      </div>
 
-                            if (catList.length === 0) {
-                              return <span className="text-slate-500 font-mono text-[11px]">—</span>;
-                            }
+                      {/* Bottom Price & Action Footer */}
+                      <div className="mt-3.5 pt-3 border-t border-slate-800/80 flex items-center justify-between gap-2">
+                        <div>
+                          <div className="text-[9px] text-slate-400 uppercase tracking-wider font-semibold">Price</div>
+                          <div className="text-xs font-bold text-emerald-400">
+                            {p.status === "NOT_REQUESTED" ? (
+                              <span className="text-sky-400 text-[10px]">Not Req</span>
+                            ) : p.status === "PRICE_NOT_AVAILABLE" || Number(p.priceLKR || p.price) === 0 ? (
+                              <span className="text-rose-400 text-[10px]">Not Available</span>
+                            ) : (
+                              formatLKR(p.priceLKR || p.price)
+                            )}
+                          </div>
+                        </div>
 
-                            return (
-                              <div className="w-[120px] max-w-[120px] flex flex-col gap-1">
-                                {catList.map((cat, idx) => (
+                        {/* Actions (Hidden for SHOP) */}
+                        {!isShop && (
+                          <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+                            {canRequestPrice(p) && (
+                              <button
+                                onClick={() => handleRequestPrice(p.id, nameDisplay)}
+                                disabled={requestingPriceId === p.id}
+                                className={`px-2 py-1 rounded-lg border text-[11px] font-semibold transition-all flex items-center gap-1 ${
+                                  p.status === "PENDING"
+                                    ? "bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 border-amber-500/40"
+                                    : "bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 border-amber-500/30"
+                                } ${requestingPriceId === p.id ? "opacity-60 cursor-not-allowed" : "cursor-pointer"}`}
+                                title="Request updated price quote"
+                              >
+                                {requestingPriceId === p.id ? (
+                                  <Loader2 className="w-3 h-3 animate-spin" />
+                                ) : (
+                                  <RotateCcw className="w-3 h-3" />
+                                )}
+                                <span>Quote</span>
+                              </button>
+                            )}
+
+                            <Link
+                              href={`/products/${p.id}/edit`}
+                              onClick={() => saveScrollState(p.id)}
+                              className="p-1.5 rounded-lg text-slate-400 hover:text-amber-400 hover:bg-slate-800 transition-colors"
+                              title="Edit Product"
+                            >
+                              <Edit2 className="w-3.5 h-3.5" />
+                            </Link>
+
+                            {(() => {
+                              const isPmsModified = Boolean(
+                                p.supplierId ||
+                                (p.supplier && p.supplier.name) ||
+                                p.additionalNote?.includes("PMS Updated") ||
+                                p.status === "PENDING"
+                              );
+
+                              if (isOnlineWeb && !isPmsModified) return null;
+
+                              return (
+                                <button
+                                  onClick={() => handleDelete(p.id, nameDisplay, isOnlineWeb)}
+                                  className={`p-1.5 rounded-lg transition-colors cursor-pointer ${
+                                    isOnlineWeb
+                                      ? "text-amber-400 hover:text-amber-300 hover:bg-amber-950/40"
+                                      : "text-slate-400 hover:text-rose-400 hover:bg-slate-800"
+                                  }`}
+                                  title={isOnlineWeb ? "Revert to web" : "Delete Product"}
+                                >
+                                  {isOnlineWeb ? (
+                                    <RotateCcw className="w-3.5 h-3.5" />
+                                  ) : (
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                  )}
+                                </button>
+                              );
+                            })()}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            {/* Shared Pagination for Grid */}
+            <div className="p-4 bg-slate-900 border border-slate-800 rounded-2xl flex flex-wrap items-center justify-between gap-4 text-xs text-slate-400 shadow-xl">
+              <div>
+                Showing {products.length > 0 ? (page - 1) * limit + 1 : 0} to{" "}
+                {Math.min(page * limit, total)} of {total} items
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  disabled={page <= 1}
+                  onClick={() => {
+                    saveScrollPosToTop();
+                    setPage((p) => Math.max(1, p - 1));
+                  }}
+                  className="p-2 rounded-lg border border-slate-800 text-slate-300 disabled:text-slate-600 hover:bg-slate-800 disabled:hover:bg-transparent transition-all"
+                >
+                  <ChevronLeft className="w-4 h-4" />
+                </button>
+                <span className="font-semibold text-white px-2">
+                  Page {page} of {totalPages || 1}
+                </span>
+                <button
+                  disabled={page >= totalPages}
+                  onClick={() => {
+                    saveScrollPosToTop();
+                    setPage((p) => Math.min(totalPages, p + 1));
+                  }}
+                  className="p-2 rounded-lg border border-slate-800 text-slate-300 disabled:text-slate-600 hover:bg-slate-800 disabled:hover:bg-transparent transition-all"
+                >
+                  <ChevronRight className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+          </div>
+        ) : (
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-xl">
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs text-slate-300">
+                <thead className="bg-slate-950/80 text-slate-400 uppercase font-semibold text-[10px] tracking-wider border-b border-slate-800">
+                  <tr>
+                    <th className="px-2.5 py-3 w-[110px]">Sku / Source</th>
+                    <th className="px-3 py-3 min-w-[180px] max-w-[280px]">Name</th>
+                    {!isShop && <th className="px-2 py-3 w-[120px]">Category</th>}
+                    {!isShop && <th className="px-2 py-3 text-center w-[105px]">Status</th>}
+                    <th className="px-2 py-3 text-center w-[90px]">Qty / Stock</th>
+                    <th className="px-2.5 py-3 text-right w-[105px]">Price (LKR)</th>
+                    <th className="px-2 py-3 text-center w-[95px]">Date</th>
+                    <th className={`px-1.5 py-3 text-center ${isShop ? "w-[84px]" : "w-[52px]"}`}>Image</th>
+                    {!isShop && <th className="px-2.5 py-3 text-right w-[85px]">Actions</th>}
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-800/60">
+                  {isLoading ? (
+                    <tr>
+                      <td colSpan={isShop ? 6 : 9} className="py-16 text-center">
+                        <Loader2 className="w-6 h-6 animate-spin text-indigo-500 mx-auto" />
+                        <p className="text-xs text-slate-400 mt-2">Loading products...</p>
+                      </td>
+                    </tr>
+                  ) : products.length === 0 ? (
+                    <tr>
+                      <td colSpan={isShop ? 6 : 9} className="py-16 text-center text-slate-400">
+                        No products found matching the criteria.
+                      </td>
+                    </tr>
+                  ) : (
+                    products.map((p) => {
+                      const skuDisplay = p.sku ? p.sku : "—";
+                      const nameDisplay = p.modelAndName || p.productName;
+                      const isOnlineWeb =
+                        p.source === "ONLINE_WEB" ||
+                        p.source === "LK_TRONICS" ||
+                        Boolean(p.externalId);
+
+                      return (
+                        <tr
+                          key={p.id}
+                          id={`product-row-${p.id}`}
+                          onClick={() => {
+                            if (isShop) {
+                              setPreviewProduct(p);
+                            } else {
+                              saveScrollState(p.id);
+                              router.push(`/products/${p.id}`);
+                            }
+                          }}
+                          className={`cursor-pointer transition-colors group ${
+                            isOnlineWeb
+                              ? "border-l-4 border-l-orange-500 bg-orange-950/10 hover:bg-orange-950/20"
+                              : "border-l-4 border-l-blue-500/50 hover:bg-slate-800/60"
+                          }`}
+                          title="Click row to view product details"
+                        >
+                          {/* 1. Sku / Source */}
+                          <td className="px-2.5 py-2 font-mono whitespace-nowrap">
+                            <div className="flex flex-col gap-0.5 items-start">
+                              <span
+                                className={`font-bold tracking-wide text-xs ${
+                                  isOnlineWeb ? "text-orange-400" : "text-blue-400"
+                                }`}
+                              >
+                                {skuDisplay}
+                              </span>
+                              {isOnlineWeb ? (
+                                <div className="flex flex-col gap-0.5 items-start">
                                   <span
-                                    key={idx}
-                                    className={`px-1.5 py-0.5 rounded text-[10px] font-medium border break-words line-clamp-2 leading-tight ${
-                                      idx === 0
-                                        ? "bg-slate-800 text-slate-300 border-slate-700"
-                                        : "bg-indigo-950/50 text-indigo-300 border-indigo-800/40"
-                                    }`}
-                                    title={catList.length > 1 ? `Category ${idx + 1}: ${cat}` : cat}
+                                    className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[9px] font-bold bg-orange-500/15 text-orange-300 border border-orange-500/30 shadow-sm"
+                                    title="Product synced from Online Web (lk-tronics.com)"
                                   >
-                                    {cat}
+                                    <Globe className="w-2.5 h-2.5 text-orange-400 shrink-0" />
+                                    Online Web
                                   </span>
-                                ))}
-                              </div>
-                            );
-                          })()}
-                        </td>
+                                  {(p.supplierId || (p.supplier && p.supplier.name) || p.additionalNote?.includes("PMS Updated")) && (
+                                    <span
+                                      className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[8.5px] font-bold bg-indigo-500/20 text-indigo-300 border border-indigo-500/35 shadow-sm"
+                                      title={`Price updated via PMS ${p.supplier ? `(Supplier: ${p.supplier.name})` : ""}`}
+                                    >
+                                      PMS Updated
+                                    </span>
+                                  )}
+                                </div>
+                              ) : (
+                                <span
+                                  className="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-semibold bg-blue-500/15 text-blue-300 border border-blue-500/30"
+                                  title="PMS local product"
+                                >
+                                  PMS
+                                </span>
+                              )}
+                            </div>
+                          </td>
 
-                        {/* 4. Status */}
-                        <td className="px-2 py-2 text-center whitespace-nowrap">
-                          {getStatusBadge(p.status)}
-                        </td>
+                          {/* 2. Name & Supply / Special Note */}
+                          <td className="px-3 py-2">
+                            <div className="font-semibold text-white group-hover:text-indigo-300 transition-colors max-w-[220px] lg:max-w-[280px] truncate text-xs">
+                              {nameDisplay}
+                            </div>
+                            {(p.referenceLink || p.externalUrl) && (
+                              <div className="mt-0.5">
+                                <a
+                                  href={p.referenceLink || p.externalUrl!}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  onClick={(e) => e.stopPropagation()}
+                                  className="inline-flex items-center gap-1 text-[10px] text-violet-400 hover:text-violet-300 hover:underline transition-colors"
+                                  title="Open product on web site"
+                                >
+                                  <span>View on Web Site</span>
+                                  <ExternalLink className="w-3 h-3 text-violet-400 shrink-0" />
+                                </a>
+                              </div>
+                            )}
+                            {(p.supplierNote || p.additionalNote) && (
+                              <div className="flex items-center gap-1.5 mt-0.5 text-[10px] text-amber-300/90 max-w-[220px] lg:max-w-[280px] truncate font-normal">
+                                <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[8.5px] uppercase font-bold tracking-wider bg-amber-500/15 text-amber-400 border border-amber-500/25 shrink-0">
+                                  {p.supplierNote ? "Note" : "Note"}
+                                </span>
+                                <span className="truncate text-slate-300" title={p.supplierNote || p.additionalNote || ""}>
+                                  {p.supplierNote || p.additionalNote}
+                                </span>
+                              </div>
+                            )}
+                          </td>
+
+                          {/* 3. Category (Hidden for SHOP) */}
+                          {!isShop && (
+                            <td className="px-2 py-2">
+                              {(() => {
+                                let catList: string[] = [];
+                                if (p.categoryNames) {
+                                  try {
+                                    const parsed = JSON.parse(p.categoryNames);
+                                    if (Array.isArray(parsed)) {
+                                      catList = parsed.filter(Boolean);
+                                    }
+                                  } catch {
+                                    catList = p.categoryNames
+                                      .split(",")
+                                      .map((s) => s.trim())
+                                      .filter(Boolean);
+                                }
+                              }
+                              if (catList.length === 0 && p.category?.name) {
+                                catList = [p.category.name];
+                              }
+
+                              if (catList.length === 0) {
+                                return <span className="text-slate-500 font-mono text-[11px]">—</span>;
+                              }
+
+                              return (
+                                <div className="w-[120px] max-w-[120px] flex flex-col gap-1">
+                                  {catList.map((cat, idx) => (
+                                    <span
+                                      key={idx}
+                                      className={`px-1.5 py-0.5 rounded text-[10px] font-medium border break-words line-clamp-2 leading-tight ${
+                                        idx === 0
+                                          ? "bg-slate-800 text-slate-300 border-slate-700"
+                                          : "bg-indigo-950/50 text-indigo-300 border-indigo-800/40"
+                                      }`}
+                                      title={catList.length > 1 ? `Category ${idx + 1}: ${cat}` : cat}
+                                    >
+                                      {cat}
+                                    </span>
+                                  ))}
+                                </div>
+                              );
+                            })()}
+                          </td>
+                        )}
+
+                        {/* 4. Status (Hidden for SHOP) */}
+                        {!isShop && (
+                          <td className="px-2 py-2 text-center whitespace-nowrap">
+                            {getStatusBadge(p.status)}
+                          </td>
+                        )}
 
                         {/* 5. Qty / Stock */}
                         <td className="px-2 py-2 text-center whitespace-nowrap">
@@ -1220,7 +1626,7 @@ export default function ProductsPage() {
                           })()}
                         </td>
 
-                        {/* 8. Image (All time show thumbnail) */}
+                        {/* 8. Image (Enlarged for SHOP) */}
                         <td className="px-1.5 py-1 text-center whitespace-nowrap">
                           {p.imagePath ? (
                             <button
@@ -1235,96 +1641,97 @@ export default function ProductsPage() {
                                 src={p.imagePath}
                                 alt={nameDisplay}
                                 referrerPolicy="no-referrer"
-                                className="w-9 h-9 object-cover rounded-lg border border-slate-700 bg-slate-950 group-hover:border-indigo-500 group-hover:scale-105 transition-all shadow-md mx-auto"
+                                className={`${
+                                  isShop ? "w-16 h-16 rounded-xl" : "w-9 h-9 rounded-lg"
+                                } object-cover border border-slate-700 bg-slate-950 group-hover:border-indigo-500 group-hover:scale-105 transition-all shadow-md mx-auto`}
                               />
                             </button>
                           ) : (
-                            <div className="w-9 h-9 rounded-lg border border-slate-800 bg-slate-950/60 flex items-center justify-center mx-auto text-slate-600">
-                              <ImageIcon className="w-4 h-4 stroke-1" />
+                            <div
+                              className={`${
+                                isShop ? "w-16 h-16 rounded-xl" : "w-9 h-9 rounded-lg"
+                              } border border-slate-800 bg-slate-950/60 flex items-center justify-center mx-auto text-slate-600`}
+                            >
+                              <ImageIcon className={`${isShop ? "w-7 h-7" : "w-4 h-4"} stroke-1`} />
                             </div>
                           )}
                         </td>
 
-                        {/* 9. Actions */}
-                        <td
-                          className="px-2 py-2 text-right whitespace-nowrap"
-                          onClick={(e) => e.stopPropagation()}
-                        >
-                          <div className="inline-flex items-center gap-1">
-                            {/* Request Price Button: Compact Icon-only (Only allowed for Over the Sea, Price Not Available, or PMS-updated online products) */}
-                            {canRequestPrice(p) && (
-                              <button
-                                onClick={() => handleRequestPrice(p.id, nameDisplay)}
-                                disabled={requestingPriceId === p.id}
-                                className={`p-1.5 rounded-lg border transition-all ${
-                                  p.status === "PENDING"
-                                    ? "bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 border-amber-500/40"
-                                    : "bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 border-amber-500/30"
-                                } ${requestingPriceId === p.id ? "opacity-60 cursor-not-allowed" : "cursor-pointer"}`}
-                                title={
-                                  p.status === "PENDING"
-                                    ? "Product is currently Pending: Click to re-request supplier quote"
-                                    : "Request Price (moves to Pending)"
-                                }
-                              >
-                                {requestingPriceId === p.id ? (
-                                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                                ) : (
-                                  <RotateCcw className="w-3.5 h-3.5" />
-                                )}
-                              </button>
-                            )}
-
-                            {/* Edit */}
-                            <Link
-                              href={`/products/${p.id}/edit`}
-                              onClick={() => saveScrollState(p.id)}
-                              className="p-1.5 rounded-lg text-slate-400 hover:text-amber-400 hover:bg-slate-800 transition-colors"
-                              title="Edit Product"
-                            >
-                              <Edit2 className="w-3.5 h-3.5" />
-                            </Link>
-
-                            {/* Delete (Staff & Admin):
-                                - Pure Online Web product: cannot delete (hidden)
-                                - PMS modified Online Web product: removes PMS modifications only (reverts to web product)
-                                - Local PMS product: permanent delete */}
-                            {(() => {
-                              const isPmsModified = Boolean(
-                                p.supplierId ||
-                                (p.supplier && p.supplier.name) ||
-                                p.additionalNote?.includes("PMS Updated") ||
-                                p.status === "PENDING"
-                              );
-
-                              if (isOnlineWeb && !isPmsModified) {
-                                return null;
-                              }
-
-                              return (
+                        {/* 9. Actions (Hidden for SHOP) */}
+                        {!isShop && (
+                          <td
+                            className="px-2 py-2 text-right whitespace-nowrap"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            <div className="inline-flex items-center justify-end gap-1">
+                              {/* Request Price Button */}
+                              {canRequestPrice(p) && (
                                 <button
-                                  onClick={() => handleDelete(p.id, nameDisplay, isOnlineWeb)}
-                                  className={`p-1.5 rounded-lg transition-colors cursor-pointer ${
-                                    isOnlineWeb
-                                      ? "text-amber-400 hover:text-amber-300 hover:bg-amber-950/40"
-                                      : "text-slate-400 hover:text-rose-400 hover:bg-slate-800"
-                                  }`}
+                                  onClick={() => handleRequestPrice(p.id, nameDisplay)}
+                                  disabled={requestingPriceId === p.id}
+                                  className="p-1.5 rounded-lg border transition-all bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 border-amber-500/30 cursor-pointer"
                                   title={
-                                    isOnlineWeb
-                                      ? "Remove PMS quotation & modifications (reverts to standard web product)"
-                                      : "Delete Product"
+                                    p.status === "PENDING"
+                                      ? "Product is currently Pending: Click to re-request supplier quote"
+                                      : "Request Price (moves to Pending)"
                                   }
                                 >
-                                  {isOnlineWeb ? (
-                                    <RotateCcw className="w-3.5 h-3.5" />
+                                  {requestingPriceId === p.id ? (
+                                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
                                   ) : (
-                                    <Trash2 className="w-3.5 h-3.5" />
+                                    <RotateCcw className="w-3.5 h-3.5" />
                                   )}
                                 </button>
-                              );
-                            })()}
-                          </div>
-                        </td>
+                              )}
+
+                              {/* Edit (Hidden for SHOP) */}
+                              <Link
+                                href={`/products/${p.id}/edit`}
+                                onClick={() => saveScrollState(p.id)}
+                                className="p-1.5 rounded-lg text-slate-400 hover:text-amber-400 hover:bg-slate-800 transition-colors"
+                                title="Edit Product"
+                              >
+                                <Edit2 className="w-3.5 h-3.5" />
+                              </Link>
+
+                              {/* Delete (Staff & Admin, Hidden for SHOP) */}
+                              {(() => {
+                                const isPmsModified = Boolean(
+                                  p.supplierId ||
+                                  (p.supplier && p.supplier.name) ||
+                                  p.additionalNote?.includes("PMS Updated") ||
+                                  p.status === "PENDING"
+                                );
+
+                                if (isOnlineWeb && !isPmsModified) {
+                                  return null;
+                                }
+
+                                return (
+                                  <button
+                                    onClick={() => handleDelete(p.id, nameDisplay, isOnlineWeb)}
+                                    className={`p-1.5 rounded-lg transition-colors cursor-pointer ${
+                                      isOnlineWeb
+                                        ? "text-amber-400 hover:text-amber-300 hover:bg-amber-950/40"
+                                        : "text-slate-400 hover:text-rose-400 hover:bg-slate-800"
+                                    }`}
+                                    title={
+                                      isOnlineWeb
+                                        ? "Remove PMS quotation & modifications (reverts to standard web product)"
+                                        : "Delete Product"
+                                    }
+                                  >
+                                    {isOnlineWeb ? (
+                                      <RotateCcw className="w-3.5 h-3.5" />
+                                    ) : (
+                                      <Trash2 className="w-3.5 h-3.5" />
+                                    )}
+                                  </button>
+                                );
+                              })()}
+                            </div>
+                          </td>
+                        )}
                       </tr>
                     );
                   })
@@ -1366,6 +1773,7 @@ export default function ProductsPage() {
             </div>
           </div>
         </div>
+      )}
       </div>
 
       {/* Admin Setting: Price Validity Period Modal */}
@@ -1434,6 +1842,207 @@ export default function ProductsPage() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Instant Product Preview Modal (0ms Offline Preview for Shop) */}
+      {previewProduct && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/85 backdrop-blur-md animate-in fade-in duration-200">
+          <div className="bg-slate-900 border border-slate-700/80 rounded-3xl max-w-3xl w-full p-6 shadow-2xl shadow-black/80 relative max-h-[90vh] flex flex-col overflow-hidden animate-in zoom-in-95 duration-200">
+            {/* Header */}
+            <div className="flex items-start justify-between gap-4 pb-4 border-b border-slate-800">
+              <div className="space-y-1.5 pr-6">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="font-mono font-bold text-xs text-orange-400 bg-orange-950/60 px-2.5 py-1 rounded-lg border border-orange-500/40">
+                    SKU: {previewProduct.sku || previewProduct.recordNo || "—"}
+                  </span>
+                  {previewProduct.shippingClass === "over-the-sea" || previewProduct.shippingClass === "Over the Sea" ? (
+                    <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold bg-cyan-950/80 text-cyan-300 border border-cyan-500/40">
+                      🚢 Over the Sea
+                    </span>
+                  ) : null}
+                  {previewProduct.stockStatus === "outofstock" || previewProduct.quantity === 0 ? (
+                    <span className="inline-flex items-center px-2.5 py-1 rounded-lg text-xs font-bold bg-rose-500/15 text-rose-400 border border-rose-500/30">
+                      Out of Stock
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center px-2.5 py-1 rounded-lg font-mono text-xs font-bold bg-slate-800 text-emerald-400 border border-slate-700">
+                      Qty: {previewProduct.quantity}
+                    </span>
+                  )}
+                </div>
+                <h3 className="text-lg font-bold text-white leading-snug pt-1">
+                  {previewProduct.modelAndName || previewProduct.productName}
+                </h3>
+              </div>
+              <button
+                onClick={() => setPreviewProduct(null)}
+                className="p-2 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 transition-colors shrink-0"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Content Body */}
+            <div className="py-4 space-y-5 overflow-y-auto max-h-[calc(85vh-160px)] pr-2">
+              <div className="grid grid-cols-1 md:grid-cols-12 gap-6 items-start">
+                {/* Image Section */}
+                <div className="md:col-span-5 bg-slate-950 rounded-2xl p-3 border border-slate-800 flex flex-col items-center justify-center min-h-[220px]">
+                  {previewProduct.imagePath ? (
+                    <div className="relative group/modalimg w-full flex items-center justify-center">
+                      <img
+                        src={previewProduct.imagePath}
+                        alt={previewProduct.productName}
+                        referrerPolicy="no-referrer"
+                        className="max-h-56 w-auto object-contain rounded-xl"
+                      />
+                      <button
+                        onClick={() => setPreviewImage(previewProduct.imagePath!)}
+                        className="absolute bottom-2 right-2 p-1.5 rounded-lg bg-slate-900/80 backdrop-blur-sm border border-slate-700 text-slate-300 hover:text-white transition-opacity"
+                        title="Zoom Image"
+                      >
+                        <ImageIcon className="w-4 h-4" />
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="text-slate-600 flex flex-col items-center gap-2 py-8">
+                      <ImageIcon className="w-12 h-12 stroke-1" />
+                      <span className="text-xs">No image available</span>
+                    </div>
+                  )}
+                </div>
+
+                {/* Details Section */}
+                <div className="md:col-span-7 space-y-4">
+                  {/* Selling Price Box */}
+                  <div className="p-4 rounded-2xl bg-gradient-to-br from-emerald-950/40 to-slate-900 border border-emerald-500/30">
+                    <span className="text-[11px] font-bold uppercase tracking-wider text-emerald-400/90 block mb-1">
+                      Selling Price (LKR)
+                    </span>
+                    <span className="text-2xl font-black text-emerald-400 font-mono">
+                      {previewProduct.status === "NOT_REQUESTED"
+                        ? "Not Requested"
+                        : previewProduct.status === "PRICE_NOT_AVAILABLE" ||
+                          Number(previewProduct.priceLKR || previewProduct.price) === 0
+                        ? "Price Not Available"
+                        : formatLKR(previewProduct.priceLKR || previewProduct.price)}
+                    </span>
+                  </div>
+
+                  {/* Categories */}
+                  {previewProduct.categoryNames && (
+                    <div className="space-y-1.5">
+                      <span className="text-[11px] font-semibold text-slate-400">Categories</span>
+                      <div className="flex flex-wrap gap-1.5">
+                        {previewProduct.categoryNames
+                          .replace(/[\[\]"]/g, "")
+                          .split(",")
+                          .map((cat: string, i: number) => (
+                            <span
+                              key={i}
+                              className="px-2.5 py-1 rounded-lg text-xs bg-slate-800 text-slate-300 border border-slate-700 font-medium"
+                            >
+                              {cat.trim()}
+                            </span>
+                          ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Storage Warehouse Location (Section & Rack) for Shop user */}
+                  {isShop && (() => {
+                    const loc = extractStorageLocation(
+                      previewProduct.additionalNote,
+                      previewProduct.description
+                    );
+                    if (!loc) return null;
+                    return (
+                      <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/30 flex items-center gap-2.5">
+                        <div className="p-1.5 rounded-lg bg-amber-500/20 text-amber-300 shrink-0">
+                          <MapPin className="w-4 h-4" />
+                        </div>
+                        <div>
+                          <span className="text-[10px] uppercase font-bold tracking-wider text-amber-400 block">
+                            Storage Location
+                          </span>
+                          <div className="flex flex-wrap items-center gap-2 font-mono font-black text-xs text-white mt-0.5">
+                            {loc.section && (
+                              <span className="px-2 py-0.5 rounded bg-slate-900 border border-amber-500/40 text-amber-300">
+                                SECTION: <strong className="text-white font-bold">{loc.section}</strong>
+                              </span>
+                            )}
+                            {loc.rack && (
+                              <span className="px-2 py-0.5 rounded bg-slate-900 border border-amber-500/40 text-amber-300">
+                                RACK: <strong className="text-white font-bold">{loc.rack}</strong>
+                              </span>
+                            )}
+                            {loc.shelf && (
+                              <span className="px-2 py-0.5 rounded bg-slate-900 border border-amber-500/40 text-amber-300">
+                                SHELF: <strong className="text-white font-bold">{loc.shelf}</strong>
+                              </span>
+                            )}
+                            {!loc.section && !loc.rack && !loc.shelf && (
+                              <span className="text-slate-200">{loc.raw}</span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })()}
+
+                  {/* Description / Specifications */}
+                  {previewProduct.description && (
+                    <div className="space-y-1.5">
+                      <span className="text-[11px] font-semibold text-slate-400">
+                        Specifications & Details
+                      </span>
+                      <div className="p-3.5 rounded-xl bg-slate-950/70 border border-slate-800 text-xs text-slate-300 max-h-48 overflow-y-auto whitespace-pre-line leading-relaxed">
+                        {previewProduct.description}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div className="pt-4 border-t border-slate-800 flex items-center justify-between gap-3">
+              <div>
+                {(previewProduct.referenceLink || previewProduct.externalUrl) && (
+                  <a
+                    href={previewProduct.referenceLink || previewProduct.externalUrl!}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1.5 text-xs text-violet-400 hover:text-violet-300 font-medium"
+                  >
+                    <span>View on Website</span>
+                    <ExternalLink className="w-3.5 h-3.5" />
+                  </a>
+                )}
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setPreviewProduct(null)}
+                  className="px-4 py-2 rounded-xl border border-slate-700 hover:bg-slate-800 text-slate-300 text-xs font-semibold transition-colors"
+                >
+                  Close
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const id = previewProduct.id;
+                    setPreviewProduct(null);
+                    saveScrollState(id);
+                    router.push(`/products/${id}`);
+                  }}
+                  className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold shadow-lg shadow-indigo-600/20 transition-all"
+                >
+                  Full Page View
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}
