@@ -6,6 +6,11 @@ export default withAuth(
     const token = req.nextauth.token;
     const pathname = req.nextUrl.pathname;
 
+    // Reject unauthenticated API requests with 401 JSON instead of redirecting to HTML login page
+    if (pathname.startsWith("/api/") && !token) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
     // Role-based route protection for User management
     if (pathname.startsWith("/users") || pathname.startsWith("/api/users")) {
       // /api/users/list is permitted for any authenticated user (used for dropdowns)
@@ -52,7 +57,13 @@ export default withAuth(
   },
   {
     callbacks: {
-      authorized: ({ token }) => Boolean(token),
+      authorized: ({ token, req }) => {
+        // Let API routes pass through to middleware handler to return 401 JSON
+        if (req.nextUrl.pathname.startsWith("/api/")) {
+          return true;
+        }
+        return Boolean(token);
+      },
     },
     pages: {
       signIn: "/login",
