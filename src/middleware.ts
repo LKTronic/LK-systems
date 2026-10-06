@@ -68,6 +68,10 @@ export default withAuth(
     pages: {
       signIn: "/login",
     },
+    secret:
+      process.env.NEXTAUTH_SECRET ||
+      process.env.AUTH_SECRET ||
+      "dev_temp_secret_key_needs_env_auth_secret_32_chars",
   }
 );
 
