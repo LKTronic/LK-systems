@@ -103,16 +103,30 @@ export default function UsersPage() {
 
     try {
       if (editingUser) {
-        // Update user: only username and password can be updated
+        const isEditingSuperAdmin = editingUser.role === "SUPERADMIN";
         const payload: any = {};
-        if (editingUser.username !== "superadmin") {
+
+        if (isEditingSuperAdmin) {
+          // SuperAdmin: only username and password can be changed
           payload.username = formUsername;
-        }
-        if (formPassword && formPassword.trim().length > 0) {
-          if (formPassword.length < 6) {
-            throw new Error("New password must be at least 6 characters");
+          if (formPassword && formPassword.trim().length > 0) {
+            if (formPassword.length < 6) {
+              throw new Error("New password must be at least 6 characters");
+            }
+            payload.password = formPassword;
           }
-          payload.password = formPassword;
+        } else {
+          // All other users: ALL details can be changed!
+          payload.name = formName;
+          payload.username = formUsername;
+          if (formPassword && formPassword.trim().length > 0) {
+            if (formPassword.length < 6) {
+              throw new Error("New password must be at least 6 characters");
+            }
+            payload.password = formPassword;
+          }
+          payload.role = formRole;
+          payload.status = formStatus;
         }
 
         const res = await fetch(`/api/users/${editingUser.id}`, {
@@ -152,13 +166,8 @@ export default function UsersPage() {
   };
 
   const handleToggleStatus = async (user: UserItem) => {
-    if (user.username === "superadmin") {
-      alert("The default root SuperAdmin account (@superadmin) cannot be deactivated.");
-      return;
-    }
-
-    if (user.role === "SUPERADMIN" && !isSuperAdmin) {
-      alert("Only SuperAdmin can change SuperAdmin account status.");
+    if (user.role === "SUPERADMIN") {
+      alert("The SuperAdmin account cannot be deactivated.");
       return;
     }
 
@@ -188,13 +197,8 @@ export default function UsersPage() {
   };
 
   const handleDeleteUser = async (user: UserItem) => {
-    if (user.username === "superadmin") {
-      alert("The default root SuperAdmin account (@superadmin) cannot be deleted.");
-      return;
-    }
-
-    if (user.role === "SUPERADMIN" && !isSuperAdmin) {
-      alert("Only SuperAdmin can delete SuperAdmin accounts.");
+    if (user.role === "SUPERADMIN") {
+      alert("The SuperAdmin account cannot be deleted.");
       return;
     }
 
@@ -228,6 +232,8 @@ export default function UsersPage() {
       alert("Error deleting user");
     }
   };
+
+  const isEditingSuperAdmin = editingUser?.role === "SUPERADMIN";
 
   return (
     <AppLayout
@@ -280,18 +286,13 @@ export default function UsersPage() {
                 ) : users.map((user) => (
                   <tr key={user.id} className="hover:bg-slate-800/40 transition-colors">
                     <td className="py-3 px-4 font-semibold text-slate-200 flex items-center gap-2">
-                      {user.username === "superadmin" ? (
+                      {user.role === "SUPERADMIN" ? (
                         <>
                           <Crown className="w-4 h-4 text-amber-400 shrink-0" />
                           <span>{user.name}</span>
                           <span className="text-[9px] font-bold tracking-wider text-amber-300 bg-amber-500/20 border border-amber-500/30 px-1.5 py-0.5 rounded uppercase">
-                            Root
+                            SuperAdmin
                           </span>
-                        </>
-                      ) : user.role === "SUPERADMIN" ? (
-                        <>
-                          <Crown className="w-4 h-4 text-purple-400 shrink-0" />
-                          <span>{user.name}</span>
                         </>
                       ) : (
                         <span>{user.name}</span>
@@ -337,21 +338,19 @@ export default function UsersPage() {
                           disabled={user.role === "SUPERADMIN" && !isSuperAdmin}
                           className="p-1.5 text-slate-400 hover:text-indigo-400 disabled:opacity-30 disabled:cursor-not-allowed rounded-lg hover:bg-slate-800 transition-colors cursor-pointer"
                           title={
-                            user.role === "SUPERADMIN" && !isSuperAdmin
-                              ? "Only SuperAdmin can edit SuperAdmin accounts"
-                              : user.username === "superadmin"
-                              ? "Change Root SuperAdmin Password"
-                              : "Edit Username or Password"
+                            user.role === "SUPERADMIN"
+                              ? "Edit SuperAdmin Username or Password"
+                              : "Edit User Details"
                           }
                         >
                           <Edit2 className="w-4 h-4" />
                         </button>
 
-                        {/* Root SuperAdmin: Protected completely from deletion & status toggle */}
-                        {user.username === "superadmin" ? (
+                        {/* SuperAdmin: Protected completely from deletion & status toggle */}
+                        {user.role === "SUPERADMIN" ? (
                           <div
                             className="p-1.5 text-amber-400/60 cursor-not-allowed rounded-lg bg-slate-950/40"
-                            title="Default Root SuperAdmin account cannot be deleted or deactivated"
+                            title="SuperAdmin account cannot be deleted or deactivated"
                           >
                             <Lock className="w-4 h-4" />
                           </div>
@@ -360,10 +359,7 @@ export default function UsersPage() {
                             {/* Deactivate/Activate Status Button */}
                             <button
                               onClick={() => handleToggleStatus(user)}
-                              disabled={
-                                user.id === currentUserId ||
-                                (user.role === "SUPERADMIN" && !isSuperAdmin)
-                              }
+                              disabled={user.id === currentUserId}
                               className={`p-1.5 rounded-lg transition-colors cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed ${
                                 user.status === "ACTIVE"
                                   ? "text-slate-400 hover:text-amber-400 hover:bg-slate-800"
@@ -372,8 +368,6 @@ export default function UsersPage() {
                               title={
                                 user.id === currentUserId
                                   ? "You cannot deactivate your own account"
-                                  : user.role === "SUPERADMIN" && !isSuperAdmin
-                                  ? "Only SuperAdmin can change SuperAdmin status"
                                   : user.status === "ACTIVE"
                                   ? "Deactivate User"
                                   : "Activate User"
@@ -389,16 +383,11 @@ export default function UsersPage() {
                             {/* Permanently Delete User Button */}
                             <button
                               onClick={() => handleDeleteUser(user)}
-                              disabled={
-                                user.id === currentUserId ||
-                                (user.role === "SUPERADMIN" && !isSuperAdmin)
-                              }
+                              disabled={user.id === currentUserId}
                               className="p-1.5 text-slate-400 hover:text-rose-400 hover:bg-slate-800 disabled:opacity-30 disabled:cursor-not-allowed rounded-lg transition-colors cursor-pointer"
                               title={
                                 user.id === currentUserId
                                   ? "You cannot delete your own account"
-                                  : user.role === "SUPERADMIN" && !isSuperAdmin
-                                  ? "Only SuperAdmin can delete SuperAdmin accounts"
                                   : "Completely and permanently delete user account"
                               }
                             >
@@ -425,7 +414,9 @@ export default function UsersPage() {
                 {editingUser ? (
                   <>
                     <Edit2 className="w-4 h-4 text-indigo-400" />
-                    <span>Edit User Account</span>
+                    <span>
+                      {isEditingSuperAdmin ? "Edit SuperAdmin Account" : "Edit User Account"}
+                    </span>
                   </>
                 ) : (
                   <>
@@ -442,24 +433,16 @@ export default function UsersPage() {
               </button>
             </div>
 
-            {/* Informational Guidance Banner */}
-            {editingUser?.username === "superadmin" ? (
+            {/* Informational Guidance Banner - ONLY for SuperAdmin */}
+            {isEditingSuperAdmin && (
               <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/20 text-xs text-amber-300 flex items-start gap-2.5">
                 <Crown className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
                 <div>
-                  <span className="font-semibold block text-amber-200">Default Root SuperAdmin Account</span>
-                  <span>Only password can be updated. Full name, username, role, and status are permanently locked.</span>
+                  <span className="font-semibold block text-amber-200">SuperAdmin Account</span>
+                  <span>Username and password can be updated. Full name, role, and account status are locked.</span>
                 </div>
               </div>
-            ) : editingUser ? (
-              <div className="p-3 rounded-xl bg-indigo-500/10 border border-indigo-500/20 text-xs text-indigo-300 flex items-start gap-2.5">
-                <Lock className="w-4 h-4 text-indigo-400 shrink-0 mt-0.5" />
-                <div>
-                  <span className="font-semibold block text-indigo-200">Edit Account Restrictions</span>
-                  <span>Only username and password can be modified. Full name, role, and status are locked.</span>
-                </div>
-              </div>
-            ) : null}
+            )}
 
             {modalError && (
               <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/20 text-xs text-rose-400 flex items-center gap-2">
@@ -469,11 +452,11 @@ export default function UsersPage() {
             )}
 
             <form onSubmit={handleSaveUser} className="space-y-4 text-xs">
-              {/* Full Name Field - Locked in edit mode */}
+              {/* Full Name Field - Locked ONLY for SuperAdmin, Editable for all other users */}
               <div>
                 <label className="block text-slate-300 font-semibold mb-1.5 flex items-center justify-between">
                   <span>Full Name</span>
-                  {editingUser && (
+                  {isEditingSuperAdmin && (
                     <span className="text-[10px] text-slate-400 font-normal flex items-center gap-1">
                       <Lock className="w-3 h-3 text-slate-500" /> Locked
                     </span>
@@ -481,8 +464,8 @@ export default function UsersPage() {
                 </label>
                 <input
                   type="text"
-                  required={!editingUser}
-                  disabled={!!editingUser}
+                  required
+                  disabled={isEditingSuperAdmin}
                   value={formName}
                   onChange={(e) => setFormName(e.target.value)}
                   placeholder="e.g. John Doe"
@@ -490,24 +473,18 @@ export default function UsersPage() {
                 />
               </div>
 
-              {/* Username Field - Locked for Root SuperAdmin, Editable for others */}
+              {/* Username Field - Editable for SuperAdmin and ALL other users */}
               <div>
-                <label className="block text-slate-300 font-semibold mb-1.5 flex items-center justify-between">
-                  <span>Username</span>
-                  {editingUser?.username === "superadmin" && (
-                    <span className="text-[10px] text-amber-400 font-normal flex items-center gap-1">
-                      <Lock className="w-3 h-3 text-amber-400" /> Locked (Root SuperAdmin)
-                    </span>
-                  )}
+                <label className="block text-slate-300 font-semibold mb-1.5">
+                  Username
                 </label>
                 <input
                   type="text"
                   required
-                  disabled={editingUser?.username === "superadmin"}
                   value={formUsername}
                   onChange={(e) => setFormUsername(e.target.value.toLowerCase())}
                   placeholder="e.g. jdoe"
-                  className="w-full px-3.5 py-2 bg-slate-950 border border-slate-800 rounded-lg text-white font-mono focus:outline-none focus:ring-1 focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed disabled:bg-slate-900/60"
+                  className="w-full px-3.5 py-2 bg-slate-950 border border-slate-800 rounded-lg text-white font-mono focus:outline-none focus:ring-1 focus:ring-indigo-500"
                 />
               </div>
 
@@ -540,12 +517,12 @@ export default function UsersPage() {
                 </div>
               </div>
 
-              {/* Role and Account Status Grid - Locked in edit mode */}
+              {/* Role and Account Status Grid */}
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-slate-300 font-semibold mb-1.5 flex items-center justify-between">
                     <span>Role</span>
-                    {editingUser && (
+                    {isEditingSuperAdmin && (
                       <span className="text-[10px] text-slate-400 font-normal flex items-center gap-1">
                         <Lock className="w-3 h-3 text-slate-500" /> Locked
                       </span>
@@ -554,20 +531,20 @@ export default function UsersPage() {
                   <select
                     value={formRole}
                     onChange={(e) => setFormRole(e.target.value as any)}
-                    disabled={!!editingUser}
+                    disabled={isEditingSuperAdmin}
                     className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-white focus:outline-none focus:ring-1 focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed disabled:bg-slate-900/60"
                   >
                     <option value="STAFF">STAFF</option>
                     <option value="SHOP">SHOP</option>
                     <option value="ADMIN">ADMIN</option>
-                    {isSuperAdmin && <option value="SUPERADMIN">SUPERADMIN</option>}
+                    {isEditingSuperAdmin && <option value="SUPERADMIN">SUPERADMIN</option>}
                   </select>
                 </div>
 
                 <div>
                   <label className="block text-slate-300 font-semibold mb-1.5 flex items-center justify-between">
                     <span>Account Status</span>
-                    {editingUser && (
+                    {isEditingSuperAdmin && (
                       <span className="text-[10px] text-slate-400 font-normal flex items-center gap-1">
                         <Lock className="w-3 h-3 text-slate-500" /> Locked
                       </span>
@@ -576,7 +553,7 @@ export default function UsersPage() {
                   <select
                     value={formStatus}
                     onChange={(e) => setFormStatus(e.target.value as any)}
-                    disabled={!!editingUser}
+                    disabled={isEditingSuperAdmin}
                     className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-white focus:outline-none focus:ring-1 focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed disabled:bg-slate-900/60"
                   >
                     <option value="ACTIVE">ACTIVE</option>

@@ -57,46 +57,26 @@ export async function PUT(
     }
 
     const { name, username, password, role, status } = parseResult.data;
+    const isEditingSuperAdmin = existingUser.role === "SUPERADMIN";
 
-    // Rule 1: Default Root SuperAdmin (@superadmin) - Only password can be updated
-    if (existingUser.username === "superadmin") {
-      if (username && username !== "superadmin") {
-        return NextResponse.json(
-          { error: "Forbidden: The default SuperAdmin username cannot be changed." },
-          { status: 400 }
-        );
-      }
-      if (role && role !== "SUPERADMIN") {
-        return NextResponse.json(
-          { error: "Forbidden: The default SuperAdmin role cannot be changed." },
-          { status: 400 }
-        );
-      }
-      if (status && status !== "ACTIVE") {
-        return NextResponse.json(
-          { error: "Forbidden: The default SuperAdmin account cannot be deactivated." },
-          { status: 400 }
-        );
-      }
+    // Rule 1: Only SUPERADMIN can edit the SuperAdmin account
+    if (isEditingSuperAdmin && currentUserRole !== "SUPERADMIN") {
+      return NextResponse.json(
+        { error: "Forbidden: Only SuperAdmin can modify SuperAdmin account." },
+        { status: 403 }
+      );
     }
 
-    // Rule 2: Only a SUPERADMIN can modify another SUPERADMIN account
-    if (existingUser.role === "SUPERADMIN" && currentUserRole !== "SUPERADMIN") {
+    // Rule 2: Cannot promote any user to SUPERADMIN (only one SuperAdmin is permitted)
+    if (role === "SUPERADMIN" && !isEditingSuperAdmin) {
       return NextResponse.json(
-        { error: "Forbidden: Only a SuperAdmin can modify SuperAdmin accounts." },
-        { status: 403 }
+        { error: "Forbidden: Cannot assign SuperAdmin role. Only one SuperAdmin account is permitted." },
+        { status: 400 }
       );
     }
 
     // Check unique username if changing
     if (username && username !== existingUser.username) {
-      if (existingUser.username === "superadmin") {
-        return NextResponse.json(
-          { error: "Username of default root superadmin cannot be changed." },
-          { status: 400 }
-        );
-      }
-
       let duplicate: any = null;
       try {
         duplicate = await prisma.user.findUnique({
@@ -110,7 +90,7 @@ export async function PUT(
         duplicate = raw[0] || null;
       }
 
-      if (duplicate) {
+      if (duplicate && duplicate.id !== id) {
         return NextResponse.json(
           { error: "Username already in use." },
           { status: 409 }
@@ -118,13 +98,33 @@ export async function PUT(
       }
     }
 
-    // In edit mode: Only username and password can be updated (Name, Role, and Status are locked)
     const updateData: any = {};
-    if (username && existingUser.username !== "superadmin") {
-      updateData.username = username;
-    }
-    if (password && password.trim().length >= 6) {
-      updateData.passwordHash = await bcrypt.hash(password, 10);
+
+    if (isEditingSuperAdmin) {
+      // SuperAdmin: ONLY username and password can be updated. Name, Role, Status are locked.
+      if (username && username !== existingUser.username) {
+        updateData.username = username;
+      }
+      if (password && password.trim().length >= 6) {
+        updateData.passwordHash = await bcrypt.hash(password, 10);
+      }
+    } else {
+      // All other users: ALL details can be edited! Not locked!
+      if (name && name.trim()) {
+        updateData.name = name.trim();
+      }
+      if (username && username !== existingUser.username) {
+        updateData.username = username;
+      }
+      if (password && password.trim().length >= 6) {
+        updateData.passwordHash = await bcrypt.hash(password, 10);
+      }
+      if (role && role !== "SUPERADMIN") {
+        updateData.role = role;
+      }
+      if (status) {
+        updateData.status = status;
+      }
     }
 
     if (Object.keys(updateData).length === 0) {
@@ -156,6 +156,10 @@ export async function PUT(
     } catch (updateErr) {
       const fields: string[] = [];
       const values: any[] = [];
+      if (updateData.name) {
+        fields.push("name = ?");
+        values.push(updateData.name);
+      }
       if (updateData.username) {
         fields.push("username = ?");
         values.push(updateData.username);
@@ -163,6 +167,14 @@ export async function PUT(
       if (updateData.passwordHash) {
         fields.push("passwordHash = ?");
         values.push(updateData.passwordHash);
+      }
+      if (updateData.role) {
+        fields.push("role = ?");
+        values.push(updateData.role);
+      }
+      if (updateData.status) {
+        fields.push("status = ?");
+        values.push(updateData.status);
       }
       fields.push("updatedAt = NOW(3)");
       values.push(id);
@@ -227,18 +239,10 @@ export async function DELETE(
       return NextResponse.json({ error: "User not found" }, { status: 404 });
     }
 
-    // Rule 1: Default Root SuperAdmin (@superadmin) cannot be deleted or deactivated by anyone
-    if (existingUser.username === "superadmin") {
+    // Rule 1: SuperAdmin cannot be deleted or deactivated by anyone
+    if (existingUser.role === "SUPERADMIN") {
       return NextResponse.json(
-        { error: "Forbidden: The default root SuperAdmin account (@superadmin) cannot be deleted." },
-        { status: 403 }
-      );
-    }
-
-    // Rule 2: Only a SUPERADMIN can delete another SUPERADMIN account
-    if (existingUser.role === "SUPERADMIN" && currentUserRole !== "SUPERADMIN") {
-      return NextResponse.json(
-        { error: "Forbidden: Only SuperAdmin can delete SuperAdmin accounts." },
+        { error: "Forbidden: The SuperAdmin account cannot be deleted or deactivated." },
         { status: 403 }
       );
     }
