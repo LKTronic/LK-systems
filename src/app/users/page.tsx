@@ -415,7 +415,9 @@ export default function UsersPage() {
                   <>
                     <Edit2 className="w-4 h-4 text-indigo-400" />
                     <span>
-                      {isEditingSuperAdmin ? "Edit SuperAdmin Account" : "Edit User Account"}
+                      {isEditingSuperAdmin
+                        ? `Edit SuperAdmin (@${editingUser.username})`
+                        : `Edit User (@${editingUser.username})`}
                     </span>
                   </>
                 ) : (
@@ -451,7 +453,30 @@ export default function UsersPage() {
               </div>
             )}
 
-            <form onSubmit={handleSaveUser} className="space-y-4 text-xs">
+            <form
+              key={editingUser ? `edit-${editingUser.id}-${editingUser.username}` : "create-user"}
+              onSubmit={handleSaveUser}
+              autoComplete="off"
+              className="space-y-4 text-xs"
+            >
+              {/* Deceive browser password managers so they never overwrite the user's username with the admin's */}
+              <input
+                type="text"
+                name="pms_prevent_autofill_user"
+                aria-hidden="true"
+                tabIndex={-1}
+                autoComplete="off"
+                style={{ display: "none", position: "absolute", opacity: 0, pointerEvents: "none" }}
+              />
+              <input
+                type="password"
+                name="pms_prevent_autofill_pass"
+                aria-hidden="true"
+                tabIndex={-1}
+                autoComplete="new-password"
+                style={{ display: "none", position: "absolute", opacity: 0, pointerEvents: "none" }}
+              />
+
               {/* Full Name Field - Locked ONLY for SuperAdmin, Editable for all other users */}
               <div>
                 <label className="block text-slate-300 font-semibold mb-1.5 flex items-center justify-between">
@@ -464,11 +489,13 @@ export default function UsersPage() {
                 </label>
                 <input
                   type="text"
+                  name="edit_account_name"
                   required
                   disabled={isEditingSuperAdmin}
                   value={formName}
                   onChange={(e) => setFormName(e.target.value)}
                   placeholder="e.g. John Doe"
+                  autoComplete="off"
                   className="w-full px-3.5 py-2 bg-slate-950 border border-slate-800 rounded-lg text-white focus:outline-none focus:ring-1 focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed disabled:bg-slate-900/60"
                 />
               </div>
@@ -480,10 +507,15 @@ export default function UsersPage() {
                 </label>
                 <input
                   type="text"
+                  name="edit_account_username"
                   required
                   value={formUsername}
                   onChange={(e) => setFormUsername(e.target.value.toLowerCase())}
                   placeholder="e.g. jdoe"
+                  autoComplete="off"
+                  autoCorrect="off"
+                  autoCapitalize="none"
+                  spellCheck="false"
                   className="w-full px-3.5 py-2 bg-slate-950 border border-slate-800 rounded-lg text-white font-mono focus:outline-none focus:ring-1 focus:ring-indigo-500"
                 />
               </div>
@@ -496,6 +528,7 @@ export default function UsersPage() {
                 <div className="relative">
                   <input
                     type={showPassword ? "text" : "password"}
+                    name="edit_account_password"
                     required={!editingUser}
                     value={formPassword}
                     onChange={(e) => setFormPassword(e.target.value)}
@@ -504,6 +537,7 @@ export default function UsersPage() {
                         ? "•••••••• (Leave blank to keep unchanged)"
                         : "At least 6 characters"
                     }
+                    autoComplete="new-password"
                     className="w-full pl-3.5 pr-10 py-2 bg-slate-950 border border-slate-800 rounded-lg text-white font-mono focus:outline-none focus:ring-1 focus:ring-indigo-500 text-xs"
                   />
                   <button
