@@ -84,11 +84,11 @@ export async function POST(request: NextRequest) {
 
     const { name, username, password, role, status } = parseResult.data;
 
-    // Rule: Only SUPERADMIN can create another SUPERADMIN account
-    if (role === "SUPERADMIN" && currentUserRole !== "SUPERADMIN") {
+    // Rule: There is only ONE SuperAdmin account in the system - new ones cannot be created
+    if (role === "SUPERADMIN") {
       return NextResponse.json(
-        { error: "Forbidden: Only SuperAdmin can create SuperAdmin accounts." },
-        { status: 403 }
+        { error: "Forbidden: Cannot create new SuperAdmin accounts. Only one SuperAdmin account is permitted." },
+        { status: 400 }
       );
     }
 
