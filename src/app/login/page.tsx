@@ -3,30 +3,36 @@
 import { useState, useEffect } from "react";
 import { signIn, useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
-import { Lock, User, Loader2, AlertCircle } from "lucide-react";
+import { Lock, User, Loader2, AlertCircle, Eye, EyeOff } from "lucide-react";
 
 export default function LoginPage() {
   const router = useRouter();
   const { data: session, status } = useSession();
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [isMounted, setIsMounted] = useState(false);
+  const [redirecting, setRedirecting] = useState(false);
 
   useEffect(() => {
     setIsMounted(true);
   }, []);
 
   useEffect(() => {
-    if (status === "authenticated") {
+    if (status === "authenticated" && !redirecting) {
       const role = (session?.user as any)?.role;
       const params = typeof window !== "undefined" ? new URLSearchParams(window.location.search) : null;
       const callbackUrl = params?.get("callbackUrl");
-      const target = callbackUrl || (role === "SHOP" ? "/products" : "/dashboard");
+      let target = callbackUrl;
+      if (!target || target.includes("/login") || target === "/") {
+        target = role === "SHOP" ? "/products" : "/dashboard";
+      }
+      setRedirecting(true);
       router.replace(target);
     }
-  }, [status, session, router]);
+  }, [status, session, router, redirecting]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -45,23 +51,29 @@ export default function LoginPage() {
         setIsLoading(false);
       } else {
         const params = typeof window !== "undefined" ? new URLSearchParams(window.location.search) : null;
-        const callbackUrl = params?.get("callbackUrl");
-        const target = callbackUrl || "/dashboard";
-        window.location.href = target;
+        let callbackUrl = params?.get("callbackUrl");
+        if (!callbackUrl || callbackUrl.includes("/login") || callbackUrl === "/") {
+          callbackUrl = "/dashboard";
+        }
+        window.location.href = callbackUrl;
       }
-    } catch (err) {
-      setError("An unexpected error occurred. Please try again.");
+    } catch (err: any) {
+      setError(err?.message || "An unexpected error occurred. Please try again.");
       setIsLoading(false);
     }
   };
 
-  if (!isMounted || status === "loading" || status === "authenticated") {
+  // Only show full-screen loader if user is already authenticated and redirecting
+  if (redirecting) {
     return (
       <div
         suppressHydrationWarning
         className="min-h-screen flex items-center justify-center bg-slate-950 px-4 py-12"
       >
-        <Loader2 className="w-8 h-8 animate-spin text-indigo-500" />
+        <div className="flex flex-col items-center gap-3">
+          <Loader2 className="w-8 h-8 animate-spin text-indigo-500" />
+          <p className="text-xs text-slate-400">Redirecting to your dashboard...</p>
+        </div>
       </div>
     );
   }
@@ -119,7 +131,7 @@ export default function LoginPage() {
                 onChange={(e) => setUsername(e.target.value)}
                 placeholder="e.g. admin"
                 disabled={isLoading}
-                className="w-full pl-10 pr-4 py-2.5 bg-slate-950 border border-slate-800 rounded-lg text-sm text-white placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all"
+                className="w-full pl-10 pr-4 py-2.5 bg-slate-950 border border-slate-800 rounded-lg text-sm text-white placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all font-mono"
               />
             </div>
           </div>
@@ -136,14 +148,22 @@ export default function LoginPage() {
                 <Lock className="w-4 h-4" />
               </div>
               <input
-                type="password"
+                type={showPassword ? "text" : "password"}
                 required
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="••••••••"
                 disabled={isLoading}
-                className="w-full pl-10 pr-4 py-2.5 bg-slate-950 border border-slate-800 rounded-lg text-sm text-white placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all"
+                className="w-full pl-10 pr-10 py-2.5 bg-slate-950 border border-slate-800 rounded-lg text-sm text-white placeholder-slate-600 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all font-mono"
               />
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                className="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-500 hover:text-slate-300 transition-colors cursor-pointer"
+                title={showPassword ? "Hide password" : "Show password"}
+              >
+                {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+              </button>
             </div>
           </div>
 
