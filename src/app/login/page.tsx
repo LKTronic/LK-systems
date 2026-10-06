@@ -24,9 +24,9 @@ export default function LoginPage() {
       const params = typeof window !== "undefined" ? new URLSearchParams(window.location.search) : null;
       const callbackUrl = params?.get("callbackUrl");
       const target = callbackUrl || (role === "SHOP" ? "/products" : "/dashboard");
-      window.location.href = target;
+      router.replace(target);
     }
-  }, [status, session]);
+  }, [status, session, router]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
