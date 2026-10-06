@@ -65,20 +65,6 @@ export function AppLayout({
     }
   }, [isMounted, status, session, router, requireAdmin, role, isShop]);
 
-  // Safety timer: prevent getting permanently stuck on loading screen (non-shop users only)
-  useEffect(() => {
-    if (isShop) return; // Never auto-redirect shop users to login
-    const timer = setTimeout(() => {
-      if (status === "loading") {
-        const isOffline = typeof navigator !== "undefined" && !navigator.onLine;
-        if (isOffline) {
-          return;
-        }
-        router.push("/login");
-      }
-    }, 4000);
-    return () => clearTimeout(timer);
-  }, [status, router, isShop]);
 
   const isOffline = typeof navigator !== "undefined" && !navigator.onLine;
 

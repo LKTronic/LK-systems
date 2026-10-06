@@ -21,13 +21,12 @@ export default function LoginPage() {
   useEffect(() => {
     if (status === "authenticated") {
       const role = (session?.user as any)?.role;
-      if (role === "SHOP") {
-        router.replace("/products");
-      } else {
-        router.replace("/dashboard");
-      }
+      const params = typeof window !== "undefined" ? new URLSearchParams(window.location.search) : null;
+      const callbackUrl = params?.get("callbackUrl");
+      const target = callbackUrl || (role === "SHOP" ? "/products" : "/dashboard");
+      window.location.href = target;
     }
-  }, [status, session, router]);
+  }, [status, session]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -43,12 +42,15 @@ export default function LoginPage() {
 
       if (res?.error) {
         setError(res.error || "Invalid username or password");
+        setIsLoading(false);
       } else {
-        router.refresh();
+        const params = typeof window !== "undefined" ? new URLSearchParams(window.location.search) : null;
+        const callbackUrl = params?.get("callbackUrl");
+        const target = callbackUrl || "/dashboard";
+        window.location.href = target;
       }
     } catch (err) {
       setError("An unexpected error occurred. Please try again.");
-    } finally {
       setIsLoading(false);
     }
   };
