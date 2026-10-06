@@ -58,27 +58,45 @@ export async function PUT(
 
     const { name, username, password, role, status } = parseResult.data;
 
-    // Rule 1: SUPERADMIN cannot be deactivated by anyone
-    if (existingUser.role === "SUPERADMIN" && status === "INACTIVE") {
-      return NextResponse.json(
-        { error: "Forbidden: SuperAdmin accounts cannot be deactivated by anyone." },
-        { status: 403 }
-      );
+    // Rule 1: Default Root SuperAdmin (@superadmin) - Only password can be updated
+    if (existingUser.username === "superadmin") {
+      if (username && username !== "superadmin") {
+        return NextResponse.json(
+          { error: "Forbidden: The default SuperAdmin username cannot be changed." },
+          { status: 400 }
+        );
+      }
+      if (role && role !== "SUPERADMIN") {
+        return NextResponse.json(
+          { error: "Forbidden: The default SuperAdmin role cannot be changed." },
+          { status: 400 }
+        );
+      }
+      if (status && status !== "ACTIVE") {
+        return NextResponse.json(
+          { error: "Forbidden: The default SuperAdmin account cannot be deactivated." },
+          { status: 400 }
+        );
+      }
     }
 
-    // Rule 2: Only a SUPERADMIN can assign or modify a SUPERADMIN role/account
-    if (
-      (existingUser.role === "SUPERADMIN" || role === "SUPERADMIN") &&
-      currentUserRole !== "SUPERADMIN"
-    ) {
+    // Rule 2: Only a SUPERADMIN can modify another SUPERADMIN account
+    if (existingUser.role === "SUPERADMIN" && currentUserRole !== "SUPERADMIN") {
       return NextResponse.json(
-        { error: "Forbidden: Only a SuperAdmin can modify or assign SuperAdmin accounts." },
+        { error: "Forbidden: Only a SuperAdmin can modify SuperAdmin accounts." },
         { status: 403 }
       );
     }
 
     // Check unique username if changing
     if (username && username !== existingUser.username) {
+      if (existingUser.username === "superadmin") {
+        return NextResponse.json(
+          { error: "Username of default root superadmin cannot be changed." },
+          { status: 400 }
+        );
+      }
+
       let duplicate: any = null;
       try {
         duplicate = await prisma.user.findUnique({
@@ -100,13 +118,24 @@ export async function PUT(
       }
     }
 
+    // In edit mode: Only username and password can be updated (Name, Role, and Status are locked)
     const updateData: any = {};
-    if (name) updateData.name = name;
-    if (username) updateData.username = username;
-    if (role) updateData.role = role;
-    if (status) updateData.status = status;
+    if (username && existingUser.username !== "superadmin") {
+      updateData.username = username;
+    }
     if (password && password.trim().length >= 6) {
       updateData.passwordHash = await bcrypt.hash(password, 10);
+    }
+
+    if (Object.keys(updateData).length === 0) {
+      return NextResponse.json({
+        id: existingUser.id,
+        name: existingUser.name,
+        username: existingUser.username,
+        role: existingUser.role,
+        status: existingUser.status,
+        updatedAt: existingUser.updatedAt,
+      });
     }
 
     try {
@@ -127,26 +156,28 @@ export async function PUT(
     } catch (updateErr) {
       const fields: string[] = [];
       const values: any[] = [];
-      if (name) { fields.push("name = ?"); values.push(name); }
-      if (username) { fields.push("username = ?"); values.push(username); }
-      if (role) { fields.push("role = ?"); values.push(role); }
-      if (status) { fields.push("status = ?"); values.push(status); }
-      if (password && password.trim().length >= 6) {
+      if (updateData.username) {
+        fields.push("username = ?");
+        values.push(updateData.username);
+      }
+      if (updateData.passwordHash) {
         fields.push("passwordHash = ?");
-        values.push(await bcrypt.hash(password, 10));
+        values.push(updateData.passwordHash);
       }
       fields.push("updatedAt = NOW(3)");
       values.push(id);
 
-      await prisma.$executeRawUnsafe(
-        `UPDATE User SET ${fields.join(", ")} WHERE id = ?`,
-        ...values
-      );
+      if (fields.length > 1) {
+        await prisma.$executeRawUnsafe(
+          `UPDATE User SET ${fields.join(", ")} WHERE id = ?`,
+          ...values
+        );
+      }
       const updatedRows = await prisma.$queryRawUnsafe<any[]>(
         `SELECT id, name, username, role, status, updatedAt FROM User WHERE id = ? LIMIT 1`,
         id
       );
-      return NextResponse.json(updatedRows[0] || { id, name, username, role, status });
+      return NextResponse.json(updatedRows[0] || existingUser);
     }
   } catch (error: any) {
     console.error("Error updating user:", error);
@@ -157,7 +188,7 @@ export async function PUT(
   }
 }
 
-// DELETE /api/users/:id (Delete or Deactivate user - Admin / SuperAdmin)
+// DELETE /api/users/:id (Permanently delete user - Admin / SuperAdmin)
 export async function DELETE(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -179,27 +210,44 @@ export async function DELETE(
       return NextResponse.json({ error: "Invalid user ID" }, { status: 400 });
     }
 
-    const existingUser = await prisma.user.findUnique({
-      where: { id },
-    });
+    let existingUser: any = null;
+    try {
+      existingUser = await prisma.user.findUnique({
+        where: { id },
+      });
+    } catch {
+      const raw = await prisma.$queryRawUnsafe<any[]>(
+        `SELECT * FROM User WHERE id = ? LIMIT 1`,
+        id
+      );
+      existingUser = raw[0] || null;
+    }
 
     if (!existingUser) {
       return NextResponse.json({ error: "User not found" }, { status: 404 });
     }
 
-    // Rule 1: SUPERADMIN cannot be deleted or deactivated by anyone
-    if (existingUser.role === "SUPERADMIN") {
+    // Rule 1: Default Root SuperAdmin (@superadmin) cannot be deleted or deactivated by anyone
+    if (existingUser.username === "superadmin") {
       return NextResponse.json(
-        { error: "Forbidden: SuperAdmin accounts cannot be deleted or deactivated by anyone." },
+        { error: "Forbidden: The default root SuperAdmin account (@superadmin) cannot be deleted." },
         { status: 403 }
       );
     }
 
-    // Rule 2: Protect against self-deletion/self-deactivation
+    // Rule 2: Only a SUPERADMIN can delete another SUPERADMIN account
+    if (existingUser.role === "SUPERADMIN" && currentUserRole !== "SUPERADMIN") {
+      return NextResponse.json(
+        { error: "Forbidden: Only SuperAdmin can delete SuperAdmin accounts." },
+        { status: 403 }
+      );
+    }
+
+    // Rule 3: Protect against self-deletion
     const currentUserId = parseInt((session.user as any).id, 10);
     if (currentUserId === id) {
       return NextResponse.json(
-        { error: "You cannot delete or deactivate your own account." },
+        { error: "You cannot delete your own account." },
         { status: 400 }
       );
     }
@@ -208,7 +256,7 @@ export async function DELETE(
     const mode = searchParams.get("mode");
 
     if (mode === "toggle") {
-      // Toggle Active / Inactive
+      // Toggle Active / Inactive (if explicitly requested)
       const newStatus = existingUser.status === "ACTIVE" ? "INACTIVE" : "ACTIVE";
       const updated = await prisma.user.update({
         where: { id },
@@ -221,33 +269,70 @@ export async function DELETE(
       });
     }
 
-    // Default or mode === "delete": Delete user (or soft delete if FK exists)
+    // Default or mode === "delete": Permanent Hard Deletion from DB (Never soft-delete or set to INACTIVE)
+    let fallbackAdminId = currentUserId;
+    if (!fallbackAdminId || fallbackAdminId === id) {
+      try {
+        const rootAdmin = await prisma.user.findFirst({
+          where: { role: "SUPERADMIN" },
+          select: { id: true },
+        });
+        fallbackAdminId = rootAdmin ? rootAdmin.id : 1;
+      } catch {
+        fallbackAdminId = 1;
+      }
+    }
+
     try {
+      // Step A: Reassign any Product records created by this user so FK constraint does not fail
+      await prisma.product.updateMany({
+        where: { createdBy: id },
+        data: { createdBy: fallbackAdminId },
+      });
+
+      // Step B: Nullify userId in ProductHistory
+      await prisma.productHistory.updateMany({
+        where: { userId: id },
+        data: { userId: null },
+      });
+
+      // Step C: Permanently delete user row from MySQL
       await prisma.user.delete({
         where: { id },
       });
+
       return NextResponse.json({
         message: `User @${existingUser.username} permanently deleted.`,
       });
     } catch (dbError: any) {
-      // If FK constraint prevents hard deletion, set status to INACTIVE
-      if (dbError.code === "P2003") {
-        const updated = await prisma.user.update({
-          where: { id },
-          data: { status: "INACTIVE" },
-          select: { id: true, username: true, status: true },
-        });
+      console.warn("Prisma user delete encountered issue, attempting direct SQL hard delete:", dbError);
+      try {
+        await prisma.$executeRawUnsafe(
+          `UPDATE Product SET createdBy = ? WHERE createdBy = ?`,
+          fallbackAdminId,
+          id
+        );
+        await prisma.$executeRawUnsafe(
+          `UPDATE ProductHistory SET userId = NULL WHERE userId = ?`,
+          id
+        );
+        await prisma.$executeRawUnsafe(`DELETE FROM User WHERE id = ?`, id);
+
         return NextResponse.json({
-          message: `User @${existingUser.username} has linked product records, so account was deactivated instead of deleted.`,
-          user: updated,
+          message: `User @${existingUser.username} permanently deleted.`,
         });
+      } catch (rawError: any) {
+        console.error("Hard delete completely failed:", rawError);
+        return NextResponse.json(
+          { error: rawError?.message || "Failed to permanently delete user from database." },
+          { status: 500 }
+        );
       }
-      throw dbError;
     }
-  } catch (error) {
+  } catch (error: any) {
     console.error("Error deleting user:", error);
     return NextResponse.json(
-      { error: "Failed to delete user" },
+      { error: error?.message || "Failed to delete user." },
       { status: 500 }
     );
   }
