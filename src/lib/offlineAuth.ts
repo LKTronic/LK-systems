@@ -6,7 +6,7 @@
 
 export const OFFLINE_ROLE_KEY = "pms_offline_role";
 export const OFFLINE_USER_KEY = "pms_offline_user";
-export const CACHE_NAME = "pms-shop-cache-v5";
+export const CACHE_NAME = "pms-shop-cache-v7";
 
 export interface CachedUser {
   id?: string;

@@ -8,10 +8,19 @@ import { checkRateLimit } from "@/lib/rateLimit";
 // 7 days session duration with daily rolling updates on active usage
 const SEVEN_DAYS_IN_SECONDS = 7 * 24 * 60 * 60;
 
-// SEC-02 Remediation: Validate that AUTH_SECRET is provided via environment
-const authSecret = process.env.AUTH_SECRET;
-if (!authSecret && process.env.NODE_ENV === "production") {
-  throw new Error("FATAL: AUTH_SECRET environment variable is missing in production.");
+if (!process.env.NEXTAUTH_URL && typeof window === "undefined") {
+  process.env.NEXTAUTH_URL = process.env.VERCEL_URL
+    ? `https://${process.env.VERCEL_URL}`
+    : "https://system.lk-tronics.com";
+}
+
+const authSecret =
+  process.env.AUTH_SECRET ||
+  process.env.NEXTAUTH_SECRET ||
+  "dev_temp_secret_key_needs_env_auth_secret_32_chars";
+
+if (!process.env.NEXTAUTH_SECRET) {
+  process.env.NEXTAUTH_SECRET = authSecret;
 }
 
 export const authOptions: NextAuthOptions = {
@@ -20,21 +29,7 @@ export const authOptions: NextAuthOptions = {
     maxAge: SEVEN_DAYS_IN_SECONDS,
     updateAge: 24 * 60 * 60, // Refresh session token expiry daily on user activity
   },
-  cookies: {
-    sessionToken: {
-      name:
-        process.env.NODE_ENV === "production"
-          ? "__Secure-next-auth.session-token"
-          : "next-auth.session-token",
-      options: {
-        httpOnly: true,
-        sameSite: "lax",
-        path: "/",
-        secure: process.env.NODE_ENV === "production",
-        maxAge: SEVEN_DAYS_IN_SECONDS,
-      },
-    },
-  },
+  useSecureCookies: process.env.NODE_ENV === "production",
   pages: {
     signIn: "/login",
     error: "/login",
