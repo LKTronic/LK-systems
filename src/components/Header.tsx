@@ -129,8 +129,8 @@ export function Header({ title, description }: { title: string; description?: st
     };
     window.addEventListener("pms_shop_offline_status", handleStatusEvent);
 
-    // Register Service Worker and cache page assets for offline resilience
-    if ("serviceWorker" in navigator) {
+    // Register Service Worker only for Shop counter offline resilience
+    if (isShop && "serviceWorker" in navigator) {
       navigator.serviceWorker
         .register("/sw.js")
         .then(() => {
