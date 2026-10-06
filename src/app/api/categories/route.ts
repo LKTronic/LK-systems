@@ -7,7 +7,7 @@ import { prisma } from "@/lib/prisma";
 let cachedCategories: { data: any; timestamp: number } | null = null;
 const CATEGORIES_CACHE_TTL_MS = 60 * 1000; // 1 minute
 
-export function invalidateCategoriesCache() {
+function invalidateCategoriesCache() {
   cachedCategories = null;
 }
 
