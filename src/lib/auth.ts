@@ -9,9 +9,13 @@ import { checkRateLimit } from "@/lib/rateLimit";
 const SEVEN_DAYS_IN_SECONDS = 7 * 24 * 60 * 60;
 
 if (!process.env.NEXTAUTH_URL && typeof window === "undefined") {
-  process.env.NEXTAUTH_URL = process.env.VERCEL_URL
-    ? `https://${process.env.VERCEL_URL}`
-    : "https://system.lk-tronics.com";
+  if (process.env.NODE_ENV === "development") {
+    process.env.NEXTAUTH_URL = "http://localhost:3000";
+  } else if (process.env.VERCEL_URL) {
+    process.env.NEXTAUTH_URL = `https://${process.env.VERCEL_URL}`;
+  } else {
+    process.env.NEXTAUTH_URL = "https://system.lk-tronics.com";
+  }
 }
 
 const authSecret =
@@ -29,7 +33,18 @@ export const authOptions: NextAuthOptions = {
     maxAge: SEVEN_DAYS_IN_SECONDS,
     updateAge: 24 * 60 * 60, // Refresh session token expiry daily on user activity
   },
-  useSecureCookies: process.env.NODE_ENV === "production",
+  useSecureCookies: false, // Ensures consistent cookie naming across reverse proxies (Nginx/Cloudflare) and local dev
+  cookies: {
+    sessionToken: {
+      name: "next-auth.session-token",
+      options: {
+        httpOnly: true,
+        sameSite: "lax",
+        path: "/",
+        secure: false,
+      },
+    },
+  },
   pages: {
     signIn: "/login",
     error: "/login",

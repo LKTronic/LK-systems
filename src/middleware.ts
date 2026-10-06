@@ -69,8 +69,8 @@ export default withAuth(
       signIn: "/login",
     },
     secret:
-      process.env.NEXTAUTH_SECRET ||
       process.env.AUTH_SECRET ||
+      process.env.NEXTAUTH_SECRET ||
       "dev_temp_secret_key_needs_env_auth_secret_32_chars",
   }
 );
