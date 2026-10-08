@@ -112,100 +112,122 @@ export function notifyShopSyncStatus(
   );
 }
 
+let activeSyncPromise: Promise<{ count: number; timestamp: string }> | null = null;
+let lastSyncTimestamp = 0;
+
 /**
  * Downloads latest product catalog from server and persists into browser's IndexedDB,
  * and caches all product images locally for 100% offline image viewing.
  */
-export async function syncShopCatalogToIndexedDb(): Promise<{ count: number; timestamp: string }> {
-  notifyShopSyncStatus("syncing");
-  try {
-    const res = await fetch("/api/shop/offline-catalog", {
-      cache: "no-store",
-    });
+export async function syncShopCatalogToIndexedDb(force = false): Promise<{ count: number; timestamp: string }> {
+  if (activeSyncPromise) {
+    return activeSyncPromise;
+  }
 
-    if (!res.ok) {
-      throw new Error(`Catalog fetch failed with status ${res.status}`);
-    }
+  const now = Date.now();
+  if (!force && lastSyncTimestamp > 0 && now - lastSyncTimestamp < 30000) {
+    const meta = await getShopOfflineMeta();
+    return { count: meta.count, timestamp: meta.lastSyncTime || new Date().toISOString() };
+  }
 
-    const data = await res.json();
-    const products: ShopOfflineProduct[] = data.products || [];
-    const timestamp = data.timestamp || new Date().toISOString();
+  activeSyncPromise = (async () => {
+    notifyShopSyncStatus("syncing");
+    try {
+      const res = await fetch("/api/shop/offline-catalog", {
+        cache: "no-store",
+      });
 
-    const db = await openDb();
-    await new Promise<void>((resolve, reject) => {
-      const tx = db.transaction([STORE_PRODUCTS, STORE_META], "readwrite");
-      const productStore = tx.objectStore(STORE_PRODUCTS);
-      const metaStore = tx.objectStore(STORE_META);
-
-      // Clear existing cached products and bulk insert updated list
-      productStore.clear();
-      for (const p of products) {
-        productStore.put(p);
+      if (!res.ok) {
+        throw new Error(`Catalog fetch failed with status ${res.status}`);
       }
 
-      metaStore.put({ key: "lastSyncTime", value: timestamp });
-      metaStore.put({ key: "productCount", value: products.length });
-      metaStore.put({ key: "version", value: data.version || Date.now() });
+      const data = await res.json();
+      const products: ShopOfflineProduct[] = data.products || [];
+      const timestamp = data.timestamp || new Date().toISOString();
 
-      tx.oncomplete = () => resolve();
-      tx.onerror = () => reject(tx.error || new Error("Failed to write to IndexedDB"));
-    });
+      const db = await openDb();
+      await new Promise<void>((resolve, reject) => {
+        const tx = db.transaction([STORE_PRODUCTS, STORE_META], "readwrite");
+        const productStore = tx.objectStore(STORE_PRODUCTS);
+        const metaStore = tx.objectStore(STORE_META);
 
-    // Filter strictly to Web Store products (ONLINE_WEB / LK_TRONICS)
-    // Do not download internal PMS-added product images
-    const webProducts = products.filter(
-      (p) => p.source === "ONLINE_WEB" || p.source === "LK_TRONICS" || Boolean(p.externalId)
-    );
-    const imageUrls = Array.from(
-      new Set(
-        webProducts
-          .map((p) => p.imagePath)
-          .filter(
-            (u): u is string =>
-              Boolean(u && (u.startsWith("http://") || u.startsWith("https://")))
-          )
-      )
-    );
-
-    if (imageUrls.length > 0 && typeof window !== "undefined" && "caches" in window) {
-      // Check and download only missing images in the background without blocking
-      preCacheProductImages(imageUrls, (done, total) => {
-        if (done < total) {
-          notifyShopSyncStatus("downloading_images", {
-            count: products.length,
-            doneImages: done,
-            totalImages: total,
-          });
-        } else {
-          notifyShopSyncStatus("synced", {
-            count: products.length,
-            doneImages: total,
-            totalImages: total,
-          });
+        // Clear existing cached products and bulk insert updated list
+        productStore.clear();
+        for (const p of products) {
+          productStore.put(p);
         }
-      })
-        .then((result) => {
-          notifyShopSyncStatus("synced", {
-            count: products.length,
-            doneImages: result.cachedCount,
-            totalImages: result.total,
-          });
-        })
-        .catch(() => {
-          notifyShopSyncStatus("synced", { count: products.length });
-        });
-    } else {
-      notifyShopSyncStatus("synced", { count: products.length });
-    }
 
-    return { count: products.length, timestamp };
-  } catch (err) {
-    console.warn("Shop offline sync warning (will use existing cached data):", err);
-    getShopOfflineMeta().then((meta) => {
-      notifyShopSyncStatus("offline", { count: meta.count });
-    });
-    throw err;
-  }
+        metaStore.put({ key: "lastSyncTime", value: timestamp });
+        metaStore.put({ key: "productCount", value: products.length });
+        metaStore.put({ key: "version", value: data.version || Date.now() });
+
+        tx.oncomplete = () => resolve();
+        tx.onerror = () => reject(tx.error || new Error("Failed to write to IndexedDB"));
+      });
+
+      lastSyncTimestamp = Date.now();
+      notifyShopSyncStatus("synced", { count: products.length });
+
+      // Filter strictly to Web Store products (ONLINE_WEB / LK_TRONICS)
+      // Do not download internal PMS-added product images
+      const webProducts = products.filter(
+        (p) => p.source === "ONLINE_WEB" || p.source === "LK_TRONICS" || Boolean(p.externalId)
+      );
+      const imageUrls = Array.from(
+        new Set(
+          webProducts
+            .map((p) => p.imagePath)
+            .filter(
+              (u): u is string =>
+                Boolean(u && (u.startsWith("http://") || u.startsWith("https://")))
+            )
+        )
+      );
+
+      // Defer image pre-caching so it never saturates network connection during initial page load/search
+      if (imageUrls.length > 0 && typeof window !== "undefined" && "caches" in window) {
+        setTimeout(() => {
+          preCacheProductImages(imageUrls, (done, total) => {
+            if (done < total) {
+              notifyShopSyncStatus("downloading_images", {
+                count: products.length,
+                doneImages: done,
+                totalImages: total,
+              });
+            } else {
+              notifyShopSyncStatus("synced", {
+                count: products.length,
+                doneImages: total,
+                totalImages: total,
+              });
+            }
+          })
+            .then((result) => {
+              notifyShopSyncStatus("synced", {
+                count: products.length,
+                doneImages: result.cachedCount,
+                totalImages: result.total,
+              });
+            })
+            .catch(() => {
+              notifyShopSyncStatus("synced", { count: products.length });
+            });
+        }, 3000);
+      }
+
+      return { count: products.length, timestamp };
+    } catch (err) {
+      console.warn("Shop offline sync warning (will use existing cached data):", err);
+      getShopOfflineMeta().then((meta) => {
+        notifyShopSyncStatus("offline", { count: meta.count });
+      });
+      throw err;
+    } finally {
+      activeSyncPromise = null;
+    }
+  })();
+
+  return activeSyncPromise;
 }
 
 /**
@@ -259,13 +281,13 @@ export async function preCacheProductImages(
       return { cachedCount: total, total };
     }
 
-    // Step 2: Download only the missing images in controlled batches of 10
+    // Step 2: Download only the missing images in gentle batches of 4 so browser sockets stay open for user search
     if (onProgress) {
       onProgress(alreadyCachedCount, total);
     }
 
     let newlyCached = 0;
-    const downloadBatchSize = 10;
+    const downloadBatchSize = 4;
 
     for (let i = 0; i < missingUrls.length; i += downloadBatchSize) {
       const batch = missingUrls.slice(i, i + downloadBatchSize);
@@ -291,6 +313,8 @@ export async function preCacheProductImages(
           }
         })
       );
+      // Small pause between batches to yield the network queue to user interactions
+      await new Promise((r) => setTimeout(r, 60));
     }
     return { cachedCount: alreadyCachedCount + newlyCached, total };
   } catch (err) {

@@ -107,7 +107,6 @@ export default function ProductsPage() {
   const [isReady, setIsReady] = useState(false);
   const [viewMode, setViewMode] = useState<"list" | "grid">("list");
   const [isOffline, setIsOffline] = useState(false);
-  const isInitialSearch = useRef(true);
   const hasRestoredScroll = useRef(false);
 
   useEffect(() => {
@@ -423,9 +422,9 @@ export default function ProductsPage() {
         return;
       }
 
-      // Fast network fetch with 2-second timeout so page never hangs on dead connection
+      // Network fetch with 10-second timeout to allow complex multi-term search & cold-start queries without hanging
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 2000);
+      const timeoutId = setTimeout(() => controller.abort(), 10000);
       let res: Response | null = null;
       try {
         res = await fetch(`/api/products?${params.toString()}`, {
@@ -452,10 +451,13 @@ export default function ProductsPage() {
           page,
           limit,
         });
-        setProducts(localResult.products as any);
-        setTotal(localResult.pagination.total);
-        setTotalPages(localResult.pagination.totalPages);
-        setDidYouMean(localResult.didYouMean || null);
+        const isActuallyOffline = typeof navigator !== "undefined" && !navigator.onLine;
+        if (localResult.products.length > 0 || isActuallyOffline) {
+          setProducts(localResult.products as any);
+          setTotal(localResult.pagination.total);
+          setTotalPages(localResult.pagination.totalPages);
+          setDidYouMean(localResult.didYouMean || null);
+        }
       }
     } catch (err) {
       console.warn("Network request failed, falling back to offline IndexedDB:", err);
@@ -469,10 +471,13 @@ export default function ProductsPage() {
             page,
             limit,
           });
-          setProducts(localResult.products as any);
-          setTotal(localResult.pagination.total);
-          setTotalPages(localResult.pagination.totalPages);
-          setDidYouMean(localResult.didYouMean || null);
+          const isActuallyOffline = typeof navigator !== "undefined" && !navigator.onLine;
+          if (localResult.products.length > 0 || isActuallyOffline) {
+            setProducts(localResult.products as any);
+            setTotal(localResult.pagination.total);
+            setTotalPages(localResult.pagination.totalPages);
+            setDidYouMean(localResult.didYouMean || null);
+          }
         } catch (dbErr) {
           console.error("Failed to read from local offline store:", dbErr);
         }
@@ -580,22 +585,19 @@ export default function ProductsPage() {
   // Live search debouncing: as user types, update debouncedSearch after 250ms
   useEffect(() => {
     if (!isReady) return;
-    if (isInitialSearch.current) {
-      isInitialSearch.current = false;
-      return;
-    }
+    if (search === debouncedSearch) return;
     const timer = setTimeout(() => {
       setDebouncedSearch(search);
       setPage(1);
     }, 250);
     return () => clearTimeout(timer);
-  }, [search, isReady]);
+  }, [search, debouncedSearch, isReady]);
 
   // Fetch products whenever filters or pagination change (once filters are ready)
   useEffect(() => {
     if (!isReady) return;
     fetchProducts();
-  }, [isReady, page, limit, status, sourceFilter, categoryId, addedBy, debouncedSearch]);
+  }, [isReady, page, limit, status, sourceFilter, categoryId, addedBy, debouncedSearch, isShop]);
 
   // Track scroll position continuously while scrolling
   useEffect(() => {

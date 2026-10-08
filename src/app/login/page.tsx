@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { signIn, useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { Lock, User, Loader2, AlertCircle, Eye, EyeOff } from "lucide-react";
+import { persistAuthSession } from "@/lib/offlineAuth";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -22,6 +23,9 @@ export default function LoginPage() {
 
   useEffect(() => {
     if (status === "authenticated" && !redirecting) {
+      if (session?.user) {
+        persistAuthSession(session);
+      }
       const role = (session?.user as any)?.role;
       const params = typeof window !== "undefined" ? new URLSearchParams(window.location.search) : null;
       const callbackUrl = params?.get("callbackUrl");
@@ -50,6 +54,24 @@ export default function LoginPage() {
         setError(res.error || "Invalid username or password");
         setIsLoading(false);
       } else {
+        try {
+          const sessionRes = await fetch("/api/auth/session");
+          if (sessionRes.ok) {
+            const sess = await sessionRes.json();
+            if (sess?.user) {
+              persistAuthSession(sess);
+            }
+            const role = (sess?.user as any)?.role;
+            const params = typeof window !== "undefined" ? new URLSearchParams(window.location.search) : null;
+            let callbackUrl = params?.get("callbackUrl");
+            if (!callbackUrl || callbackUrl.includes("/login") || callbackUrl === "/") {
+              callbackUrl = role === "SHOP" ? "/products" : "/dashboard";
+            }
+            window.location.href = callbackUrl;
+            return;
+          }
+        } catch (e) {}
+
         const params = typeof window !== "undefined" ? new URLSearchParams(window.location.search) : null;
         let callbackUrl = params?.get("callbackUrl");
         if (!callbackUrl || callbackUrl.includes("/login") || callbackUrl === "/") {
