@@ -167,6 +167,16 @@ export const authOptions: NextAuthOptions = {
       }
       return session;
     },
+    async redirect({ url, baseUrl }) {
+      // Always return relative path so remote network PCs stay on their IP/hostname rather than getting forced onto localhost
+      if (url.startsWith("/")) return url;
+      try {
+        const parsed = new URL(url);
+        return parsed.pathname + parsed.search;
+      } catch {
+        return "/dashboard";
+      }
+    },
   },
   secret: authSecret || "dev_temp_secret_key_needs_env_auth_secret_32_chars",
 };

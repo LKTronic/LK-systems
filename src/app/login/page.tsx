@@ -6,6 +6,37 @@ import { useRouter } from "next/navigation";
 import { Lock, User, Loader2, AlertCircle, Eye, EyeOff } from "lucide-react";
 import { persistAuthSession } from "@/lib/offlineAuth";
 
+function getSafeRedirectTarget(rawCallbackUrl: string | null | undefined, role?: string): string {
+  const fallback = role === "SHOP" ? "/products" : "/dashboard";
+  if (!rawCallbackUrl) return fallback;
+
+  try {
+    // If it's an absolute URL (e.g. http://localhost:3000/dashboard or http://192.168.1.10:3000/dashboard)
+    if (rawCallbackUrl.startsWith("http://") || rawCallbackUrl.startsWith("https://")) {
+      const parsed = new URL(rawCallbackUrl);
+      const path = parsed.pathname + parsed.search;
+      if (!path || path === "/" || path.includes("/login")) {
+        return fallback;
+      }
+      if (role === "SHOP" && (path.startsWith("/dashboard") || path.startsWith("/supply") || path.startsWith("/users"))) {
+        return "/products";
+      }
+      return path;
+    }
+  } catch (e) {}
+
+  // If it's a relative path
+  if (rawCallbackUrl.startsWith("/") && !rawCallbackUrl.startsWith("//") && !rawCallbackUrl.includes("/login")) {
+    if (rawCallbackUrl === "/") return fallback;
+    if (role === "SHOP" && (rawCallbackUrl.startsWith("/dashboard") || rawCallbackUrl.startsWith("/supply") || rawCallbackUrl.startsWith("/users"))) {
+      return "/products";
+    }
+    return rawCallbackUrl;
+  }
+
+  return fallback;
+}
+
 export default function LoginPage() {
   const router = useRouter();
   const { data: session, status } = useSession();
@@ -28,15 +59,14 @@ export default function LoginPage() {
       }
       const role = (session?.user as any)?.role;
       const params = typeof window !== "undefined" ? new URLSearchParams(window.location.search) : null;
-      const callbackUrl = params?.get("callbackUrl");
-      let target = callbackUrl;
-      if (!target || target.includes("/login") || target === "/") {
-        target = role === "SHOP" ? "/products" : "/dashboard";
-      }
+      const target = getSafeRedirectTarget(params?.get("callbackUrl"), role);
       setRedirecting(true);
-      router.replace(target);
+      window.location.href = target;
+      setTimeout(() => {
+        window.location.assign(target);
+      }, 2000);
     }
-  }, [status, session, router, redirecting]);
+  }, [status, session, redirecting]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -54,30 +84,25 @@ export default function LoginPage() {
         setError(res.error || "Invalid username or password");
         setIsLoading(false);
       } else {
+        setRedirecting(true);
+        let role: string | undefined;
         try {
           const sessionRes = await fetch("/api/auth/session");
           if (sessionRes.ok) {
             const sess = await sessionRes.json();
             if (sess?.user) {
               persistAuthSession(sess);
+              role = (sess.user as any)?.role;
             }
-            const role = (sess?.user as any)?.role;
-            const params = typeof window !== "undefined" ? new URLSearchParams(window.location.search) : null;
-            let callbackUrl = params?.get("callbackUrl");
-            if (!callbackUrl || callbackUrl.includes("/login") || callbackUrl === "/") {
-              callbackUrl = role === "SHOP" ? "/products" : "/dashboard";
-            }
-            window.location.href = callbackUrl;
-            return;
           }
         } catch (e) {}
 
         const params = typeof window !== "undefined" ? new URLSearchParams(window.location.search) : null;
-        let callbackUrl = params?.get("callbackUrl");
-        if (!callbackUrl || callbackUrl.includes("/login") || callbackUrl === "/") {
-          callbackUrl = "/dashboard";
-        }
-        window.location.href = callbackUrl;
+        const target = getSafeRedirectTarget(params?.get("callbackUrl"), role);
+        window.location.href = target;
+        setTimeout(() => {
+          window.location.assign(target);
+        }, 2000);
       }
     } catch (err: any) {
       setError(err?.message || "An unexpected error occurred. Please try again.");
@@ -87,6 +112,8 @@ export default function LoginPage() {
 
   // Only show full-screen loader if user is already authenticated and redirecting
   if (redirecting) {
+    const role = (session?.user as any)?.role;
+    const dest = role === "SHOP" ? "/products" : "/dashboard";
     return (
       <div
         suppressHydrationWarning
@@ -94,7 +121,17 @@ export default function LoginPage() {
       >
         <div className="flex flex-col items-center gap-3">
           <Loader2 className="w-8 h-8 animate-spin text-indigo-500" />
-          <p className="text-xs text-slate-400">Redirecting to your dashboard...</p>
+          <p className="text-xs text-slate-400">Redirecting to your workspace...</p>
+          <a
+            href={dest}
+            onClick={(e) => {
+              e.preventDefault();
+              window.location.href = dest;
+            }}
+            className="text-xs text-indigo-400 hover:text-indigo-300 underline mt-2 cursor-pointer"
+          >
+            Click here if not redirected automatically
+          </a>
         </div>
       </div>
     );
