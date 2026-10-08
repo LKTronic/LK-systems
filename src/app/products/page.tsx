@@ -403,6 +403,7 @@ export default function ProductsPage() {
       if (sourceFilter !== "ALL") params.set("source", sourceFilter);
       if (categoryId !== "ALL") params.set("categoryId", categoryId);
       if (addedBy !== "ALL") params.set("createdBy", addedBy);
+      if (isShop) params.set("isShop", "true");
 
       // In offline mode for shop users, query local IndexedDB directly
       if (isShop && typeof navigator !== "undefined" && !navigator.onLine) {

@@ -111,22 +111,146 @@ export function damerauLevenshtein(a: string, b: string): number {
 /**
  * Strips vowels to test consonant-skeleton similarity (e.g. "dsply" -> "display", "sensr" -> "sensor")
  */
+/**
+ * Strips vowels to test consonant-skeleton similarity (e.g. "dsply" -> "display", "sensr" -> "sensor")
+ */
 function getConsonantSkeleton(str: string): string {
   return str.toLowerCase().replace(/[^a-z0-9]/g, "").replace(/[aeiou]/g, "");
 }
 
 /**
- * Checks if a token is a dimension, number, or electrical modifier (e.g. "2.4", "5v", "16x2", "0.96")
+ * Normalizes unicode curly quotes, primes, and double apostrophes to standard ASCII quotes
+ */
+export function normalizeTextQuotes(str: string): string {
+  if (!str) return "";
+  return str
+    .replace(/[\u201c\u201d\u2033\u201f]/g, '"')
+    .replace(/[\u2018\u2019\u2032\u201b]/g, "'")
+    .replace(/''/g, '"');
+}
+
+/**
+ * Expands a token into common electronic unit and dimension equivalents.
+ * Example: "7inch" -> ["7inch", "7\"", "7 inch", "7-inch", "7.0\"", "7.0 inch", "070", "7in"]
+ */
+export function getDimensionVariants(token: string): string[] {
+  const clean = normalizeTextQuotes(token.toLowerCase().trim());
+  const variants = new Set<string>([clean]);
+
+  // Match inch patterns: "7inch", "7\"", "7-inch", "7in", "2.4inch", "0.96inch", "2.4\""
+  const inchMatch = clean.match(/^(\d+(\.\d+)?)\s*(inch|inches|"|in|-inch)?$/i);
+  if (inchMatch) {
+    const num = inchMatch[1];
+    const hasDecimal = num.includes(".");
+
+    variants.add(`${num}"`);
+    variants.add(`${num} inch`);
+    variants.add(`${num}inch`);
+    variants.add(`${num}-inch`);
+    variants.add(`${num}in`);
+    variants.add(`${num} in`);
+
+    if (!hasDecimal) {
+      variants.add(`${num}.0"`);
+      variants.add(`${num}.0 inch`);
+      variants.add(`${num}.0inch`);
+      variants.add(`${num}.0-inch`);
+      // HMI model code conventions (e.g. 7" -> 070)
+      if (num === "7") {
+        variants.add("070");
+        variants.add("sk-070");
+        variants.add("ea-070");
+        variants.add("gt-070");
+      } else if (num === "4") {
+        variants.add("043");
+      } else if (num === "10") {
+        variants.add("101");
+        variants.add("102");
+      }
+    } else {
+      const strippedDot = num.replace(".", "");
+      if (strippedDot.length <= 4) {
+        variants.add(strippedDot);
+      }
+      if (num === "4.3") variants.add("043");
+      if (num === "7.0") {
+        variants.add("070");
+        variants.add('7"');
+        variants.add("7 inch");
+        variants.add("7-inch");
+      }
+      if (num === "10.1" || num === "10.2") {
+        variants.add("101");
+        variants.add("102");
+      }
+    }
+  }
+
+  // Match resistance: "10k", "10kohm", "4.7k", "220r", "100ohm"
+  const resMatch = clean.match(/^(\d+(\.\d+)?)\s*(k|kohm|k\u03a9|m|mohm|r|ohm|\u03a9)$/i);
+  if (resMatch) {
+    const val = resMatch[1];
+    const unit = resMatch[3].toLowerCase();
+    if (unit === "k" || unit === "kohm" || unit === "k\u03a9") {
+      variants.add(`${val}k`);
+      variants.add(`${val} k`);
+      variants.add(`${val}kohm`);
+      variants.add(`${val} kohm`);
+    } else if (unit === "r" || unit === "ohm" || unit === "\u03a9") {
+      variants.add(`${val}r`);
+      variants.add(`${val} r`);
+      variants.add(`${val}ohm`);
+      variants.add(`${val} ohm`);
+    }
+  }
+
+  // Match capacitance: "100uf", "10uf", "22pf"
+  const capMatch = clean.match(/^(\d+(\.\d+)?)\s*(uf|u|mfd|nf|pf)$/i);
+  if (capMatch) {
+    const val = capMatch[1];
+    const unit = capMatch[3].toLowerCase();
+    variants.add(`${val}${unit}`);
+    variants.add(`${val} ${unit}`);
+    if (unit === "uf" || unit === "u") {
+      variants.add(`${val}uf`);
+      variants.add(`${val} uf`);
+      variants.add(`${val}u`);
+    }
+  }
+
+  // Match voltage: "5v", "12v", "24v", "3.3v"
+  const voltMatch = clean.match(/^(\d+(\.\d+)?)\s*(v|volt|volts)$/i);
+  if (voltMatch) {
+    const val = voltMatch[1];
+    variants.add(`${val}v`);
+    variants.add(`${val} v`);
+    variants.add(`${val}volt`);
+    variants.add(`${val} volt`);
+  }
+
+  // Model codes with/without hyphens: e.g. "sk070" -> "sk-070"
+  const codeMatch = clean.match(/^([a-z]+)(\d+.*)$/i);
+  if (codeMatch && !clean.includes("-") && clean.length >= 4) {
+    variants.add(`${codeMatch[1]}-${codeMatch[2]}`);
+  }
+
+  return Array.from(variants);
+}
+
+/**
+ * Checks if a token is a dimension, number, or electrical modifier (e.g. "2.4", "7inch", "5v", "16x2", "0.96")
  */
 export function isModifierToken(token: string): boolean {
-  const clean = token.toLowerCase().trim();
-  // Pure digits: "2", "4", "12", "24"
+  const clean = normalizeTextQuotes(token.toLowerCase().trim());
+  // Pure digits: "2", "4", "7", "12", "24"
   if (/^\d+$/.test(clean)) return true;
   // Decimal or dimensions: "2.4", "0.96", "1.3", "3.5", "16x2", "20x4"
   if (/^\d+\.\d+([a-z"']*)?$/i.test(clean)) return true;
   if (/^\d+x\d+$/i.test(clean)) return true;
-  // Units: "5v", "12v", "3.3v", "10k", "100uf", "16mhz", "2a", "2.4a"
-  if (/^\d+(\.\d+)?[a-z%]+$/i.test(clean)) return true;
+  // Inch variations: "7inch", "7in", "7\"", "7-inch"
+  if (/^\d+(\.\d+)?\s*(inch|inches|"|in|-inch)$/i.test(clean)) return true;
+  // Units: "5v", "12v", "3.3v", "10k", "100uf", "16mhz", "2a", "2.4a", "100r", "10kohm"
+  if (/^\d+(\.\d+)?[a-z%\u03a9\u00b5]+$/i.test(clean)) return true;
   return false;
 }
 
@@ -195,7 +319,7 @@ export function getFuzzySuggestion(
   let hasCorrection = false;
 
   const correctedTokens = rawTokens.map((token) => {
-    // Preserve SKUs like PMS-0012 or modifiers like "2.4"
+    // Preserve SKUs like PMS-0012 or modifiers like "2.4" or "7inch"
     if (/^[A-Za-z]+-\d+$/i.test(token) || isModifierToken(token)) {
       return token;
     }
@@ -230,30 +354,50 @@ export interface ScorableProduct {
   additionalNote?: string | null;
   quantity?: number;
   stockStatus?: string | null;
+  shippingClass?: string | null;
+}
+
+/**
+ * Determines if a product is currently available in stock.
+ */
+export function isProductAvailable(product: {
+  quantity?: number | null;
+  stockStatus?: string | null;
+}): boolean {
+  const qty = typeof product.quantity === "number" ? product.quantity : Number(product.quantity || 0);
+  const isOutOfStock = product.stockStatus === "outofstock";
+  return qty > 0 && !isOutOfStock;
 }
 
 /**
  * Tests if a specific token or dimension matches inside a target text.
- * Special support for dimensions like "2.4" matching "2.4", "2.4\"", "2.4inch", "2.4-inch", "2.4 in".
+ * Normalizes unicode quotes and evaluates all dimension / unit variants.
  */
-function tokenMatchesText(token: string, targetText: string): boolean {
+export function tokenMatchesText(token: string, targetText: string): boolean {
   if (!targetText || !token) return false;
-  const t = token.toLowerCase();
-  const text = targetText.toLowerCase();
+  const t = normalizeTextQuotes(token.toLowerCase().trim());
+  const rawText = targetText.toLowerCase();
+  const text = normalizeTextQuotes(rawText);
 
   // 1. Direct substring
-  if (text.includes(t)) return true;
+  if (rawText.includes(t) || text.includes(t)) return true;
 
-  // 2. Dimension normalization: if token is decimal like "2.4", check for inch notations
-  if (/^\d+\.\d+$/.test(t)) {
-    if (
-      text.includes(`${t}"`) ||
-      text.includes(`${t} inch`) ||
-      text.includes(`${t}inch`) ||
-      text.includes(`${t}-inch`) ||
-      text.includes(`${t}in`) ||
-      text.includes(`${t}'`)
-    ) {
+  // 2. Compact alphanumeric check (e.g. "sk070" matches "sk-070", "e2bm12" matches "e2b-m12ks04")
+  const compactToken = t.replace(/[^a-z0-9]/g, "");
+  const compactText = text.replace(/[^a-z0-9]/g, "");
+  if (compactToken.length >= 3 && compactText.includes(compactToken)) {
+    return true;
+  }
+
+  // 3. Dimension & Unit variants check (e.g. "7inch" matches "7\"", "7.0 inch", "070")
+  const variants = getDimensionVariants(t);
+  for (const v of variants) {
+    const vLower = v.toLowerCase();
+    if (rawText.includes(vLower) || text.includes(vLower)) {
+      return true;
+    }
+    // Word boundary check for 3-digit model codes like "070"
+    if (vLower === "070" && /(?:^|[^0-9])070(?:[^0-9]|$)/.test(text)) {
       return true;
     }
   }
@@ -271,17 +415,17 @@ export function scoreProductRelevance(
   product: ScorableProduct,
   vocabulary?: Iterable<string>
 ): number {
-  const cleanQuery = query.trim().toLowerCase();
+  const cleanQuery = normalizeTextQuotes(query.trim().toLowerCase());
   if (!cleanQuery) return 1;
 
-  const sku = (product.sku || "").trim().toLowerCase();
-  const recordNo = (product.recordNo || "").trim().toLowerCase();
-  const refNo = (product.referenceNo || "").trim().toLowerCase();
-  const name = (product.modelAndName || product.productName || "").trim().toLowerCase();
-  const rawName = (product.productName || "").trim().toLowerCase();
-  const desc = (product.description || "").trim().toLowerCase();
-  const cat = (product.categoryNames || product.category?.name || "").trim().toLowerCase();
-  const notes = `${product.supplierNote || ""} ${product.additionalNote || ""}`.trim().toLowerCase();
+  const sku = normalizeTextQuotes((product.sku || "").trim().toLowerCase());
+  const recordNo = normalizeTextQuotes((product.recordNo || "").trim().toLowerCase());
+  const refNo = normalizeTextQuotes((product.referenceNo || "").trim().toLowerCase());
+  const name = normalizeTextQuotes((product.modelAndName || product.productName || "").trim().toLowerCase());
+  const rawName = normalizeTextQuotes((product.productName || "").trim().toLowerCase());
+  const desc = normalizeTextQuotes((product.description || "").trim().toLowerCase());
+  const cat = normalizeTextQuotes((product.categoryNames || product.category?.name || "").trim().toLowerCase());
+  const notes = normalizeTextQuotes(`${product.supplierNote || ""} ${product.additionalNote || ""}`.trim().toLowerCase());
 
   const fullText = `${sku} ${recordNo} ${refNo} ${name} ${rawName} ${cat} ${desc} ${notes}`;
 
@@ -322,13 +466,17 @@ export function scoreProductRelevance(
     let matchedTokenCount = 0;
     let matchedCoreNounCount = 0;
     let totalCoreNounCount = 0;
+    let matchedModifierCount = 0;
+    let totalModifierCount = 0;
 
     for (let i = 0; i < activeTokens.length; i++) {
       const origToken = activeTokens[i];
       const corrToken = correctedTokens[i];
       const isModifier = isModifierToken(origToken);
 
-      if (!isModifier) {
+      if (isModifier) {
+        totalModifierCount++;
+      } else {
         totalCoreNounCount++;
       }
 
@@ -338,9 +486,9 @@ export function scoreProductRelevance(
       if (tokenMatchesText(origToken, fullText)) {
         tokenMatched = true;
         if (tokenMatchesText(origToken, name)) {
-          score += isModifier ? 35 : 50;
+          score += isModifier ? 40 : 50;
         } else {
-          score += isModifier ? 20 : 30;
+          score += isModifier ? 25 : 30;
         }
       }
       // Typo-corrected token match (e.g. "diplay" -> "display")
@@ -362,16 +510,32 @@ export function scoreProductRelevance(
 
       if (tokenMatched) {
         matchedTokenCount++;
-        if (!isModifier) {
+        if (isModifier) {
+          matchedModifierCount++;
+        } else {
           matchedCoreNounCount++;
         }
       }
     }
 
-    // CRITICAL FILTER:
-    // If the search contains core component nouns (e.g. "display" in "diplay 2.4"),
-    // but the product ONLY matched an unrelated number/modifier (e.g. "2.4" in a 2.4GHz antenna),
-    // DISCARD IT COMPLETELY (score = 0)!
+    // STRICT NON-MATCH FILTER 1:
+    // When multiple core nouns are searched (e.g. "samkoon hmi"), all core nouns must match.
+    // Prevents showing unrelated Samkoon VFDs, motors, or PLC cables when searching for HMIs.
+    if (totalCoreNounCount >= 2 && matchedCoreNounCount < totalCoreNounCount) {
+      return 0;
+    }
+    if (totalCoreNounCount === 1 && matchedCoreNounCount === 0) {
+      return 0;
+    }
+
+    // STRICT NON-MATCH FILTER 2:
+    // If the user specified a dimension/modifier (e.g. "7inch" in "samkoon hmi 7inch"),
+    // the product MUST match that dimension. Do not show 4.3" or 10.2" panels!
+    if (totalModifierCount > 0 && matchedModifierCount === 0) {
+      return 0;
+    }
+
+    // If query has core nouns but matched 0 core nouns, discard
     if (totalCoreNounCount > 0 && matchedCoreNounCount === 0) {
       return 0;
     }
@@ -382,16 +546,12 @@ export function scoreProductRelevance(
     } else if (matchedTokenCount > 0 && matchedTokenCount / activeTokens.length >= 0.5) {
       score += 40;
     } else if (matchedTokenCount === 0 && score === 0) {
-      return 0; // No tokens matched
+      return 0;
     }
   }
 
   // 4. In-Stock Priority Boost (+80 points)
-  // Ensures shop attendants always see currently available stock at the very top of search results!
-  const hasQuantity = typeof product.quantity === "number" && product.quantity > 0;
-  const isStockAvailable = product.stockStatus !== "outofstock" && hasQuantity;
-
-  if (isStockAvailable) {
+  if (isProductAvailable(product)) {
     score += 80;
   }
 

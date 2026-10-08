@@ -8,6 +8,7 @@ import {
   scoreProductRelevance,
   getFuzzySuggestion,
   BASELINE_ELECTRONICS_VOCABULARY,
+  isProductAvailable,
 } from "./fuzzySearch";
 
 const DB_NAME = "PMS_SHOP_OFFLINE_DB";
@@ -558,20 +559,29 @@ export async function searchShopIndexedDb(params: {
 
         // Score candidate items using weighted electronics relevance engine
         // Seamlessly evaluates both raw input and typo-corrected query, taking the best match
-        let scoredItems: { product: ShopOfflineProduct; score: number }[] = [];
+        let scoredItems: { product: ShopOfflineProduct; score: number; isAvailable: boolean }[] = [];
         for (const p of items) {
           const directScore = scoreProductRelevance(search, p, offlineVocab);
           const fuzzyScore = fuzzy.hasCorrection
             ? scoreProductRelevance(fuzzy.correctedQuery, p, offlineVocab)
             : 0;
           const bestScore = Math.max(directScore, fuzzyScore);
+          // Strictly exclude non-matching products (score must be > 0)
           if (bestScore > 0) {
-            scoredItems.push({ product: p, score: bestScore });
+            const isAvail = isProductAvailable(p);
+            scoredItems.push({ product: p, score: bestScore, isAvailable: isAvail });
           }
         }
 
-        // Sort descending: closest/best matches appear first, with in-stock products boosted to top
-        scoredItems.sort((a, b) => b.score - a.score);
+        // Shop User Priority Sorting:
+        // Tier 0: Available products FIRST (quantity > 0 and in stock)
+        // Tier 1: Over the Sea pre-orders & Regular Out-of-Stock EQUAL (sorted descending by score)
+        scoredItems.sort((a, b) => {
+          if (a.isAvailable !== b.isAvailable) {
+            return a.isAvailable ? -1 : 1;
+          }
+          return b.score - a.score;
+        });
         items = scoredItems.map((s) => s.product);
       }
 

@@ -8,6 +8,8 @@ import {
   getFuzzySuggestion,
   scoreProductRelevance,
   isModifierToken,
+  getDimensionVariants,
+  isProductAvailable,
 } from "@/lib/fuzzySearch";
 import { getNextRecordNo, getNextSku, withSequenceLock } from "@/lib/recordNo";
 
@@ -132,21 +134,19 @@ export async function GET(request: NextRequest) {
         ? fuzzyCorrection.correctedTokens
         : search.split(/[\s,+/_\-:]+/).filter(Boolean);
 
-      if (searchTerms.length === 1) {
-        andConditions.push({
-          OR: [
-            { modelAndName: { contains: searchTerms[0] } },
-            { productName: { contains: searchTerms[0] } },
-            { sku: { contains: searchTerms[0] } },
-            { referenceNo: { contains: searchTerms[0] } },
-            { recordNo: { contains: searchTerms[0] } },
-            { description: { contains: searchTerms[0] } },
-            { categoryNames: { contains: searchTerms[0] } },
-          ],
-        });
-      } else {
-        // Multi-word search: all terms must match within product metadata
-        for (const term of searchTerms) {
+      for (const term of searchTerms) {
+        const variants = getDimensionVariants(term);
+        if (variants.length > 1) {
+          andConditions.push({
+            OR: variants.flatMap((v) => [
+              { modelAndName: { contains: v } },
+              { productName: { contains: v } },
+              { sku: { contains: v } },
+              { referenceNo: { contains: v } },
+              { description: { contains: v } },
+            ]),
+          });
+        } else {
           andConditions.push({
             OR: [
               { modelAndName: { contains: term } },
@@ -246,6 +246,12 @@ export async function GET(request: NextRequest) {
       }
 
       if (candidates.length > 0) {
+        const userRole = (session?.user as any)?.role;
+        const isShopUser =
+          userRole === "SHOP" ||
+          searchParams.get("isShop") === "true" ||
+          searchParams.get("role") === "SHOP";
+
         const scored = candidates
           .map((p) => {
             const score = Math.max(
@@ -254,12 +260,26 @@ export async function GET(request: NextRequest) {
                 ? scoreProductRelevance(fuzzyCorrection.correctedQuery, p as any, activeVocab)
                 : 0
             );
-            return { product: p, score };
+            const isAvail = isProductAvailable(p);
+            return { product: p, score, isAvailable: isAvail };
           })
           .filter((s) => s.score > 0);
 
-        // Sort descending: highest relevance score first (in-stock items naturally boosted)
-        scored.sort((a, b) => b.score - a.score);
+        if (isShopUser) {
+          // Shop User Priority Sorting:
+          // Tier 0: Available products FIRST (quantity > 0 and in stock)
+          // Tier 1: Over the Sea pre-orders & Regular Out-of-Stock EQUAL (both sorted descending by score)
+          scored.sort((a, b) => {
+            if (a.isAvailable !== b.isAvailable) {
+              return a.isAvailable ? -1 : 1;
+            }
+            return b.score - a.score;
+          });
+        } else {
+          // General admin/staff search: highest relevance score first (in-stock items naturally boosted)
+          scored.sort((a, b) => b.score - a.score);
+        }
+
         total = scored.length;
         products = scored.slice(skip, skip + limit).map((s) => s.product);
       }
