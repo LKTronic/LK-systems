@@ -55,15 +55,27 @@ export function persistAuthSession(session: any) {
 }
 
 /**
+ * Clears persisted offline auth information from localStorage upon logout
+ */
+export function clearOfflineAuthSession() {
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.removeItem(OFFLINE_ROLE_KEY);
+    localStorage.removeItem(OFFLINE_USER_KEY);
+  } catch (e) {}
+}
+
+/**
  * Returns the effective user role: session role if available, or persisted role from localStorage
  */
 export function getEffectiveRole(session: any): string {
   const sessionRole = (session?.user as any)?.role;
   if (sessionRole) {
     persistAuthSession(session);
-    return sessionRole;
+    return String(sessionRole).trim().toUpperCase();
   }
-  return getPersistedRole();
+  const persisted = getPersistedRole();
+  return String(persisted || "STAFF").trim().toUpperCase();
 }
 
 /**

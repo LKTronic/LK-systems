@@ -15,14 +15,17 @@ import {
   ShieldAlert,
 } from "lucide-react";
 import { ThemeToggle } from "@/components/ThemeToggle";
-import { getEffectiveRole } from "@/lib/offlineAuth";
+import { getEffectiveRole, clearOfflineAuthSession } from "@/lib/offlineAuth";
 
 export function Sidebar() {
   const pathname = usePathname();
   const { data: session } = useSession();
   const role = getEffectiveRole(session);
-  const isAdmin = role === "ADMIN" || role === "SUPERADMIN";
   const isShop = role === "SHOP";
+  const isStaff = role === "STAFF";
+  // User Management is strictly for ADMIN and SUPERADMIN only.
+  // Explicitly hide for SHOP and STAFF users under all circumstances.
+  const isAdmin = !isShop && !isStaff && (role === "ADMIN" || role === "SUPERADMIN");
 
   const navigation = [
     { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
@@ -35,9 +38,9 @@ export function Sidebar() {
       : []),
   ];
 
-  const adminNavigation = [
-    { name: "User Management", href: "/users", icon: Users },
-  ];
+  const adminNavigation = isAdmin
+    ? [{ name: "User Management", href: "/users", icon: Users }]
+    : [];
 
   return (
     <aside className="w-64 bg-slate-900 border-r border-slate-800 flex flex-col h-screen sticky top-0 shrink-0 select-none">
@@ -76,6 +79,14 @@ export function Sidebar() {
                 <Link
                   key={item.name}
                   href={item.href}
+                  onClick={() => {
+                    if (item.href === "/products") {
+                      try {
+                        sessionStorage.removeItem("pms_products_filter_state_v2");
+                        sessionStorage.removeItem("pms_products_filter_state");
+                      } catch (e) {}
+                    }
+                  }}
                   prefetch={true}
                   className={`flex items-center gap-3 px-3.5 py-2.5 rounded-lg text-sm font-medium transition-all ${
                     isActive
@@ -91,7 +102,7 @@ export function Sidebar() {
           </nav>
         </div>
 
-        {isAdmin && (
+        {isAdmin && adminNavigation.length > 0 && (
           <div>
             <div className="px-3 mb-2 text-[11px] font-semibold tracking-wider text-amber-400/90 uppercase flex items-center gap-1.5">
               <ShieldAlert className="w-3.5 h-3.5" />
@@ -152,7 +163,10 @@ export function Sidebar() {
         </div>
 
         <button
-          onClick={() => signOut({ callbackUrl: "/login" })}
+          onClick={() => {
+            clearOfflineAuthSession();
+            signOut({ callbackUrl: "/login" });
+          }}
           className="w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-xs font-semibold text-rose-300 hover:bg-rose-500/10 hover:text-rose-200 border border-rose-500/20 transition-all"
         >
           <LogOut className="w-3.5 h-3.5" />

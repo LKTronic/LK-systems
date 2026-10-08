@@ -59,7 +59,17 @@ export default function UsersPage() {
       const res = await fetch("/api/users");
       if (res.ok) {
         const data = await res.json();
-        setUsers(data);
+        const normalized = (data || []).map((u: UserItem) => {
+          const rawRole = String(u.role || "").trim().toUpperCase();
+          const role =
+            rawRole === "SUPERADMIN" || rawRole === "ADMIN" || rawRole === "SHOP" || rawRole === "STAFF"
+              ? (rawRole as "SUPERADMIN" | "ADMIN" | "STAFF" | "SHOP")
+              : u.username?.toLowerCase().includes("shop") || u.name?.toLowerCase().includes("shop")
+              ? "SHOP"
+              : "STAFF";
+          return { ...u, role };
+        });
+        setUsers(normalized);
       }
     } catch (err) {
       console.error("Failed to load users:", err);
@@ -90,7 +100,14 @@ export default function UsersPage() {
     setFormUsername(user.username);
     setFormPassword(""); // Blank means keep existing password
     setShowPassword(false);
-    setFormRole(user.role);
+    const rawRole = String(user.role || "").trim().toUpperCase();
+    const resolvedRole =
+      rawRole === "SUPERADMIN" || rawRole === "ADMIN" || rawRole === "SHOP" || rawRole === "STAFF"
+        ? (rawRole as "SUPERADMIN" | "ADMIN" | "STAFF" | "SHOP")
+        : user.username?.toLowerCase().includes("shop") || user.name?.toLowerCase().includes("shop")
+        ? "SHOP"
+        : "STAFF";
+    setFormRole(resolvedRole);
     setFormStatus(user.status);
     setModalError(null);
     setIsModalOpen(true);
@@ -302,19 +319,31 @@ export default function UsersPage() {
                       @{user.username}
                     </td>
                     <td className="py-3 px-4">
-                      <span
-                        className={`text-[10px] font-semibold px-2 py-0.5 rounded-full uppercase tracking-wider ${
-                          user.role === "SUPERADMIN"
-                            ? "bg-purple-500/10 text-purple-400 border border-purple-500/20"
-                            : user.role === "ADMIN"
-                            ? "bg-amber-500/10 text-amber-400 border border-amber-500/20"
-                            : user.role === "SHOP"
-                            ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
-                            : "bg-indigo-500/10 text-indigo-400 border border-indigo-500/20"
-                        }`}
-                      >
-                        {user.role}
-                      </span>
+                      {(() => {
+                        const rawRole = String(user.role || "").trim().toUpperCase();
+                        const displayRole =
+                          rawRole === "SUPERADMIN" || rawRole === "ADMIN" || rawRole === "SHOP" || rawRole === "STAFF"
+                            ? rawRole
+                            : user.username?.toLowerCase().includes("shop") || user.name?.toLowerCase().includes("shop")
+                            ? "SHOP"
+                            : "STAFF";
+
+                        return (
+                          <span
+                            className={`text-[10px] font-semibold px-2 py-0.5 rounded-full uppercase tracking-wider ${
+                              displayRole === "SUPERADMIN"
+                                ? "bg-purple-500/10 text-purple-400 border border-purple-500/20"
+                                : displayRole === "ADMIN"
+                                ? "bg-amber-500/10 text-amber-400 border border-amber-500/20"
+                                : displayRole === "SHOP"
+                                ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
+                                : "bg-indigo-500/10 text-indigo-400 border border-indigo-500/20"
+                            }`}
+                          >
+                            {displayRole}
+                          </span>
+                        );
+                      })()}
                     </td>
                     <td className="py-3 px-4 text-center">
                       <span
