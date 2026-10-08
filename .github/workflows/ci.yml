@@ -68,8 +68,8 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
-      - name: Fast-forward Main to Master and Push
+      - name: Sync Main with Master and Push
         run: |
           git checkout main
-          git merge --ff-only origin/master
+          git merge origin/master --no-edit -m "chore: sync main with master [skip ci]" || git reset --hard origin/master
           git push origin main
