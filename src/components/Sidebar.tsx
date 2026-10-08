@@ -76,6 +76,14 @@ export function Sidebar() {
                 <Link
                   key={item.name}
                   href={item.href}
+                  onClick={() => {
+                    if (item.href === "/products") {
+                      try {
+                        sessionStorage.removeItem("pms_products_filter_state_v2");
+                        sessionStorage.removeItem("pms_products_filter_state");
+                      } catch (e) {}
+                    }
+                  }}
                   prefetch={true}
                   className={`flex items-center gap-3 px-3.5 py-2.5 rounded-lg text-sm font-medium transition-all ${
                     isActive
