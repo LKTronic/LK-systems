@@ -73,7 +73,7 @@ export function Header({ title, description }: { title: string; description?: st
     setIsManualSyncing(true);
     try {
       if (isOnline) {
-        await syncShopCatalogToIndexedDb();
+        await syncShopCatalogToIndexedDb(true);
       } else {
         await forceSyncShopImages((done, total) => {
           setImageProgress({ done, total });
@@ -499,8 +499,8 @@ export function Header({ title, description }: { title: string; description?: st
                   </>
                 ) : (
                   <>
-                    <Sparkles className="w-3.5 h-3.5" />
-                    <span>Download All Images</span>
+                    <RefreshCw className="w-3.5 h-3.5" />
+                    <span>{isOnline ? "Force Resync Catalog & Images" : "Sync Images Offline"}</span>
                   </>
                 )}
               </button>

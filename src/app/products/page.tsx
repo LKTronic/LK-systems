@@ -551,6 +551,19 @@ export default function ProductsPage() {
     }
   }, [isShop, isAdmin]);
 
+  // Refresh products table when a background or manual sync completes
+  useEffect(() => {
+    const handleSyncStatus = (e: any) => {
+      if (e.detail?.status === "synced" && isShop && isReady) {
+        fetchProducts();
+      }
+    };
+    window.addEventListener("pms_shop_offline_status", handleSyncStatus);
+    return () => {
+      window.removeEventListener("pms_shop_offline_status", handleSyncStatus);
+    };
+  }, [isShop, isReady]);
+
   // Persist filter state to sessionStorage and URL query params
   useEffect(() => {
     if (!isReady) return;
