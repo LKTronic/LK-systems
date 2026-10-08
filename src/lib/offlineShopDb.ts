@@ -9,6 +9,7 @@ import {
   getFuzzySuggestion,
   BASELINE_ELECTRONICS_VOCABULARY,
   isProductAvailable,
+  getShopProductPriorityRank,
 } from "./fuzzySearch";
 
 const DB_NAME = "PMS_SHOP_OFFLINE_DB";
@@ -574,15 +575,28 @@ export async function searchShopIndexedDb(params: {
         }
 
         // Shop User Priority Sorting:
-        // Tier 0: Available products FIRST (quantity > 0 and in stock)
-        // Tier 1: Over the Sea pre-orders & Regular Out-of-Stock EQUAL (sorted descending by score)
+        // Rank 0: In-Stock AND Price Available FIRST
+        // Rank 1: In-Stock, but Price Not Available
+        // Rank 2: Over the Sea & Regular Out-of-Stock (Equal priority)
         scoredItems.sort((a, b) => {
-          if (a.isAvailable !== b.isAvailable) {
-            return a.isAvailable ? -1 : 1;
+          const rankA = getShopProductPriorityRank(a.product);
+          const rankB = getShopProductPriorityRank(b.product);
+          if (rankA !== rankB) {
+            return rankA - rankB;
           }
           return b.score - a.score;
         });
         items = scoredItems.map((s) => s.product);
+      } else {
+        // When browsing without a search query, show Available and Price Available products at the top
+        items.sort((a, b) => {
+          const rankA = getShopProductPriorityRank(a);
+          const rankB = getShopProductPriorityRank(b);
+          if (rankA !== rankB) {
+            return rankA - rankB;
+          }
+          return (b.id || 0) - (a.id || 0);
+        });
       }
 
       const total = items.length;

@@ -471,19 +471,74 @@ export interface ScorableProduct {
   additionalNote?: string | null;
   quantity?: number;
   stockStatus?: string | null;
-  shippingClass?: string | null;
+  price?: number | null;
+  priceLKR?: number | null;
+  status?: string | null;
 }
 
 /**
  * Determines if a product is currently available in stock.
  */
 export function isProductAvailable(product: {
-  quantity?: number | null;
+  quantity?: number | any | null;
   stockStatus?: string | null;
 }): boolean {
   const qty = typeof product.quantity === "number" ? product.quantity : Number(product.quantity || 0);
   const isOutOfStock = product.stockStatus === "outofstock";
   return qty > 0 && !isOutOfStock;
+}
+
+/**
+ * Determines if a product has a valid, active selling price.
+ */
+export function isProductPriceAvailable(product: {
+  price?: number | any | null;
+  priceLKR?: number | any | null;
+  status?: string | null;
+}): boolean {
+  const numPrice = Number(product.priceLKR ?? product.price ?? 0);
+  const isPna = product.status === "PRICE_NOT_AVAILABLE";
+  return numPrice > 0 && !isPna;
+}
+
+/**
+ * Determines if a product is ready to sell in shop:
+ * Both available in physical stock AND has a valid selling price.
+ */
+export function isProductAvailableAndPriced(product: {
+  quantity?: number | any | null;
+  stockStatus?: string | null;
+  price?: number | any | null;
+  priceLKR?: number | any | null;
+  status?: string | null;
+}): boolean {
+  return isProductAvailable(product) && isProductPriceAvailable(product);
+}
+
+/**
+ * Priority rank for shop users:
+ * 0: Both Stock Available AND Price Available (Ready to sell immediately) -> HIGHEST PRIORITY
+ * 1: Stock Available, but Price Not Available (In stock, but needs pricing)
+ * 2: Over the Sea & Regular Out-of-Stock (Equal priority for backorders/pre-orders)
+ */
+export function getShopProductPriorityRank(product: {
+  quantity?: number | any | null;
+  stockStatus?: string | null;
+  price?: number | any | null;
+  priceLKR?: number | any | null;
+  status?: string | null;
+}): number {
+  const stockAvail = isProductAvailable(product);
+  const priceAvail = isProductPriceAvailable(product);
+
+  // Top Priority: In-Stock AND Price Available
+  if (stockAvail && priceAvail) return 0;
+
+  // Second Priority: In-Stock, but Price is missing/not available
+  if (stockAvail && !priceAvail) return 1;
+
+  // Third Priority: Over the Sea and Out of Stock (equal priority)
+  return 2;
 }
 
 /**
@@ -613,8 +668,10 @@ export function scoreProductRelevance(
         }
       }
 
-      if (isProductAvailable(product)) {
-        score += 80;
+      if (isProductAvailableAndPriced(product)) {
+        score += 120;
+      } else if (isProductAvailable(product)) {
+        score += 60;
       }
       return score;
     } else {
@@ -727,9 +784,11 @@ export function scoreProductRelevance(
     }
   }
 
-  // 5. In-Stock Priority Boost (+80 points)
-  if (isProductAvailable(product)) {
-    score += 80;
+  // 5. In-Stock & Price Availability Priority Boost
+  if (isProductAvailableAndPriced(product)) {
+    score += 120;
+  } else if (isProductAvailable(product)) {
+    score += 60;
   }
 
   return score;

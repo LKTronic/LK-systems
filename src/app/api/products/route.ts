@@ -12,6 +12,7 @@ import {
   isProductAvailable,
   isStopWord,
   parseConverterIntent,
+  getShopProductPriorityRank,
 } from "@/lib/fuzzySearch";
 import { getNextRecordNo, getNextSku, withSequenceLock } from "@/lib/recordNo";
 
@@ -292,11 +293,14 @@ export async function GET(request: NextRequest) {
 
         if (isShopUser) {
           // Shop User Priority Sorting:
-          // Tier 0: Available products FIRST (quantity > 0 and in stock)
-          // Tier 1: Over the Sea pre-orders & Regular Out-of-Stock EQUAL (both sorted descending by score)
+          // Rank 0: In-Stock AND Price Available FIRST
+          // Rank 1: In-Stock, but Price Not Available
+          // Rank 2: Over the Sea & Regular Out-of-Stock (Equal priority)
           scored.sort((a, b) => {
-            if (a.isAvailable !== b.isAvailable) {
-              return a.isAvailable ? -1 : 1;
+            const rankA = getShopProductPriorityRank(a.product);
+            const rankB = getShopProductPriorityRank(b.product);
+            if (rankA !== rankB) {
+              return rankA - rankB;
             }
             return b.score - a.score;
           });
@@ -309,12 +313,24 @@ export async function GET(request: NextRequest) {
         products = scored.slice(skip, skip + limit).map((s) => s.product);
       }
     } else {
+      const userRole = (session?.user as any)?.role;
+      const isShopUser =
+        userRole === "SHOP" ||
+        searchParams.get("isShop") === "true" ||
+        searchParams.get("role") === "SHOP";
+
       [products, total] = await Promise.all([
         prisma.product.findMany({
           where,
           skip,
           take: limit,
-          orderBy: { id: "desc" },
+          orderBy: isShopUser
+            ? [
+                { quantity: "desc" },
+                { priceLKR: "desc" },
+                { id: "desc" },
+              ]
+            : { id: "desc" },
           include: includeRelations,
         }),
         prisma.product.count({ where }),
