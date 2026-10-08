@@ -26,7 +26,7 @@ import {
   ShopCacheDetailedStatus,
 } from "@/lib/offlineShopDb";
 import { formatDateDMY } from "@/lib/formatters";
-import { getEffectiveRole, cacheCurrentPageAssets } from "@/lib/offlineAuth";
+import { getEffectiveRole, cacheCurrentPageAssets, clearOfflineAuthSession } from "@/lib/offlineAuth";
 
 export function Header({ title, description }: { title: string; description?: string }) {
   const { data: session } = useSession();
@@ -298,7 +298,10 @@ export function Header({ title, description }: { title: string; description?: st
 
           {isShop && (
             <button
-              onClick={() => signOut({ callbackUrl: "/login" })}
+              onClick={() => {
+                clearOfflineAuthSession();
+                signOut({ callbackUrl: "/login" });
+              }}
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-rose-300 hover:bg-rose-500/15 hover:text-rose-200 border border-rose-500/25 transition-all cursor-pointer"
               title="Sign Out"
             >
