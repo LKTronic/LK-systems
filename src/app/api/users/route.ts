@@ -23,13 +23,24 @@ export async function GET() {
       );
     }
 
+    // Self-healing migration: Ensure MySQL User table schema supports 'SHOP' enum and fix any empty roles
+    try {
+      await prisma.$executeRawUnsafe(
+        "ALTER TABLE User MODIFY COLUMN role ENUM('SUPERADMIN', 'ADMIN', 'STAFF', 'SHOP') NOT NULL DEFAULT 'STAFF'"
+      );
+      await prisma.$executeRawUnsafe(
+        "UPDATE User SET role = 'SHOP' WHERE (role = '' OR role IS NULL) AND (LOWER(username) LIKE '%shop%' OR LOWER(name) LIKE '%shop%')"
+      );
+    } catch {}
+
+    let usersList: any[] = [];
     try {
       const where: any = {};
       if (currentUserRole !== "SUPERADMIN") {
         where.role = { not: "SUPERADMIN" };
       }
 
-      const users = await prisma.user.findMany({
+      usersList = await prisma.user.findMany({
         where,
         select: {
           id: true,
@@ -42,16 +53,30 @@ export async function GET() {
         },
         orderBy: { createdAt: "desc" },
       });
-
-      return NextResponse.json(users);
     } catch (prismaErr) {
       const rawUsers = await prisma.$queryRawUnsafe<any[]>(
         `SELECT id, name, username, role, status, createdAt, updatedAt FROM User ${
           currentUserRole !== "SUPERADMIN" ? "WHERE role != 'SUPERADMIN'" : ""
         } ORDER BY createdAt DESC`
       );
-      return NextResponse.json(rawUsers);
+      usersList = rawUsers;
     }
+
+    const sanitizedUsers = (usersList || []).map((u: any) => {
+      const rawRole = String(u.role || "").trim().toUpperCase();
+      const role =
+        rawRole === "SUPERADMIN" || rawRole === "ADMIN" || rawRole === "SHOP" || rawRole === "STAFF"
+          ? rawRole
+          : u.username?.toLowerCase().includes("shop") || u.name?.toLowerCase().includes("shop")
+          ? "SHOP"
+          : "STAFF";
+      return {
+        ...u,
+        role,
+      };
+    });
+
+    return NextResponse.json(sanitizedUsers);
   } catch (error: any) {
     console.error("Error fetching users:", error);
     return NextResponse.json(
@@ -136,6 +161,12 @@ export async function POST(request: NextRequest) {
 
       return NextResponse.json(newUser, { status: 201 });
     } catch (createErr) {
+      try {
+        await prisma.$executeRawUnsafe(
+          "ALTER TABLE User MODIFY COLUMN role ENUM('SUPERADMIN', 'ADMIN', 'STAFF', 'SHOP') NOT NULL DEFAULT 'STAFF'"
+        );
+      } catch {}
+
       await prisma.$executeRawUnsafe(
         `INSERT INTO User (name, username, passwordHash, role, status, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, NOW(3), NOW(3))`,
         name,
@@ -148,7 +179,11 @@ export async function POST(request: NextRequest) {
         `SELECT id, name, username, role, status, createdAt FROM User WHERE username = ? LIMIT 1`,
         username
       );
-      return NextResponse.json(created[0] || { name, username, role, status }, { status: 201 });
+      const resItem = created[0] || { name, username, role, status };
+      if (!resItem.role || resItem.role === "") {
+        resItem.role = role;
+      }
+      return NextResponse.json(resItem, { status: 201 });
     }
   } catch (error: any) {
     console.error("Error creating user:", error);

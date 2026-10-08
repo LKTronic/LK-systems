@@ -154,6 +154,12 @@ export async function PUT(
 
       return NextResponse.json(updated);
     } catch (updateErr) {
+      try {
+        await prisma.$executeRawUnsafe(
+          "ALTER TABLE User MODIFY COLUMN role ENUM('SUPERADMIN', 'ADMIN', 'STAFF', 'SHOP') NOT NULL DEFAULT 'STAFF'"
+        );
+      } catch {}
+
       const fields: string[] = [];
       const values: any[] = [];
       if (updateData.name) {
@@ -189,7 +195,11 @@ export async function PUT(
         `SELECT id, name, username, role, status, updatedAt FROM User WHERE id = ? LIMIT 1`,
         id
       );
-      return NextResponse.json(updatedRows[0] || existingUser);
+      const resUser = updatedRows[0] || existingUser;
+      if (!resUser.role || resUser.role === "") {
+        resUser.role = updateData.role || existingUser.role || "SHOP";
+      }
+      return NextResponse.json(resUser);
     }
   } catch (error: any) {
     console.error("Error updating user:", error);

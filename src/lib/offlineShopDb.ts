@@ -503,7 +503,7 @@ export async function searchShopIndexedDb(params: {
 
       const search = (params.search || "").trim().toLowerCase();
       const status = params.status || "ALL";
-      const source = params.source || "ONLINE_WEB";
+      const source = params.source || "ALL";
       const categoryId = params.categoryId || "ALL";
       const page = Math.max(1, params.page || 1);
       const limit = Math.max(1, params.limit || 25);

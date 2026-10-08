@@ -99,7 +99,7 @@ export default function ProductsPage() {
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [didYouMean, setDidYouMean] = useState<string | null>(null);
   const [status, setStatus] = useState("ALL");
-  const [sourceFilter, setSourceFilter] = useState("ONLINE_WEB"); // ONLINE_WEB (default), ALL, PMS
+  const [sourceFilter, setSourceFilter] = useState("ALL"); // ALL (default: PMS + Web), ONLINE_WEB, PMS
   const [categoryId, setCategoryId] = useState("ALL");
   const [addedBy, setAddedBy] = useState("ALL");
   const [users, setUsers] = useState<{ id: number; name: string; username: string }[]>([]);
@@ -496,7 +496,7 @@ export default function ProductsPage() {
       if (hasUrlParams) {
         const p = parseInt(urlParams.get("page") || "1", 10) || 1;
         const st = urlParams.get("status") || "ALL";
-        const sf = urlParams.get("source") || "ONLINE_WEB";
+        const sf = urlParams.get("source") || "ALL";
         const cat = urlParams.get("categoryId") || "ALL";
         const ab = urlParams.get("createdBy") || "ALL";
         const q = urlParams.get("search") || "";
@@ -511,7 +511,7 @@ export default function ProductsPage() {
           setDebouncedSearch(q);
         }
       } else {
-        const saved = sessionStorage.getItem("pms_products_filter_state");
+        const saved = sessionStorage.getItem("pms_products_filter_state_v2");
         if (saved) {
           const parsed = JSON.parse(saved);
           if (parsed.page && parsed.page !== 1) setPage(parsed.page);
@@ -558,7 +558,7 @@ export default function ProductsPage() {
         addedBy,
         search: debouncedSearch,
       };
-      sessionStorage.setItem("pms_products_filter_state", JSON.stringify(stateToSave));
+      sessionStorage.setItem("pms_products_filter_state_v2", JSON.stringify(stateToSave));
 
       const params = new URLSearchParams();
       if (page > 1) params.set("page", page.toString());
@@ -976,7 +976,7 @@ export default function ProductsPage() {
               </div>
             )}
 
-            {/* Source Filter: ONLINE_WEB (Default), ALL, PMS */}
+            {/* Source Filter: ALL (Default), ONLINE_WEB, PMS */}
             <div className="w-48">
               <select
                 value={sourceFilter}
@@ -986,8 +986,8 @@ export default function ProductsPage() {
                 }}
                 className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-200 focus:border-indigo-500 outline-none"
               >
-                <option value="ONLINE_WEB">🌐 Online Web</option>
                 <option value="ALL">All Sources (PMS + Web)</option>
+                <option value="ONLINE_WEB">🌐 Online Web</option>
                 <option value="PMS">PMS Products Only</option>
               </select>
             </div>
@@ -1057,6 +1057,7 @@ export default function ProductsPage() {
               type="button"
               onClick={() => {
                 try {
+                  sessionStorage.removeItem("pms_products_filter_state_v2");
                   sessionStorage.removeItem("pms_products_filter_state");
                   sessionStorage.removeItem("pms_products_scroll_pos");
                   sessionStorage.removeItem("pms_last_viewed_product_id");
@@ -1065,7 +1066,7 @@ export default function ProductsPage() {
                 setSearch("");
                 setDebouncedSearch("");
                 setStatus("ALL");
-                setSourceFilter("ONLINE_WEB");
+                setSourceFilter("ALL");
                 setCategoryId("ALL");
                 setAddedBy("ALL");
                 setPage(1);
