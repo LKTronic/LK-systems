@@ -130,12 +130,116 @@ export function normalizeTextQuotes(str: string): string {
 }
 
 /**
- * Expands a token into common electronic unit and dimension equivalents.
+ * Common English relational connectors in electronics search queries that should not be treated as literal keywords
+ */
+export const STOP_WORDS = new Set(["to", "for", "with", "and", "in", "of", "a", "an", "the"]);
+
+export function isStopWord(token: string): boolean {
+  return STOP_WORDS.has(token.toLowerCase().trim());
+}
+
+/**
+ * Curated Electronics Domain Semantic Synonym Map
+ * Maps industry concepts, IC codes, and voltage equivalents bidirectionally
+ */
+export const ELECTRONICS_SEMANTIC_SYNONYMS: Record<string, string[]> = {
+  // AC Mains / Power Supply equivalents (220V, 230V, 240V, AC-DC are interchangeable in power supply context)
+  "220v": ["220v", "230v", "240v", "220vac", "230vac", "240vac", "ac-dc", "ac/dc", "ac dc", "smps"],
+  "230v": ["220v", "230v", "240v", "220vac", "230vac", "240vac", "ac-dc", "ac/dc", "ac dc", "smps"],
+  "240v": ["220v", "230v", "240v", "220vac", "230vac", "240vac", "ac-dc", "ac/dc", "ac dc", "smps"],
+  "110v": ["110v", "110vac", "ac-dc", "ac/dc", "ac dc", "smps"],
+  "ac-dc": ["220v", "230v", "240v", "220vac", "230vac", "ac-dc", "ac/dc", "ac dc", "smps", "power supply"],
+  "ac/dc": ["220v", "230v", "240v", "220vac", "230vac", "ac-dc", "ac/dc", "ac dc", "smps", "power supply"],
+  "smps": ["power supply", "smps", "adapter", "ac-dc", "ac/dc"],
+  "psu": ["power supply", "smps"],
+
+  // Converter Architectures (Step-Down / Buck, Step-Up / Boost)
+  "buck": ["step-down", "step down", "buck", "dc-dc", "regulator"],
+  "step-down": ["buck", "step-down", "step down", "dc-dc", "regulator"],
+  "stepdown": ["buck", "step-down", "step down", "dc-dc", "regulator"],
+  "boost": ["step-up", "step up", "boost", "dc-dc", "stepup"],
+  "step-up": ["boost", "step-up", "step up", "dc-dc", "stepup"],
+  "stepup": ["boost", "step-up", "step up", "dc-dc", "stepup"],
+
+  // Communication, Serial & Programmers (Customers search function "ttl", products use IC chip name)
+  "ttl": ["uart", "serial", "ch340", "cp2102", "ft232", "pl2303"],
+  "uart": ["ttl", "serial", "ch340", "cp2102", "ft232", "pl2303"],
+  "serial": ["uart", "ttl", "rs232", "rs485"],
+  "rs485": ["modbus", "max485", "rs-485", "rtu"],
+  "rs232": ["max3232", "db9", "serial"],
+  "modbus": ["rs485", "rtu", "tcp", "modbus"],
+
+  // Microcontroller & IoT Aliases
+  "nodemcu": ["esp8266", "nodemcu", "d1 mini", "wemos"],
+  "esp8266": ["nodemcu", "esp8266", "d1 mini", "wemos", "esp-12"],
+  "esp32": ["esp32", "wroom", "devkit", "esp-wroom-32", "esp-wroom"],
+  "bluepill": ["stm32", "stm32f103", "stm32f103c8t6", "blue pill"],
+  "stm32": ["blue pill", "bluepill", "stm32f103", "stm32f401", "stm32f411"],
+
+  // Displays & Touch
+  "hmi": ["touch screen", "touch panel", "samkoon", "nextion", "hmi"],
+  "oled": ["ssd1306", "sh1106", "i2c display", "0.96", "1.3"],
+  "16x2": ["1602", "16x2", "hd44780"],
+  "1602": ["1602", "16x2", "hd44780"],
+  "20x4": ["2004", "20x4"],
+  "2004": ["2004", "20x4"],
+};
+
+export interface ConverterIntent {
+  isConverterQuery: boolean;
+  inputVoltage?: string;
+  outputVoltage?: string;
+  inputVariants: string[];
+  outputVariants: string[];
+}
+
+/**
+ * Parses queries like "220V to 5V", "230V to 5V", "24V to 12V", "12V to 5V step down"
+ */
+export function parseConverterIntent(query: string): ConverterIntent {
+  const clean = normalizeTextQuotes(query.trim().toLowerCase());
+  const match = clean.match(/(\d+(?:\.\d+)?\s*(?:v|vac|vdc|volt|volts)?)\s+(?:to|->|-)\s+(\d+(?:\.\d+)?\s*(?:v|vac|vdc|volt|volts)?)/i);
+  if (!match) {
+    return { isConverterQuery: false, inputVariants: [], outputVariants: [] };
+  }
+
+  let inVolt = match[1].trim();
+  let outVolt = match[2].trim();
+
+  if (/^\d+(\.\d+)?$/.test(inVolt)) inVolt += "v";
+  if (/^\d+(\.\d+)?$/.test(outVolt)) outVolt += "v";
+
+  const inputVariants = getDimensionVariants(inVolt);
+  const outputVariants = getDimensionVariants(outVolt);
+
+  // If input is AC mains (220v, 230v, 240v, 110v), expand to AC-DC power supply concepts
+  if (/^(220|230|240|110)v$/i.test(inVolt)) {
+    inputVariants.push("ac-dc", "ac/dc", "ac dc", "smps", "power supply", "hi-link", "hlk");
+  }
+
+  return {
+    isConverterQuery: true,
+    inputVoltage: inVolt,
+    outputVoltage: outVolt,
+    inputVariants: Array.from(new Set(inputVariants)),
+    outputVariants: Array.from(new Set(outputVariants)),
+  };
+}
+
+/**
+ * Expands a token into common electronic unit, dimension, and semantic equivalents.
  * Example: "7inch" -> ["7inch", "7\"", "7 inch", "7-inch", "7.0\"", "7.0 inch", "070", "7in"]
+ * Example: "220v" -> ["220v", "230v", "240v", "ac-dc", "ac/dc", "220vac", ...]
  */
 export function getDimensionVariants(token: string): string[] {
   const clean = normalizeTextQuotes(token.toLowerCase().trim());
   const variants = new Set<string>([clean]);
+
+  // Check electronics semantic synonyms
+  const syns = ELECTRONICS_SEMANTIC_SYNONYMS[clean];
+  if (syns) {
+    syns.forEach((s) => variants.add(s));
+  }
 
   // Match inch patterns: "7inch", "7\"", "7-inch", "7in", "2.4inch", "0.96inch", "2.4\""
   const inchMatch = clean.match(/^(\d+(\.\d+)?)\s*(inch|inches|"|in|-inch)?$/i);
@@ -218,14 +322,27 @@ export function getDimensionVariants(token: string): string[] {
     }
   }
 
-  // Match voltage: "5v", "12v", "24v", "3.3v"
-  const voltMatch = clean.match(/^(\d+(\.\d+)?)\s*(v|volt|volts)$/i);
+  // Match voltage: "5v", "12v", "24v", "3.3v", "220v", "230v"
+  const voltMatch = clean.match(/^(\d+(\.\d+)?)\s*(v|vac|vdc|volt|volts)$/i);
   if (voltMatch) {
     const val = voltMatch[1];
     variants.add(`${val}v`);
     variants.add(`${val} v`);
     variants.add(`${val}volt`);
     variants.add(`${val} volt`);
+    variants.add(`${val}vac`);
+    variants.add(`${val}vdc`);
+    // AC mains cross-mapping
+    if (val === "220" || val === "230" || val === "240") {
+      variants.add("220v");
+      variants.add("230v");
+      variants.add("240v");
+      variants.add("220vac");
+      variants.add("230vac");
+      variants.add("ac-dc");
+      variants.add("ac/dc");
+      variants.add("ac dc");
+    }
   }
 
   // Model codes with/without hyphens: e.g. "sk070" -> "sk-070"
@@ -456,11 +573,71 @@ export function scoreProductRelevance(
     score += 70;
   }
 
-  // 3. Multi-token breakdown & Deep Typo Matching
+  // 3. Converter Intent Recognition (e.g. "220V to 5V", "230V to 5V", "24V to 12V", "12V to 5V step down")
+  const converter = parseConverterIntent(cleanQuery);
+  if (converter.isConverterQuery) {
+    const inputMatches = converter.inputVariants.some((v) => tokenMatchesText(v, fullText));
+    const outputMatches = converter.outputVariants.some((v) => tokenMatchesText(v, fullText));
+
+    // Both input conversion and output voltage must match
+    if (inputMatches && outputMatches) {
+      score += 350;
+      if (converter.outputVariants.some((v) => tokenMatchesText(v, name))) {
+        score += 80;
+      }
+      if (converter.inputVariants.some((v) => tokenMatchesText(v, name))) {
+        score += 60;
+      }
+      // Check for conversion intent keywords like "step down", "buck", "power supply", "hlk"
+      if (/step[- ]down|buck|power supply|converter|smps/i.test(fullText)) {
+        score += 40;
+      }
+      if (/step[- ]down|buck|power supply|converter|smps/i.test(name)) {
+        score += 80;
+      }
+
+      // If query explicitly asked for step down / buck, enforce architecture match
+      if (/step[- ]down|buck/i.test(cleanQuery)) {
+        if (/step[- ]down|buck/i.test(name)) {
+          score += 150;
+        } else if (!/step[- ]down|buck/i.test(fullText)) {
+          return 0;
+        }
+      }
+      // If query explicitly asked for step up / boost, enforce architecture match
+      if (/step[- ]up|boost/i.test(cleanQuery)) {
+        if (/step[- ]up|boost/i.test(name)) {
+          score += 150;
+        } else if (!/step[- ]up|boost/i.test(fullText)) {
+          return 0;
+        }
+      }
+
+      if (isProductAvailable(product)) {
+        score += 80;
+      }
+      return score;
+    } else {
+      // If user typed a specific converter query like "220V to 5V", do not match products missing either voltage
+      return 0;
+    }
+  }
+
+  // 4. Multi-token breakdown & Deep Typo Matching (Stop-words like "to", "for" filtered out)
   const vocab = vocabulary || BASELINE_ELECTRONICS_VOCABULARY;
   const fuzzy = getFuzzySuggestion(cleanQuery, vocab);
-  const activeTokens = fuzzy.tokens;
-  const correctedTokens = fuzzy.correctedTokens;
+  const rawTokens = fuzzy.tokens;
+  const rawCorrected = fuzzy.correctedTokens;
+
+  // Filter out stop words so connectors like "to" do not penalize searches
+  const activeTokens: string[] = [];
+  const correctedTokens: string[] = [];
+  for (let i = 0; i < rawTokens.length; i++) {
+    if (!isStopWord(rawTokens[i])) {
+      activeTokens.push(rawTokens[i]);
+      correctedTokens.push(rawCorrected[i]);
+    }
+  }
 
   if (activeTokens.length > 0) {
     let matchedTokenCount = 0;
@@ -482,7 +659,7 @@ export function scoreProductRelevance(
 
       let tokenMatched = false;
 
-      // Exact or dimension match on original token
+      // Exact, semantic synonym, or dimension match on original token
       if (tokenMatchesText(origToken, fullText)) {
         tokenMatched = true;
         if (tokenMatchesText(origToken, name)) {
@@ -550,7 +727,7 @@ export function scoreProductRelevance(
     }
   }
 
-  // 4. In-Stock Priority Boost (+80 points)
+  // 5. In-Stock Priority Boost (+80 points)
   if (isProductAvailable(product)) {
     score += 80;
   }

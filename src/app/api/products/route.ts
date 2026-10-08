@@ -10,6 +10,8 @@ import {
   isModifierToken,
   getDimensionVariants,
   isProductAvailable,
+  isStopWord,
+  parseConverterIntent,
 } from "@/lib/fuzzySearch";
 import { getNextRecordNo, getNextSku, withSequenceLock } from "@/lib/recordNo";
 
@@ -129,35 +131,58 @@ export async function GET(request: NextRequest) {
         didYouMean = fuzzyCorrection.correctedQuery;
       }
 
-      // If typo correction detected (e.g. "diplay" -> "display"), use corrected tokens for SQL query
-      const searchTerms = fuzzyCorrection.hasCorrection
-        ? fuzzyCorrection.correctedTokens
-        : search.split(/[\s,+/_\-:]+/).filter(Boolean);
+      const converter = parseConverterIntent(search);
+      if (converter.isConverterQuery) {
+        // Converter Query (e.g. "220V to 5V", "24V to 12V", "12V to 5V step down"):
+        // Condition 1: Input conversion variants (220v, 230v, ac-dc, smps, etc.)
+        andConditions.push({
+          OR: converter.inputVariants.flatMap((v) => [
+            { modelAndName: { contains: v } },
+            { productName: { contains: v } },
+            { description: { contains: v } },
+          ]),
+        });
+        // Condition 2: Output voltage variants (5v, 5vdc, etc.)
+        andConditions.push({
+          OR: converter.outputVariants.flatMap((v) => [
+            { modelAndName: { contains: v } },
+            { productName: { contains: v } },
+            { description: { contains: v } },
+          ]),
+        });
+      } else {
+        // Multi-word search: filter stop-words like "to", "for"
+        const rawTerms = fuzzyCorrection.hasCorrection
+          ? fuzzyCorrection.correctedTokens
+          : search.split(/[\s,+/_\-:]+/).filter(Boolean);
+        const searchTerms = rawTerms.filter((t) => !isStopWord(t));
 
-      for (const term of searchTerms) {
-        const variants = getDimensionVariants(term);
-        if (variants.length > 1) {
-          andConditions.push({
-            OR: variants.flatMap((v) => [
-              { modelAndName: { contains: v } },
-              { productName: { contains: v } },
-              { sku: { contains: v } },
-              { referenceNo: { contains: v } },
-              { description: { contains: v } },
-            ]),
-          });
-        } else {
-          andConditions.push({
-            OR: [
-              { modelAndName: { contains: term } },
-              { productName: { contains: term } },
-              { sku: { contains: term } },
-              { referenceNo: { contains: term } },
-              { recordNo: { contains: term } },
-              { description: { contains: term } },
-              { categoryNames: { contains: term } },
-            ],
-          });
+        for (const term of searchTerms) {
+          const variants = getDimensionVariants(term);
+          if (variants.length > 1) {
+            andConditions.push({
+              OR: variants.flatMap((v) => [
+                { modelAndName: { contains: v } },
+                { productName: { contains: v } },
+                { sku: { contains: v } },
+                { referenceNo: { contains: v } },
+                { description: { contains: v } },
+                { categoryNames: { contains: v } },
+              ]),
+            });
+          } else {
+            andConditions.push({
+              OR: [
+                { modelAndName: { contains: term } },
+                { productName: { contains: term } },
+                { sku: { contains: term } },
+                { referenceNo: { contains: term } },
+                { recordNo: { contains: term } },
+                { description: { contains: term } },
+                { categoryNames: { contains: term } },
+              ],
+            });
+          }
         }
       }
     }
