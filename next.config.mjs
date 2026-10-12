@@ -29,6 +29,7 @@ const nextConfig = {
   ],
   poweredByHeader: false, // SEC-05 Remediation: Suppress X-Powered-By fingerprint
   async headers() {
+    return [
       {
         source: "/login",
         headers: [
