@@ -3,12 +3,12 @@ const isDev = process.env.NODE_ENV !== "production";
 
 // SEC-06 Remediation: Restrict connect-src strictly to 'self' and https in production
 const connectSrc = isDev
-  ? "connect-src 'self' ws: wss: http: https:;"
-  : "connect-src 'self' https:;";
+  ? "connect-src 'self' ws: wss: http: https: https://cloudflareinsights.com;"
+  : "connect-src 'self' https: https://cloudflareinsights.com;";
 
 const cspHeader = `
   default-src 'self';
-  script-src 'self' 'unsafe-inline' 'unsafe-eval';
+  script-src 'self' 'unsafe-inline' 'unsafe-eval' https://static.cloudflareinsights.com;
   style-src 'self' 'unsafe-inline';
   img-src 'self' data: blob: https: http:;
   font-src 'self' data:;

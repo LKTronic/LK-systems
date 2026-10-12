@@ -127,13 +127,29 @@ export default function LoginPage() {
         } catch (e) {}
 
         const params = typeof window !== "undefined" ? new URLSearchParams(window.location.search) : null;
-        const target = getSafeRedirectTarget(params?.get("callbackUrl"), role);
+        const target = getSafeRedirectTarget(res?.url || params?.get("callbackUrl"), role);
         window.location.href = target;
         setTimeout(() => {
           window.location.assign(target);
         }, 2000);
       }
     } catch (err: any) {
+      console.warn("Sign in caught exception:", err);
+      // If error message includes "Failed to construct 'URL'", do fallback redirect check
+      if (err?.message?.includes("Failed to construct 'URL'")) {
+        try {
+          const sessionRes = await fetch("/api/auth/session");
+          if (sessionRes.ok) {
+            const sess = await sessionRes.json();
+            if (sess?.user) {
+              persistAuthSession(sess);
+              const target = getSafeRedirectTarget(null, sess.user.role);
+              window.location.href = target;
+              return;
+            }
+          }
+        } catch (e) {}
+      }
       setError(err?.message || "An unexpected error occurred. Please try again.");
       setIsLoading(false);
     }

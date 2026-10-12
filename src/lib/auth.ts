@@ -11,8 +11,8 @@ const SEVEN_DAYS_IN_SECONDS = 7 * 24 * 60 * 60;
 if (!process.env.NEXTAUTH_URL && typeof window === "undefined") {
   if (process.env.VERCEL_URL) {
     process.env.NEXTAUTH_URL = `https://${process.env.VERCEL_URL}`;
-  } else if (process.env.NODE_ENV === "production" && process.env.SYSTEM_URL) {
-    process.env.NEXTAUTH_URL = process.env.SYSTEM_URL;
+  } else if (process.env.NODE_ENV === "production") {
+    process.env.NEXTAUTH_URL = "https://system.lk-tronics.com";
   } else {
     process.env.NEXTAUTH_URL = "http://localhost:3000";
   }
@@ -27,21 +27,25 @@ if (!process.env.NEXTAUTH_SECRET) {
   process.env.NEXTAUTH_SECRET = authSecret;
 }
 
+const isHttps =
+  Boolean(process.env.NEXTAUTH_URL?.startsWith("https://")) ||
+  process.env.NODE_ENV === "production";
+
 export const authOptions: NextAuthOptions = {
   session: {
     strategy: "jwt",
     maxAge: SEVEN_DAYS_IN_SECONDS,
     updateAge: 24 * 60 * 60, // Refresh session token expiry daily on user activity
   },
-  useSecureCookies: false, // Ensures consistent cookie naming across reverse proxies (Nginx/Cloudflare) and local dev
+  useSecureCookies: isHttps,
   cookies: {
     sessionToken: {
-      name: "next-auth.session-token",
+      name: isHttps ? "__Secure-next-auth.session-token" : "next-auth.session-token",
       options: {
         httpOnly: true,
         sameSite: "lax",
         path: "/",
-        secure: false,
+        secure: isHttps,
       },
     },
   },
@@ -174,14 +178,19 @@ export const authOptions: NextAuthOptions = {
       return session;
     },
     async redirect({ url, baseUrl }) {
-      // Always return relative path so remote network PCs stay on their IP/hostname rather than getting forced onto localhost
-      if (url.startsWith("/")) return url;
-      try {
-        const parsed = new URL(url);
-        return parsed.pathname + parsed.search;
-      } catch {
-        return "/dashboard";
+      // If relative URL, prepend baseUrl to produce a fully valid absolute URL
+      if (url.startsWith("/")) {
+        return `${baseUrl}${url}`;
       }
+      // If absolute URL, ensure it belongs to the same origin
+      try {
+        const parsedUrl = new URL(url);
+        const parsedBase = new URL(baseUrl);
+        if (parsedUrl.origin === parsedBase.origin) {
+          return url;
+        }
+      } catch (e) {}
+      return baseUrl;
     },
   },
   secret: authSecret || "dev_temp_secret_key_needs_env_auth_secret_32_chars",
