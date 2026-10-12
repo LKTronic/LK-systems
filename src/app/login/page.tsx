@@ -37,6 +37,9 @@ function getSafeRedirectTarget(rawCallbackUrl: string | null | undefined, role?:
   return fallback;
 }
 
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 export default function LoginPage() {
   const router = useRouter();
   const { data: session, status } = useSession();
@@ -50,6 +53,16 @@ export default function LoginPage() {
 
   useEffect(() => {
     setIsMounted(true);
+    // Purge old stale caches so login never requires a manual hard-refresh
+    if (typeof window !== "undefined" && "caches" in window) {
+      caches.keys().then((keys) => {
+        for (const key of keys) {
+          if (!key.includes("pms-shop-cache-v8")) {
+            caches.delete(key).catch(() => {});
+          }
+        }
+      }).catch(() => {});
+    }
   }, []);
 
   useEffect(() => {
