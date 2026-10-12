@@ -3,18 +3,18 @@ import CredentialsProvider from "next-auth/providers/credentials";
 import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/prisma";
 
-import { checkRateLimit } from "@/lib/rateLimit";
+import { checkRateLimit, clearRateLimit } from "@/lib/rateLimit";
 
 // 7 days session duration with daily rolling updates on active usage
 const SEVEN_DAYS_IN_SECONDS = 7 * 24 * 60 * 60;
 
 if (!process.env.NEXTAUTH_URL && typeof window === "undefined") {
-  if (process.env.NODE_ENV === "development") {
-    process.env.NEXTAUTH_URL = "http://localhost:3000";
-  } else if (process.env.VERCEL_URL) {
+  if (process.env.VERCEL_URL) {
     process.env.NEXTAUTH_URL = `https://${process.env.VERCEL_URL}`;
+  } else if (process.env.NODE_ENV === "production" && process.env.SYSTEM_URL) {
+    process.env.NEXTAUTH_URL = process.env.SYSTEM_URL;
   } else {
-    process.env.NEXTAUTH_URL = "https://system.lk-tronics.com";
+    process.env.NEXTAUTH_URL = "http://localhost:3000";
   }
 }
 
@@ -106,6 +106,10 @@ export const authOptions: NextAuthOptions = {
           throw new Error("Invalid credentials");
         }
 
+        // Successfully authenticated: clear any failed attempt rate-limiting records
+        clearRateLimit(`login_ip:${clientIp}`);
+        clearRateLimit(`login_user:${username}`);
+
         return {
           id: user.id.toString(),
           name: user.name,
@@ -145,15 +149,17 @@ export const authOptions: NextAuthOptions = {
             dbUser = raw[0] || null;
           }
 
-          // Invalidate session immediately if user deleted or deactivated
-          if (!dbUser || dbUser.status !== "ACTIVE") {
+          // Invalidate session immediately only if user explicitly found and is deactivated
+          if (dbUser && dbUser.status !== "ACTIVE") {
             return null as any;
           }
 
-          token.username = dbUser.username;
-          token.role = dbUser.role;
+          if (dbUser) {
+            token.username = dbUser.username;
+            token.role = dbUser.role;
+          }
         } catch (err) {
-          console.error("Error verifying user session status:", err);
+          console.warn("Non-fatal: could not re-verify user status in DB, keeping current token:", err);
         }
       }
 

@@ -21,6 +21,13 @@ if (typeof setInterval !== "undefined") {
 }
 
 /**
+ * Clears rate limit record for a specific key (e.g. after successful authentication)
+ */
+export function clearRateLimit(key: string): void {
+  rateLimitStore.delete(key);
+}
+
+/**
  * Extracts client IP from request headers
  */
 export function getClientIp(request: NextRequest): string {

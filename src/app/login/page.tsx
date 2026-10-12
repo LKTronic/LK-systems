@@ -54,6 +54,24 @@ export default function LoginPage() {
 
   useEffect(() => {
     if (status === "authenticated" && !redirecting) {
+      if (typeof window !== "undefined") {
+        const count = parseInt(sessionStorage.getItem("pms_login_loop_count") || "0", 10);
+        const lastTime = parseInt(sessionStorage.getItem("pms_login_loop_time") || "0", 10);
+        const now = Date.now();
+
+        // If we got redirected back to /login 3 times within 8 seconds, break the loop
+        if (now - lastTime < 8000 && count >= 3) {
+          console.warn("Redirect loop prevented. Halting automatic redirect.");
+          sessionStorage.removeItem("pms_login_loop_count");
+          setError("We detected a repeated redirect. Please click 'Enter Workspace' below or sign in again.");
+          setRedirecting(false);
+          return;
+        }
+
+        sessionStorage.setItem("pms_login_loop_count", String(count + 1));
+        sessionStorage.setItem("pms_login_loop_time", String(now));
+      }
+
       if (session?.user) {
         persistAuthSession(session);
       }
@@ -81,9 +99,20 @@ export default function LoginPage() {
       });
 
       if (res?.error) {
-        setError(res.error || "Invalid username or password");
+        if (res.error === "CredentialsSignin") {
+          setError("Invalid username or password. Please verify your credentials.");
+        } else if (res.error.toLowerCase().includes("too many")) {
+          setError(res.error);
+        } else {
+          setError(res.error || "Unable to sign in. Please check your credentials.");
+        }
         setIsLoading(false);
       } else {
+        if (typeof window !== "undefined") {
+          sessionStorage.removeItem("pms_login_loop_count");
+          sessionStorage.removeItem("pms_login_loop_time");
+        }
+
         setRedirecting(true);
         let role: string | undefined;
         try {
@@ -119,18 +148,21 @@ export default function LoginPage() {
         suppressHydrationWarning
         className="min-h-screen flex items-center justify-center bg-slate-950 px-4 py-12"
       >
-        <div className="flex flex-col items-center gap-3">
+        <div className="flex flex-col items-center gap-3 text-center">
           <Loader2 className="w-8 h-8 animate-spin text-indigo-500" />
-          <p className="text-xs text-slate-400">Redirecting to your workspace...</p>
+          <p className="text-sm font-semibold text-white">Redirecting to your workspace...</p>
+          <p className="text-xs text-slate-400 max-w-xs">
+            Preparing your dashboard and session credentials...
+          </p>
           <a
             href={dest}
             onClick={(e) => {
               e.preventDefault();
               window.location.href = dest;
             }}
-            className="text-xs text-indigo-400 hover:text-indigo-300 underline mt-2 cursor-pointer"
+            className="mt-3 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs font-semibold shadow-lg shadow-indigo-600/30 transition-all cursor-pointer"
           >
-            Click here if not redirected automatically
+            Enter Workspace Now
           </a>
         </div>
       </div>
