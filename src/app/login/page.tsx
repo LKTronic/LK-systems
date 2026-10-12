@@ -37,9 +37,6 @@ function getSafeRedirectTarget(rawCallbackUrl: string | null | undefined, role?:
   return fallback;
 }
 
-export const dynamic = "force-dynamic";
-export const revalidate = 0;
-
 export default function LoginPage() {
   const router = useRouter();
   const { data: session, status } = useSession();
