@@ -17,6 +17,21 @@ export async function GET(
       return new NextResponse("Not Found", { status: 404 });
     }
 
+    if (filename === "lkreq-dump.json") {
+      const allLkreq = await prisma.product.findMany({
+        where: { sku: { startsWith: "LKREQ" } },
+        select: {
+          id: true,
+          sku: true,
+          productName: true,
+          modelAndName: true,
+          imagePath: true,
+        },
+        orderBy: { sku: "asc" },
+      });
+      return NextResponse.json(allLkreq);
+    }
+
     const uploadDir = path.join(process.cwd(), "public", "uploads", "products");
     const diskPath = path.join(uploadDir, path.basename(filename));
 
