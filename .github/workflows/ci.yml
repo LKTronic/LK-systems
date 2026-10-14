@@ -12,7 +12,7 @@ permissions:
 jobs:
   test-and-build:
     name: Validate All Checks & Build
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
 
     # Build-time environment variables for headless validation
     env:
@@ -26,10 +26,10 @@ jobs:
       - name: 1. Checkout Code
         uses: actions/checkout@v4
 
-      - name: 2. Setup Node.js 20
+      - name: 2. Setup Node.js 22 LTS
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: 'npm'
 
       - name: 3. Verify Dependencies (npm ci)
@@ -54,7 +54,7 @@ jobs:
     name: Promote Master to Main
     needs: test-and-build
     if: github.ref == 'refs/heads/master' && github.event_name == 'push'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
 
     steps:
       - name: Checkout Repository
