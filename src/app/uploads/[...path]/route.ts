@@ -72,17 +72,24 @@ export async function GET(
       });
     }
 
-    // 3. Check if matching product in database has a restored asset or known mapping
+    // 3. Check if matching product in database has a restored asset or known mapping (ONLY for legacy restored/excel requests)
     const cleanBase = path.basename(filename);
-    const product = await prisma.product.findFirst({
-      where: {
-        OR: [
-          { imagePath: { contains: cleanBase } },
-          { supplierImage: { contains: cleanBase } },
-        ],
-      },
-      select: { id: true, sku: true, productName: true, modelAndName: true },
-    });
+    const isLegacyRestoredRequest =
+      cleanBase.startsWith("restored-") ||
+      cleanBase.startsWith("excel-") ||
+      cleanBase.includes("broken");
+
+    let product: { sku?: string | null; productName?: string | null; modelAndName?: string | null } | null = null;
+    if (isLegacyRestoredRequest) {
+      product = await prisma.product.findFirst({
+        where: {
+          OR: [
+            { imagePath: { contains: cleanBase } },
+            { supplierImage: { contains: cleanBase } },
+          ],
+        },
+        select: { id: true, sku: true, productName: true, modelAndName: true },
+      });
 
     if (product) {
       const text = `${product.sku || ""} ${product.productName || ""} ${product.modelAndName || ""}`.toUpperCase();
@@ -118,6 +125,7 @@ export async function GET(
         }
       }
     }
+  }
 
     // 4. Return clean, high-contrast SVG component placeholder (Never 404, never broken image box)
     const label = (product?.sku || product?.modelAndName || filename.replace(/[-_.]/g, " ")).substring(0, 16);

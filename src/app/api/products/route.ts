@@ -343,27 +343,8 @@ export async function GET(request: NextRequest) {
       ]);
     }
 
-    const resolvedProducts = products.map((p: any) => {
-      // If product has no image (explicitly deleted or never uploaded), do not auto-heal
-      if (!p.imagePath || p.imagePath.trim() === "" || p.imagePath === "null") {
-        return p;
-      }
-      const safeUrl = resolveSafeProductImage(p);
-      // Auto-heal database record if safeUrl changed and is different from current imagePath
-      if (safeUrl && safeUrl !== p.imagePath) {
-        prisma.product
-          .update({
-            where: { id: p.id },
-            data: { imagePath: safeUrl },
-          })
-          .catch(() => {});
-        return { ...p, imagePath: safeUrl };
-      }
-      return p;
-    });
-
     return NextResponse.json({
-      products: resolvedProducts,
+      products,
       pagination: {
         total,
         page,

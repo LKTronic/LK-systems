@@ -53,18 +53,7 @@ export async function GET(
       return NextResponse.json({ error: "Product not found" }, { status: 404 });
     }
 
-    if (product.imagePath && product.imagePath.trim() !== "" && product.imagePath !== "null") {
-      const safeUrl = resolveSafeProductImage(product);
-      if (safeUrl && safeUrl !== product.imagePath) {
-        prisma.product
-          .update({
-            where: { id },
-            data: { imagePath: safeUrl },
-          })
-          .catch(() => {});
-        product.imagePath = safeUrl;
-      }
-    }
+
 
     return NextResponse.json(product);
   } catch (error) {

@@ -447,6 +447,20 @@ describe("Product Image Deletion & Safe Fallback Resolution", () => {
       "/uploads/products/my-custom-sensor.png"
     );
   });
+
+  it("preserves newly uploaded image and NEVER reverts to old restored image even on matched components", async () => {
+    const { resolveSafeProductImage } = await import("../src/lib/imageResolver");
+
+    const newUploadedProduct = {
+      sku: "LKREQ00001",
+      modelAndName: "INA226",
+      imagePath: "/uploads/products/1799999999999-new-user-photo.png",
+    };
+    assert.equal(
+      resolveSafeProductImage(newUploadedProduct),
+      "/uploads/products/1799999999999-new-user-photo.png"
+    );
+  });
 });
 
 

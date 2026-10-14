@@ -106,11 +106,19 @@ export function resolveSafeProductImage<T extends ResolvableProduct>(product: T)
     return null;
   }
 
-  for (const entry of RESTORED_IMAGE_MAP) {
-    if (entry.match(product)) {
-      return entry.url;
+  // Only fall back to RESTORED_IMAGE_MAP if imagePath points to a known broken legacy path.
+  // Genuine user uploads or updated paths are NEVER overridden!
+  const isBrokenOrLegacy =
+    product.imagePath.includes("broken-old-path") ||
+    product.imagePath.includes("missing-image");
+
+  if (isBrokenOrLegacy) {
+    for (const entry of RESTORED_IMAGE_MAP) {
+      if (entry.match(product)) {
+        return entry.url;
+      }
     }
   }
 
-  return product.imagePath || null;
+  return product.imagePath.trim();
 }

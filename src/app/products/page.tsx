@@ -278,38 +278,31 @@ export default function ProductsPage() {
   };
 
   const getProductImageSrc = (p: Product): string => {
-    // If product has no image (e.g. user removed it), immediately show clean SVG badge
+    // 1. If product has no image (e.g. user removed it), immediately show clean SVG badge
     if (!p.imagePath || p.imagePath.trim() === "" || p.imagePath === "null") {
       const label = (p.sku || p.modelAndName || p.productName || "PRODUCT").substring(0, 14);
       const sub = (p.productName || p.modelAndName || "").substring(0, 18);
       return `data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="300" height="300" viewBox="0 0 300 300"><rect width="300" height="300" fill="%230f172a"/><rect x="20" y="20" width="260" height="260" rx="16" fill="%231e293b" stroke="%23334155" stroke-width="2"/><circle cx="150" cy="115" r="42" fill="%233b82f6" fill-opacity="0.15"/><path d="M135 115 L165 115 M150 100 L150 130" stroke="%2360a5fa" stroke-width="3" stroke-linecap="round"/><text x="150" y="190" font-family="system-ui,sans-serif" font-size="16" font-weight="bold" fill="%23f8fafc" text-anchor="middle">${encodeURIComponent(label)}</text><text x="150" y="215" font-family="system-ui,sans-serif" font-size="11" fill="%2394a3b8" text-anchor="middle">${encodeURIComponent(sub)}</text></svg>`;
     }
+
+    // 2. If product has an imagePath and it hasn't errored, ALWAYS use the product's image!
+    if (!imgErrors[p.id]) {
+      return p.imagePath;
+    }
+
+    // 3. ONLY if the image failed to load (imgErrors[p.id] is true), check for a restored fallback
     const fallback = getRestoredFallback(p);
     if (fallback) return fallback;
-    if (p.imagePath && !imgErrors[p.id]) return p.imagePath;
+
+    // 4. Default clean SVG badge
     const label = (p.sku || p.modelAndName || p.productName || "PRODUCT").substring(0, 14);
     const sub = (p.productName || p.modelAndName || "").substring(0, 18);
     return `data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="300" height="300" viewBox="0 0 300 300"><rect width="300" height="300" fill="%230f172a"/><rect x="20" y="20" width="260" height="260" rx="16" fill="%231e293b" stroke="%23334155" stroke-width="2"/><circle cx="150" cy="115" r="42" fill="%233b82f6" fill-opacity="0.15"/><path d="M135 115 L165 115 M150 100 L150 130" stroke="%2360a5fa" stroke-width="3" stroke-linecap="round"/><text x="150" y="190" font-family="system-ui,sans-serif" font-size="16" font-weight="bold" fill="%23f8fafc" text-anchor="middle">${encodeURIComponent(label)}</text><text x="150" y="215" font-family="system-ui,sans-serif" font-size="11" fill="%2394a3b8" text-anchor="middle">${encodeURIComponent(sub)}</text></svg>`;
   };
 
   const handleProductImgError = (p: Product) => {
-    if (!p.imagePath || p.imagePath.trim() === "" || p.imagePath === "null") {
-      setImgErrors((prev) => ({ ...prev, [p.id]: true }));
-      return;
-    }
-    const fallback = getRestoredFallback(p);
-    if (fallback && p.imagePath !== fallback) {
-      setProducts((prev) =>
-        prev.map((item) => (item.id === p.id ? { ...item, imagePath: fallback } : item))
-      );
-      fetch(`/api/products/${p.id}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ imagePath: fallback }),
-      }).catch(() => {});
-    } else {
-      setImgErrors((prev) => ({ ...prev, [p.id]: true }));
-    }
+    // Flag broken image for client-side fallback rendering without mutating user data in DB
+    setImgErrors((prev) => ({ ...prev, [p.id]: true }));
   };
 
   // Quick Image Upload / Replace Modal State (for ADMIN & SUPERADMIN)
