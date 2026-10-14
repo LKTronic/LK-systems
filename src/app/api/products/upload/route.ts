@@ -220,7 +220,17 @@ export async function POST(request: NextRequest) {
             const ext = imgData.extension ? `.${imgData.extension}` : ".jpg";
             const uniqueName = `excel-${Date.now()}-${crypto.randomBytes(6).toString("hex")}${ext}`;
             const filePath = path.join(uploadDir, uniqueName);
-            await writeFile(filePath, Buffer.from(imgData.buffer));
+            const imgBuffer = Buffer.from(imgData.buffer);
+            await writeFile(filePath, imgBuffer);
+
+            // Persist to MySQL database so site updates/git pulls never lose Excel images
+            try {
+              const { backupImageToDatabase } = await import("@/lib/imageStorage");
+              await backupImageToDatabase(uniqueName, imgBuffer, ext === ".png" ? "image/png" : "image/jpeg");
+            } catch (backupErr) {
+              console.warn("Database image backup non-fatal warning:", backupErr);
+            }
+
             embeddedImagesByRow.set(rowNumber, `/uploads/products/${uniqueName}`);
           }
         }

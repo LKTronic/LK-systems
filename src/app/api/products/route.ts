@@ -25,6 +25,11 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
+    // Non-blocking background sync of images to MySQL persistent storage
+    import("@/lib/imageStorage")
+      .then((m) => m.syncAllUploadsToDatabase())
+      .catch(() => {});
+
     const { searchParams } = new URL(request.url);
     const search = searchParams.get("search")?.trim() || "";
     const status = searchParams.get("status") || "ALL"; // ALL, PENDING, ACTIVE, EXPIRED, PRICE_NOT_AVAILABLE, NOT_REQUESTED

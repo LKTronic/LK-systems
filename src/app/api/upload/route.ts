@@ -114,6 +114,14 @@ export async function POST(request: NextRequest) {
     const filePath = path.join(uploadDir, uniqueName);
     await writeFile(filePath, buffer);
 
+    // Persist binary copy to MySQL database to prevent loss on git pull / server update
+    try {
+      const { backupImageToDatabase } = await import("@/lib/imageStorage");
+      await backupImageToDatabase(uniqueName, buffer, file.type || "image/png");
+    } catch (backupErr) {
+      console.warn("Database image backup non-fatal warning:", backupErr);
+    }
+
     const relativeUrl = `/uploads/products/${uniqueName}`;
 
     return NextResponse.json({ url: relativeUrl });
