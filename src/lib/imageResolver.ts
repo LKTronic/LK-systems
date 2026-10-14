@@ -101,6 +101,11 @@ const RESTORED_IMAGE_MAP = [
  * Unconditionally returns the tracked restored image asset.
  */
 export function resolveSafeProductImage<T extends ResolvableProduct>(product: T): string | null {
+  // If product has no image (e.g., user removed/deleted the image), respect explicit deletion
+  if (!product.imagePath || product.imagePath.trim() === "" || product.imagePath === "null") {
+    return null;
+  }
+
   for (const entry of RESTORED_IMAGE_MAP) {
     if (entry.match(product)) {
       return entry.url;

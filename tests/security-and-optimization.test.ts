@@ -377,3 +377,76 @@ describe("Offline Dynamic Vocabulary & Search Correction", () => {
   });
 });
 
+describe("Product Image Deletion & Safe Fallback Resolution", () => {
+  it("returns null when product.imagePath is explicitly null, empty, or 'null' even if SKU matches restored list", async () => {
+    const { resolveSafeProductImage } = await import("../src/lib/imageResolver");
+
+    const deletedProduct1 = {
+      sku: "LKREQ00001",
+      modelAndName: "INA226",
+      imagePath: null,
+    };
+    assert.equal(resolveSafeProductImage(deletedProduct1), null);
+
+    const deletedProduct2 = {
+      sku: "LKREQ00020",
+      modelAndName: "D1027",
+      imagePath: "",
+    };
+    assert.equal(resolveSafeProductImage(deletedProduct2), null);
+
+    const deletedProduct3 = {
+      sku: "LKREQ00022",
+      modelAndName: "CL57T",
+      imagePath: "   ",
+    };
+    assert.equal(resolveSafeProductImage(deletedProduct3), null);
+
+    const deletedProduct4 = {
+      sku: "LKREQ00027",
+      modelAndName: "PS21255",
+      imagePath: "null",
+    };
+    assert.equal(resolveSafeProductImage(deletedProduct4), null);
+  });
+
+  it("resolves to restored fallback image when imagePath is present on known components", async () => {
+    const { resolveSafeProductImage } = await import("../src/lib/imageResolver");
+
+    const restoredProduct1 = {
+      sku: "LKREQ00001",
+      modelAndName: "INA226",
+      imagePath: "/uploads/products/broken-old-path.png",
+    };
+    assert.equal(
+      resolveSafeProductImage(restoredProduct1),
+      "/uploads/products/1790846365161-8123776387fdc33884ec8768.png"
+    );
+
+    const restoredProduct2 = {
+      sku: "LKREQ00020",
+      modelAndName: "D1027",
+      imagePath: "/uploads/products/restored-lkreq00020-d1027.png",
+    };
+    assert.equal(
+      resolveSafeProductImage(restoredProduct2),
+      "/uploads/products/restored-lkreq00020-d1027.png"
+    );
+  });
+
+  it("preserves standard user-uploaded images when not in restored list", async () => {
+    const { resolveSafeProductImage } = await import("../src/lib/imageResolver");
+
+    const normalProduct = {
+      sku: "LKSEN00111",
+      modelAndName: "OmZ E2B-M12KS04-WP-B1",
+      imagePath: "/uploads/products/my-custom-sensor.png",
+    };
+    assert.equal(
+      resolveSafeProductImage(normalProduct),
+      "/uploads/products/my-custom-sensor.png"
+    );
+  });
+});
+
+

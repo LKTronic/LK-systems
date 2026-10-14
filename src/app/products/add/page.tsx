@@ -353,7 +353,7 @@ export default function AddProductPage() {
           supplierId: supplierId ? Number(supplierId) : undefined, // Supplier is optional
           referenceLink: referenceLink.trim() || undefined,
           additionalNote: additionalNote.trim() || undefined,
-          imagePath,
+          imagePath: imagePath && imagePath.trim() !== "" ? imagePath.trim() : null,
           status: "PENDING",
         }),
       });

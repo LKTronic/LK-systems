@@ -194,7 +194,7 @@ export default function EditProductPage({
           description: description.trim() || null,
           referenceLink: referenceLink.trim() || null,
           additionalNote: additionalNote.trim() || null,
-          imagePath,
+          imagePath: imagePath && imagePath.trim() !== "" ? imagePath.trim() : null,
           status,
         }),
       });

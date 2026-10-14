@@ -257,6 +257,10 @@ export default function ProductsPage() {
   const [imgErrors, setImgErrors] = useState<Record<number, boolean>>({});
 
   const getRestoredFallback = (p: Product): string | null => {
+    // If product has no image (e.g. user removed it), never force a fallback
+    if (!p.imagePath || p.imagePath.trim() === "" || p.imagePath === "null") {
+      return null;
+    }
     const text = `${p.sku || ""} ${p.modelAndName || ""} ${p.productName || ""}`.toUpperCase();
     if (text.includes("LKREQ00001") || text.includes("INA226")) return "/uploads/products/1790846365161-8123776387fdc33884ec8768.png";
     if (text.includes("LKREQ00002") || text.includes("HACKSAW")) return "/uploads/products/excel-1790846826123-4d8e4caa8977.png";
@@ -274,6 +278,12 @@ export default function ProductsPage() {
   };
 
   const getProductImageSrc = (p: Product): string => {
+    // If product has no image (e.g. user removed it), immediately show clean SVG badge
+    if (!p.imagePath || p.imagePath.trim() === "" || p.imagePath === "null") {
+      const label = (p.sku || p.modelAndName || p.productName || "PRODUCT").substring(0, 14);
+      const sub = (p.productName || p.modelAndName || "").substring(0, 18);
+      return `data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="300" height="300" viewBox="0 0 300 300"><rect width="300" height="300" fill="%230f172a"/><rect x="20" y="20" width="260" height="260" rx="16" fill="%231e293b" stroke="%23334155" stroke-width="2"/><circle cx="150" cy="115" r="42" fill="%233b82f6" fill-opacity="0.15"/><path d="M135 115 L165 115 M150 100 L150 130" stroke="%2360a5fa" stroke-width="3" stroke-linecap="round"/><text x="150" y="190" font-family="system-ui,sans-serif" font-size="16" font-weight="bold" fill="%23f8fafc" text-anchor="middle">${encodeURIComponent(label)}</text><text x="150" y="215" font-family="system-ui,sans-serif" font-size="11" fill="%2394a3b8" text-anchor="middle">${encodeURIComponent(sub)}</text></svg>`;
+    }
     const fallback = getRestoredFallback(p);
     if (fallback) return fallback;
     if (p.imagePath && !imgErrors[p.id]) return p.imagePath;
@@ -283,6 +293,10 @@ export default function ProductsPage() {
   };
 
   const handleProductImgError = (p: Product) => {
+    if (!p.imagePath || p.imagePath.trim() === "" || p.imagePath === "null") {
+      setImgErrors((prev) => ({ ...prev, [p.id]: true }));
+      return;
+    }
     const fallback = getRestoredFallback(p);
     if (fallback && p.imagePath !== fallback) {
       setProducts((prev) =>

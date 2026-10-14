@@ -53,15 +53,17 @@ export async function GET(
       return NextResponse.json({ error: "Product not found" }, { status: 404 });
     }
 
-    const safeUrl = resolveSafeProductImage(product);
-    if (safeUrl && safeUrl !== product.imagePath) {
-      prisma.product
-        .update({
-          where: { id },
-          data: { imagePath: safeUrl },
-        })
-        .catch(() => {});
-      product.imagePath = safeUrl;
+    if (product.imagePath && product.imagePath.trim() !== "" && product.imagePath !== "null") {
+      const safeUrl = resolveSafeProductImage(product);
+      if (safeUrl && safeUrl !== product.imagePath) {
+        prisma.product
+          .update({
+            where: { id },
+            data: { imagePath: safeUrl },
+          })
+          .catch(() => {});
+        product.imagePath = safeUrl;
+      }
     }
 
     return NextResponse.json(product);
@@ -174,7 +176,18 @@ export async function PUT(
           weight: data.weight !== undefined ? data.weight : existingProduct.weight,
           referenceLink: data.referenceLink !== undefined ? data.referenceLink : existingProduct.referenceLink,
           additionalNote: data.additionalNote !== undefined ? data.additionalNote : existingProduct.additionalNote,
-          imagePath: data.imagePath !== undefined ? data.imagePath : existingProduct.imagePath,
+          imagePath:
+            data.imagePath !== undefined
+              ? data.imagePath && data.imagePath.trim() !== "" && data.imagePath !== "null"
+                ? data.imagePath.trim()
+                : null
+              : existingProduct.imagePath,
+          supplierImage:
+            data.imagePath !== undefined
+              ? data.imagePath && data.imagePath.trim() !== "" && data.imagePath !== "null"
+                ? data.imagePath.trim()
+                : null
+              : existingProduct.supplierImage,
           categoryId: data.categoryId !== undefined ? data.categoryId : existingProduct.categoryId,
           supplierId: data.supplierId !== undefined ? (data.supplierId ? Number(data.supplierId) : null) : existingProduct.supplierId,
           status: targetStatus,
