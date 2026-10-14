@@ -58,6 +58,7 @@ export default function ProductDetailPage({
   const [product, setProduct] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [imgError, setImgError] = useState(false);
   const [isRequestingPrice, setIsRequestingPrice] = useState(false);
 
   const loadProduct = async () => {
@@ -397,17 +398,28 @@ export default function ProductDetailPage({
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-start">
               {/* Image Card */}
               <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl flex flex-col items-center justify-start sticky top-6">
-                {product.imagePath ? (
+                {product.imagePath && !imgError ? (
                   <img
                     src={product.imagePath}
                     alt={product.modelAndName || product.productName}
                     referrerPolicy="no-referrer"
+                    onError={() => setImgError(true)}
                     className="max-h-[420px] w-full object-contain rounded-xl"
                   />
                 ) : (
-                  <div className="flex flex-col items-center gap-3 text-slate-600 py-16">
-                    <ImageIcon className="w-16 h-16 stroke-1" />
-                    <span className="text-xs font-medium">No product image uploaded</span>
+                  <div className="flex flex-col items-center gap-3 text-slate-600 py-16 text-center">
+                    <ImageIcon className="w-16 h-16 stroke-1 text-slate-600" />
+                    <span className="text-xs font-medium text-slate-400">
+                      {imgError ? "Image not found on server" : "No product image uploaded"}
+                    </span>
+                    {!isShop && (
+                      <Link
+                        href={`/products/${product.id}/edit`}
+                        className="mt-2 px-3.5 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold shadow-lg shadow-indigo-600/25 transition-all"
+                      >
+                        {imgError ? "Re-upload Image" : "Upload Image"}
+                      </Link>
+                    )}
                   </div>
                 )}
               </div>

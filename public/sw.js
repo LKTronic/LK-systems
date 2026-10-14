@@ -1,7 +1,7 @@
-// PMS Shop Offline Service Worker v7
+// PMS Shop Offline Service Worker v8
 // Provides high-reliability offline browsing for PMS Shop Counter while never blocking live dashboard or auth
 
-const CACHE_NAME = "pms-shop-cache-v7";
+const CACHE_NAME = "pms-shop-cache-v8";
 const STATIC_ASSETS = [
   "/products",
   "/favicon.ico",
@@ -51,10 +51,9 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
-  // 1. CRITICAL: NEVER intercept authentication, dashboard, login, or admin routes!
-  // These MUST always pass directly to the live server.
+  // 1. CRITICAL: NEVER intercept any API, auth, login, dashboard, or admin routes!
   if (
-    url.pathname.startsWith("/api/auth") ||
+    url.pathname.startsWith("/api/") ||
     url.pathname.startsWith("/login") ||
     url.pathname.startsWith("/dashboard") ||
     url.pathname.startsWith("/users") ||
@@ -127,11 +126,12 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
-  // 4. Product & Web Images - Cache First
+  // 4. Product & Web Images - Cache First with network fallback (ONLY cache valid 200 OK responses)
   const isImage =
     event.request.destination === "image" ||
-    url.pathname.match(/\.(webp|png|jpg|jpeg|svg|gif|avif|ico)$/i) ||
-    url.hostname.includes("lk-tronics.com");
+    url.pathname.match(/\.(webp|png|jpg|jpeg|svg|gif|avif|ico)(\?.*)?$/i) ||
+    url.pathname.startsWith("/uploads/") ||
+    (url.hostname.includes("lk-tronics.com") && url.pathname.includes("/uploads/"));
 
   if (isImage) {
     event.respondWith(
@@ -165,30 +165,22 @@ self.addEventListener("fetch", (event) => {
           }
 
           if (networkRes) {
-            try {
-              cache.put(event.request.url, networkRes.clone()).catch(() => {});
-              cache.put(url.href, networkRes.clone()).catch(() => {});
-            } catch (e) {}
+            // ONLY cache successful responses - NEVER cache 404, 500, or broken responses!
+            if (networkRes.status === 200 || networkRes.type === "opaque") {
+              try {
+                cache.put(event.request.url, networkRes.clone()).catch(() => {});
+                cache.put(url.href, networkRes.clone()).catch(() => {});
+              } catch (e) {}
+            }
             return networkRes;
           }
         } catch (err) {
           // Network failed
         }
 
-        return new Response(
-          '<svg xmlns="http://www.w3.org/2000/svg" width="1" height="1"/>',
-          {
-            status: 200,
-            headers: { "Content-Type": "image/svg+xml" },
-          }
-        );
+        return fetch(event.request);
       })
     );
-    return;
-  }
-
-  // Skip other /api/ routes
-  if (url.pathname.startsWith("/api/")) {
     return;
   }
 

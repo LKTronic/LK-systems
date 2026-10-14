@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { AppLayout } from "@/components/AppLayout";
+import { ImageUpload } from "@/components/ImageUpload";
 import { CategorySearchDropdown } from "@/components/CategorySearchDropdown";
 import { formatLKR, formatDateDMY, extractStorageLocation } from "@/lib/formatters";
 import { syncShopCatalogToIndexedDb, searchShopIndexedDb } from "@/lib/offlineShopDb";
@@ -21,6 +22,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Image as ImageIcon,
+  Camera,
   Download,
   Clock,
   CheckCircle2,
@@ -250,6 +252,70 @@ export default function ProductsPage() {
   // Image and Product Instant Preview Modal States
   const [previewImage, setPreviewImage] = useState<string | null>(null);
   const [previewProduct, setPreviewProduct] = useState<any | null>(null);
+
+  // Broken image fallback tracking (never shows broken image box)
+  const [imgErrors, setImgErrors] = useState<Record<number, boolean>>({});
+
+  // Quick Image Upload / Replace Modal State (for ADMIN & SUPERADMIN)
+  const [quickImageProduct, setQuickImageProduct] = useState<Product | null>(null);
+  const [quickImageUrl, setQuickImageUrl] = useState<string | null>(null);
+  const [isSavingQuickImage, setIsSavingQuickImage] = useState(false);
+  const [quickImageError, setQuickImageError] = useState<string | null>(null);
+
+  const handleOpenQuickImage = (product: Product, e?: React.MouseEvent) => {
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+    setQuickImageProduct(product);
+    setQuickImageUrl(product.imagePath || null);
+    setQuickImageError(null);
+  };
+
+  const handleSaveQuickImage = async () => {
+    if (!quickImageProduct) return;
+    setIsSavingQuickImage(true);
+    setQuickImageError(null);
+
+    try {
+      const res = await fetch(`/api/products/${quickImageProduct.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ imagePath: quickImageUrl }),
+      });
+
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || "Failed to update product image");
+      }
+
+      // Update state locally
+      setProducts((prev) =>
+        prev.map((p) =>
+          p.id === quickImageProduct.id ? { ...p, imagePath: quickImageUrl } : p
+        )
+      );
+
+      // Reset broken image error state for this product
+      setImgErrors((prev) => {
+        const next = { ...prev };
+        delete next[quickImageProduct.id];
+        return next;
+      });
+
+      setPageToast({
+        type: "success",
+        message: `Image updated for ${quickImageProduct.sku || quickImageProduct.productName}`,
+      });
+      setTimeout(() => setPageToast(null), 4000);
+
+      setQuickImageProduct(null);
+    } catch (err: any) {
+      setQuickImageError(err.message || "Failed to update product image");
+    } finally {
+      setIsSavingQuickImage(false);
+    }
+  };
 
   // Admin Price Validity Period Modal State
   const [isValidityModalOpen, setIsValidityModalOpen] = useState(false);
@@ -1196,30 +1262,56 @@ export default function ProductsPage() {
 
                         {/* Image */}
                         <div className="w-full h-40 bg-slate-950 rounded-xl overflow-hidden flex items-center justify-center border border-slate-800/80 relative group/img">
-                          {p.imagePath ? (
+                          {p.imagePath && !imgErrors[p.id] ? (
                             <>
                               <img
                                 src={p.imagePath}
                                 alt={nameDisplay}
                                 referrerPolicy="no-referrer"
+                                onError={() => setImgErrors((prev) => ({ ...prev, [p.id]: true }))}
                                 className="w-full h-full object-contain p-2 group-hover/img:scale-105 transition-transform duration-300"
                               />
-                              <button
-                                type="button"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setPreviewImage(p.imagePath!);
-                                }}
-                                className="absolute bottom-1.5 right-1.5 p-1 rounded-lg bg-slate-900/80 backdrop-blur-sm border border-slate-700 text-slate-300 hover:text-white opacity-0 group-hover/img:opacity-100 transition-opacity cursor-pointer"
-                                title="Zoom Image"
-                              >
-                                <ImageIcon className="w-3.5 h-3.5" />
-                              </button>
+                              <div className="absolute bottom-1.5 right-1.5 flex items-center gap-1 opacity-0 group-hover/img:opacity-100 transition-opacity">
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setPreviewImage(p.imagePath!);
+                                  }}
+                                  className="p-1 rounded-lg bg-slate-900/80 backdrop-blur-sm border border-slate-700 text-slate-300 hover:text-white cursor-pointer"
+                                  title="Zoom Image"
+                                >
+                                  <ImageIcon className="w-3.5 h-3.5" />
+                                </button>
+                                {!isShop && (
+                                  <button
+                                    type="button"
+                                    onClick={(e) => handleOpenQuickImage(p, e)}
+                                    className="p-1 rounded-lg bg-indigo-600/90 hover:bg-indigo-500 backdrop-blur-sm border border-indigo-400/40 text-white cursor-pointer shadow"
+                                    title="Change / Upload Image"
+                                  >
+                                    <Camera className="w-3.5 h-3.5" />
+                                  </button>
+                                )}
+                              </div>
                             </>
                           ) : (
-                            <div className="text-slate-600 flex flex-col items-center gap-1">
-                              <ImageIcon className="w-8 h-8 stroke-1" />
-                              <span className="text-[10px] text-slate-600">No image</span>
+                            <div className="text-slate-600 flex flex-col items-center gap-1.5 p-3 text-center">
+                              <ImageIcon className="w-8 h-8 stroke-1 text-slate-600" />
+                              <span className="text-[10px] text-slate-500 font-medium">
+                                {imgErrors[p.id] ? "Image not found" : "No image"}
+                              </span>
+                              {!isShop && (
+                                <button
+                                  type="button"
+                                  onClick={(e) => handleOpenQuickImage(p, e)}
+                                  className="mt-1 px-2.5 py-1 text-[10px] font-semibold rounded-lg bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-300 border border-indigo-500/30 flex items-center gap-1 transition-all cursor-pointer"
+                                  title="Upload Image"
+                                >
+                                  <Camera className="w-3 h-3" />
+                                  <span>{imgErrors[p.id] ? "Re-upload" : "Add Image"}</span>
+                                </button>
+                              )}
                             </div>
                           )}
                         </div>
@@ -1645,31 +1737,54 @@ export default function ProductsPage() {
 
                         {/* 8. Image (Enlarged for SHOP) */}
                         <td className="px-1.5 py-1 text-center whitespace-nowrap">
-                          {p.imagePath ? (
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setPreviewImage(p.imagePath!);
-                              }}
-                              className="inline-block relative group/img cursor-pointer"
-                              title="Click to zoom image"
-                            >
-                              <img
-                                src={p.imagePath}
-                                alt={nameDisplay}
-                                referrerPolicy="no-referrer"
+                          {p.imagePath && !imgErrors[p.id] ? (
+                            <div className="relative inline-block group/tblimg">
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setPreviewImage(p.imagePath!);
+                                }}
+                                className="inline-block relative cursor-pointer"
+                                title="Click to zoom image"
+                              >
+                                <img
+                                  src={p.imagePath}
+                                  alt={nameDisplay}
+                                  referrerPolicy="no-referrer"
+                                  onError={() => setImgErrors((prev) => ({ ...prev, [p.id]: true }))}
+                                  className={`${
+                                    isShop ? "w-16 h-16 rounded-xl" : "w-9 h-9 rounded-lg"
+                                  } object-cover border border-slate-700 bg-slate-950 group-hover:border-indigo-500 group-hover:scale-105 transition-all shadow-md mx-auto`}
+                                />
+                              </button>
+                              {!isShop && (
+                                <button
+                                  type="button"
+                                  onClick={(e) => handleOpenQuickImage(p, e)}
+                                  className="absolute -top-1 -right-1 p-1 rounded-full bg-indigo-600 hover:bg-indigo-500 text-white shadow-md opacity-0 group-hover/tblimg:opacity-100 transition-opacity cursor-pointer z-10"
+                                  title="Change Image"
+                                >
+                                  <Camera className="w-2.5 h-2.5" />
+                                </button>
+                              )}
+                            </div>
+                          ) : (
+                            <div className="relative inline-block group/tblnoimg">
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  if (!isShop) handleOpenQuickImage(p, e);
+                                }}
                                 className={`${
                                   isShop ? "w-16 h-16 rounded-xl" : "w-9 h-9 rounded-lg"
-                                } object-cover border border-slate-700 bg-slate-950 group-hover:border-indigo-500 group-hover:scale-105 transition-all shadow-md mx-auto`}
-                              />
-                            </button>
-                          ) : (
-                            <div
-                              className={`${
-                                isShop ? "w-16 h-16 rounded-xl" : "w-9 h-9 rounded-lg"
-                              } border border-slate-800 bg-slate-950/60 flex items-center justify-center mx-auto text-slate-600`}
-                            >
-                              <ImageIcon className={`${isShop ? "w-7 h-7" : "w-4 h-4"} stroke-1`} />
+                                } border border-slate-800 bg-slate-950/60 flex items-center justify-center mx-auto text-slate-600 ${
+                                  !isShop ? "hover:border-indigo-500/50 hover:text-indigo-400 cursor-pointer" : ""
+                                }`}
+                                title={!isShop ? (imgErrors[p.id] ? "Image not found - click to re-upload" : "Click to add image") : undefined}
+                              >
+                                <ImageIcon className={`${isShop ? "w-7 h-7" : "w-4 h-4"} stroke-1`} />
+                              </button>
                             </div>
                           )}
                         </td>
@@ -1906,26 +2021,52 @@ export default function ProductsPage() {
               <div className="grid grid-cols-1 md:grid-cols-12 gap-6 items-start">
                 {/* Image Section */}
                 <div className="md:col-span-5 bg-slate-950 rounded-2xl p-3 border border-slate-800 flex flex-col items-center justify-center min-h-[220px]">
-                  {previewProduct.imagePath ? (
+                  {previewProduct.imagePath && !imgErrors[previewProduct.id] ? (
                     <div className="relative group/modalimg w-full flex items-center justify-center">
                       <img
                         src={previewProduct.imagePath}
                         alt={previewProduct.productName}
                         referrerPolicy="no-referrer"
+                        onError={() => setImgErrors((prev) => ({ ...prev, [previewProduct.id]: true }))}
                         className="max-h-56 w-auto object-contain rounded-xl"
                       />
-                      <button
-                        onClick={() => setPreviewImage(previewProduct.imagePath!)}
-                        className="absolute bottom-2 right-2 p-1.5 rounded-lg bg-slate-900/80 backdrop-blur-sm border border-slate-700 text-slate-300 hover:text-white transition-opacity"
-                        title="Zoom Image"
-                      >
-                        <ImageIcon className="w-4 h-4" />
-                      </button>
+                      <div className="absolute bottom-2 right-2 flex items-center gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => setPreviewImage(previewProduct.imagePath!)}
+                          className="p-1.5 rounded-lg bg-slate-900/80 backdrop-blur-sm border border-slate-700 text-slate-300 hover:text-white transition-opacity cursor-pointer"
+                          title="Zoom Image"
+                        >
+                          <ImageIcon className="w-4 h-4" />
+                        </button>
+                        {!isShop && (
+                          <button
+                            type="button"
+                            onClick={() => handleOpenQuickImage(previewProduct)}
+                            className="p-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white shadow transition-all cursor-pointer"
+                            title="Change Image"
+                          >
+                            <Camera className="w-4 h-4" />
+                          </button>
+                        )}
+                      </div>
                     </div>
                   ) : (
-                    <div className="text-slate-600 flex flex-col items-center gap-2 py-8">
-                      <ImageIcon className="w-12 h-12 stroke-1" />
-                      <span className="text-xs">No image available</span>
+                    <div className="text-slate-600 flex flex-col items-center gap-2 py-8 text-center">
+                      <ImageIcon className="w-12 h-12 stroke-1 text-slate-500" />
+                      <span className="text-xs text-slate-400">
+                        {imgErrors[previewProduct.id] ? "Image not found on server" : "No image available"}
+                      </span>
+                      {!isShop && (
+                        <button
+                          type="button"
+                          onClick={() => handleOpenQuickImage(previewProduct)}
+                          className="mt-2 px-3 py-1.5 text-xs font-semibold rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white flex items-center gap-1.5 transition-all cursor-pointer shadow-lg shadow-indigo-600/20"
+                        >
+                          <Camera className="w-3.5 h-3.5" />
+                          <span>{imgErrors[previewProduct.id] ? "Re-upload Image" : "Add Image"}</span>
+                        </button>
+                      )}
                     </div>
                   )}
                 </div>
@@ -2980,6 +3121,82 @@ export default function ProductsPage() {
                   )}
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Quick Image Upload Modal */}
+      {quickImageProduct && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-in fade-in">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-lg w-full p-6 shadow-2xl relative">
+            <div className="flex items-center justify-between pb-4 border-b border-slate-800">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 rounded-xl bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">
+                  <Camera className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-white">Update Product Image</h3>
+                  <p className="text-xs text-slate-400 truncate max-w-xs">
+                    {quickImageProduct.sku ? `${quickImageProduct.sku} - ` : ""}
+                    {quickImageProduct.modelAndName || quickImageProduct.productName}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setQuickImageProduct(null)}
+                className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {quickImageError && (
+              <div className="mt-4 p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-400 text-xs flex items-center gap-2">
+                <AlertTriangle className="w-4 h-4 shrink-0" />
+                <span>{quickImageError}</span>
+              </div>
+            )}
+
+            <div className="mt-4">
+              <label className="block text-xs font-medium text-slate-300 mb-2">
+                Paste (Ctrl+V), drag & drop, or browse image:
+              </label>
+              <ImageUpload
+                value={quickImageUrl}
+                onChange={(url) => setQuickImageUrl(url)}
+                disabled={isSavingQuickImage}
+              />
+            </div>
+
+            <div className="mt-6 flex items-center justify-end gap-3 pt-4 border-t border-slate-800">
+              <button
+                type="button"
+                onClick={() => setQuickImageProduct(null)}
+                disabled={isSavingQuickImage}
+                className="px-4 py-2 rounded-xl border border-slate-700 text-slate-300 hover:bg-slate-800 text-xs font-semibold cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleSaveQuickImage}
+                disabled={isSavingQuickImage}
+                className="flex items-center gap-2 px-5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-semibold text-xs shadow-lg shadow-indigo-600/25 transition-all disabled:opacity-50 cursor-pointer"
+              >
+                {isSavingQuickImage ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    <span>Saving...</span>
+                  </>
+                ) : (
+                  <>
+                    <Check className="w-3.5 h-3.5" />
+                    <span>Save Image</span>
+                  </>
+                )}
+              </button>
             </div>
           </div>
         </div>
