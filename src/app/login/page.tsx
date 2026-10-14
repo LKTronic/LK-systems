@@ -210,9 +210,13 @@ export default function LoginPage() {
         >
           <div
             suppressHydrationWarning
-            className="w-12 h-12 rounded-xl bg-indigo-600 flex items-center justify-center text-white font-bold text-xl shadow-lg shadow-indigo-600/30 mb-4"
+            className="w-16 h-16 rounded-2xl bg-slate-800/80 border border-slate-700/60 p-2.5 flex items-center justify-center shadow-lg shadow-indigo-950/50 mb-4 overflow-hidden"
           >
-            P
+            <img
+              src="/logo.png"
+              alt="LK Tronics Logo"
+              className="w-full h-full object-contain"
+            />
           </div>
           <h1 className="text-2xl font-bold text-white tracking-tight">
             Product Management System

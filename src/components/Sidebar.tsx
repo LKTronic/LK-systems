@@ -46,8 +46,12 @@ export function Sidebar() {
     <aside className="w-64 bg-slate-900 border-r border-slate-800 flex flex-col h-screen sticky top-0 shrink-0 select-none">
       {/* Brand Header */}
       <div className="h-16 flex items-center px-6 border-b border-slate-800 gap-3">
-        <div className="w-8 h-8 rounded-lg bg-indigo-600 flex items-center justify-center text-white font-bold shadow-md shadow-indigo-600/30">
-          P
+        <div className="w-9 h-9 rounded-xl bg-slate-800/80 border border-slate-700/60 p-1 flex items-center justify-center shrink-0 shadow-sm overflow-hidden">
+          <img
+            src="/logo.png"
+            alt="LK Tronics Logo"
+            className="w-full h-full object-contain"
+          />
         </div>
         <div>
           <h1 className="font-bold text-base text-white tracking-wide">

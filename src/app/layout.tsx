@@ -19,6 +19,16 @@ export const metadata: Metadata = {
   title: "Product Management System",
   description: "Enterprise Product Management System (PMS)",
   manifest: "/manifest.json",
+  icons: {
+    icon: [
+      { url: "/logo.png?v=20261014", type: "image/png" },
+      { url: "/favicon.ico?v=20261014", sizes: "any" },
+    ],
+    shortcut: ["/favicon.ico?v=20261014"],
+    apple: [
+      { url: "/logo.png?v=20261014" },
+    ],
+  },
 };
 
 export default function RootLayout({
@@ -33,6 +43,9 @@ export default function RootLayout({
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
       <head>
+        <link rel="icon" href="/logo.png?v=20261014" type="image/png" />
+        <link rel="shortcut icon" href="/favicon.ico?v=20261014" />
+        <link rel="apple-touch-icon" href="/logo.png?v=20261014" />
         <script
           dangerouslySetInnerHTML={{
             __html: `
