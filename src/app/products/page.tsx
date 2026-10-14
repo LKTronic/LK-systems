@@ -257,15 +257,29 @@ export default function ProductsPage() {
   const [imgErrors, setImgErrors] = useState<Record<number, boolean>>({});
 
   const getRestoredFallback = (p: Product): string | null => {
-    if (p.sku === "LKREQ00020" || p.modelAndName?.includes("D1027") || p.productName?.includes("D1027")) return "/uploads/products/restored-lkreq00020-d1027.png";
-    if (p.sku === "LKREQ00021" || p.modelAndName?.includes("TIP152") || p.productName?.includes("TIP152")) return "/uploads/products/restored-lkreq00021-tip152.png";
-    if (p.sku === "LKREQ00022" || p.modelAndName?.includes("CL57T") || p.productName?.includes("CL57T")) return "/uploads/products/restored-lkreq00022-cl57t.png";
-    if (p.sku === "LKREQ00023" || p.modelAndName?.includes("M456") || p.productName?.includes("M456")) return "/uploads/products/restored-lkreq00023-hcpl-m456.png";
-    if (p.sku === "LKREQ00024" || p.modelAndName?.includes("2SC3457") || p.productName?.includes("2SC3457") || p.modelAndName?.includes("C3457")) return "/uploads/products/restored-lkreq00024-2sc3457.png";
-    if (p.sku === "LKREQ00025" || p.modelAndName?.includes("2SJ601") || p.productName?.includes("2SJ601") || p.modelAndName?.includes("J601")) return "/uploads/products/restored-lkreq00025-2sj601.png";
-    if (p.sku === "LKREQ00026" || p.modelAndName?.includes("M51995") || p.productName?.includes("M51995")) return "/uploads/products/restored-lkreq00026-m51995afp.png";
-    if (p.sku === "LKREQ00027" || p.modelAndName?.includes("PS21255") || p.productName?.includes("PS21255")) return "/uploads/products/restored-lkreq00027-ps21255-e.png";
+    const text = `${p.sku || ""} ${p.modelAndName || ""} ${p.productName || ""}`.toUpperCase();
+    if (text.includes("LKREQ00001") || text.includes("INA226")) return "/uploads/products/1790846365161-8123776387fdc33884ec8768.png";
+    if (text.includes("LKREQ00002") || text.includes("HACKSAW")) return "/uploads/products/excel-1790846826123-4d8e4caa8977.png";
+    if (text.includes("LKREQ00003") || (text.includes("NEEDLE") && text.includes("PLIER"))) return "/uploads/products/excel-1790846826128-e86e7c57300c.png";
+    if (text.includes("LKREQ00004") || (text.includes("THIN MOUTH") && text.includes("PLIER"))) return "/uploads/products/excel-1790846826129-25c06052b4ff.png";
+    if (text.includes("LKREQ00020") || text.includes("D1027") || text.includes("2SD1027")) return "/uploads/products/restored-lkreq00020-d1027.png";
+    if (text.includes("LKREQ00021") || text.includes("TIP152")) return "/uploads/products/restored-lkreq00021-tip152.png";
+    if (text.includes("LKREQ00022") || text.includes("CL57T")) return "/uploads/products/restored-lkreq00022-cl57t.png";
+    if (text.includes("LKREQ00023") || text.includes("M456") || text.includes("HCPL")) return "/uploads/products/restored-lkreq00023-hcpl-m456.png";
+    if (text.includes("LKREQ00024") || text.includes("2SC3457") || text.includes("C3457")) return "/uploads/products/restored-lkreq00024-2sc3457.png";
+    if (text.includes("LKREQ00025") || text.includes("2SJ601") || text.includes("J601")) return "/uploads/products/restored-lkreq00025-2sj601.png";
+    if (text.includes("LKREQ00026") || text.includes("M51995")) return "/uploads/products/restored-lkreq00026-m51995afp.png";
+    if (text.includes("LKREQ00027") || text.includes("PS21255")) return "/uploads/products/restored-lkreq00027-ps21255-e.png";
     return null;
+  };
+
+  const getProductImageSrc = (p: Product): string => {
+    const fallback = getRestoredFallback(p);
+    if (fallback) return fallback;
+    if (p.imagePath && !imgErrors[p.id]) return p.imagePath;
+    const label = (p.sku || p.modelAndName || p.productName || "PRODUCT").substring(0, 14);
+    const sub = (p.productName || p.modelAndName || "").substring(0, 18);
+    return `data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="300" height="300" viewBox="0 0 300 300"><rect width="300" height="300" fill="%230f172a"/><rect x="20" y="20" width="260" height="260" rx="16" fill="%231e293b" stroke="%23334155" stroke-width="2"/><circle cx="150" cy="115" r="42" fill="%233b82f6" fill-opacity="0.15"/><path d="M135 115 L165 115 M150 100 L150 130" stroke="%2360a5fa" stroke-width="3" stroke-linecap="round"/><text x="150" y="190" font-family="system-ui,sans-serif" font-size="16" font-weight="bold" fill="%23f8fafc" text-anchor="middle">${encodeURIComponent(label)}</text><text x="150" y="215" font-family="system-ui,sans-serif" font-size="11" fill="%2394a3b8" text-anchor="middle">${encodeURIComponent(sub)}</text></svg>`;
   };
 
   const handleProductImgError = (p: Product) => {
@@ -1290,58 +1304,36 @@ export default function ProductsPage() {
 
                         {/* Image */}
                         <div className="w-full h-40 bg-slate-950 rounded-xl overflow-hidden flex items-center justify-center border border-slate-800/80 relative group/img">
-                          {p.imagePath && !imgErrors[p.id] ? (
-                            <>
-                              <img
-                                src={p.imagePath}
-                                alt={nameDisplay}
-                                referrerPolicy="no-referrer"
-                                onError={() => handleProductImgError(p)}
-                                className="w-full h-full object-contain p-2 group-hover/img:scale-105 transition-transform duration-300"
-                              />
-                              <div className="absolute bottom-1.5 right-1.5 flex items-center gap-1 opacity-0 group-hover/img:opacity-100 transition-opacity">
-                                <button
-                                  type="button"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    setPreviewImage(p.imagePath!);
-                                  }}
-                                  className="p-1 rounded-lg bg-slate-900/80 backdrop-blur-sm border border-slate-700 text-slate-300 hover:text-white cursor-pointer"
-                                  title="Zoom Image"
-                                >
-                                  <ImageIcon className="w-3.5 h-3.5" />
-                                </button>
-                                {!isShop && (
-                                  <button
-                                    type="button"
-                                    onClick={(e) => handleOpenQuickImage(p, e)}
-                                    className="p-1 rounded-lg bg-indigo-600/90 hover:bg-indigo-500 backdrop-blur-sm border border-indigo-400/40 text-white cursor-pointer shadow"
-                                    title="Change / Upload Image"
-                                  >
-                                    <Camera className="w-3.5 h-3.5" />
-                                  </button>
-                                )}
-                              </div>
-                            </>
-                          ) : (
-                            <div className="text-slate-600 flex flex-col items-center gap-1.5 p-3 text-center">
-                              <ImageIcon className="w-8 h-8 stroke-1 text-slate-600" />
-                              <span className="text-[10px] text-slate-500 font-medium">
-                                {imgErrors[p.id] ? "Image not found" : "No image"}
-                              </span>
-                              {!isShop && (
-                                <button
-                                  type="button"
-                                  onClick={(e) => handleOpenQuickImage(p, e)}
-                                  className="mt-1 px-2.5 py-1 text-[10px] font-semibold rounded-lg bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-300 border border-indigo-500/30 flex items-center gap-1 transition-all cursor-pointer"
-                                  title="Upload Image"
-                                >
-                                  <Camera className="w-3 h-3" />
-                                  <span>{imgErrors[p.id] ? "Re-upload" : "Add Image"}</span>
-                                </button>
-                              )}
-                            </div>
-                          )}
+                          <img
+                            src={getProductImageSrc(p)}
+                            alt={nameDisplay}
+                            referrerPolicy="no-referrer"
+                            onError={() => handleProductImgError(p)}
+                            className="w-full h-full object-contain p-2 group-hover/img:scale-105 transition-transform duration-300"
+                          />
+                          <div className="absolute bottom-1.5 right-1.5 flex items-center gap-1 opacity-0 group-hover/img:opacity-100 transition-opacity">
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setPreviewImage(getProductImageSrc(p));
+                              }}
+                              className="p-1 rounded-lg bg-slate-900/80 backdrop-blur-sm border border-slate-700 text-slate-300 hover:text-white cursor-pointer"
+                              title="Zoom Image"
+                            >
+                              <ImageIcon className="w-3.5 h-3.5" />
+                            </button>
+                            {!isShop && (
+                              <button
+                                type="button"
+                                onClick={(e) => handleOpenQuickImage(p, e)}
+                                className="p-1 rounded-lg bg-indigo-600/90 hover:bg-indigo-500 backdrop-blur-sm border border-indigo-400/40 text-white cursor-pointer shadow"
+                                title="Change / Upload Image"
+                              >
+                                <Camera className="w-3.5 h-3.5" />
+                              </button>
+                            )}
+                          </div>
                         </div>
 
                         {/* Title */}
@@ -1765,56 +1757,37 @@ export default function ProductsPage() {
 
                         {/* 8. Image (Enlarged for SHOP) */}
                         <td className="px-1.5 py-1 text-center whitespace-nowrap">
-                          {p.imagePath && !imgErrors[p.id] ? (
-                            <div className="relative inline-block group/tblimg">
-                              <button
-                                type="button"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setPreviewImage(p.imagePath!);
-                                }}
-                                className="inline-block relative cursor-pointer"
-                                title="Click to zoom image"
-                              >
-                                <img
-                                  src={p.imagePath}
-                                  alt={nameDisplay}
-                                  referrerPolicy="no-referrer"
-                                  onError={() => handleProductImgError(p)}
-                                  className={`${
-                                    isShop ? "w-16 h-16 rounded-xl" : "w-9 h-9 rounded-lg"
-                                  } object-cover border border-slate-700 bg-slate-950 group-hover:border-indigo-500 group-hover:scale-105 transition-all shadow-md mx-auto`}
-                                />
-                              </button>
-                              {!isShop && (
-                                <button
-                                  type="button"
-                                  onClick={(e) => handleOpenQuickImage(p, e)}
-                                  className="absolute -top-1 -right-1 p-1 rounded-full bg-indigo-600 hover:bg-indigo-500 text-white shadow-md opacity-0 group-hover/tblimg:opacity-100 transition-opacity cursor-pointer z-10"
-                                  title="Change Image"
-                                >
-                                  <Camera className="w-2.5 h-2.5" />
-                                </button>
-                              )}
-                            </div>
-                          ) : (
-                            <div className="relative inline-block group/tblnoimg">
-                              <button
-                                type="button"
-                                onClick={(e) => {
-                                  if (!isShop) handleOpenQuickImage(p, e);
-                                }}
+                          <div className="relative inline-block group/tblimg">
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setPreviewImage(getProductImageSrc(p));
+                              }}
+                              className="inline-block relative cursor-pointer"
+                              title="Click to zoom image"
+                            >
+                              <img
+                                src={getProductImageSrc(p)}
+                                alt={nameDisplay}
+                                referrerPolicy="no-referrer"
+                                onError={() => handleProductImgError(p)}
                                 className={`${
                                   isShop ? "w-16 h-16 rounded-xl" : "w-9 h-9 rounded-lg"
-                                } border border-slate-800 bg-slate-950/60 flex items-center justify-center mx-auto text-slate-600 ${
-                                  !isShop ? "hover:border-indigo-500/50 hover:text-indigo-400 cursor-pointer" : ""
-                                }`}
-                                title={!isShop ? (imgErrors[p.id] ? "Image not found - click to re-upload" : "Click to add image") : undefined}
+                                } object-contain border border-slate-700 bg-slate-950 group-hover:border-indigo-500 group-hover:scale-105 transition-all shadow-md mx-auto`}
+                              />
+                            </button>
+                            {!isShop && (
+                              <button
+                                type="button"
+                                onClick={(e) => handleOpenQuickImage(p, e)}
+                                className="absolute -top-1 -right-1 p-1 rounded-full bg-indigo-600 hover:bg-indigo-500 text-white shadow-md opacity-0 group-hover/tblimg:opacity-100 transition-opacity cursor-pointer z-10"
+                                title="Change Image"
                               >
-                                <ImageIcon className={`${isShop ? "w-7 h-7" : "w-4 h-4"} stroke-1`} />
+                                <Camera className="w-2.5 h-2.5" />
                               </button>
-                            </div>
-                          )}
+                            )}
+                          </div>
                         </td>
 
                         {/* 9. Actions (Hidden for SHOP) */}
@@ -2049,54 +2022,35 @@ export default function ProductsPage() {
               <div className="grid grid-cols-1 md:grid-cols-12 gap-6 items-start">
                 {/* Image Section */}
                 <div className="md:col-span-5 bg-slate-950 rounded-2xl p-3 border border-slate-800 flex flex-col items-center justify-center min-h-[220px]">
-                  {previewProduct.imagePath && !imgErrors[previewProduct.id] ? (
-                    <div className="relative group/modalimg w-full flex items-center justify-center">
-                      <img
-                        src={previewProduct.imagePath}
-                        alt={previewProduct.productName}
-                        referrerPolicy="no-referrer"
-                        onError={() => setImgErrors((prev) => ({ ...prev, [previewProduct.id]: true }))}
-                        className="max-h-56 w-auto object-contain rounded-xl"
-                      />
-                      <div className="absolute bottom-2 right-2 flex items-center gap-1.5">
-                        <button
-                          type="button"
-                          onClick={() => setPreviewImage(previewProduct.imagePath!)}
-                          className="p-1.5 rounded-lg bg-slate-900/80 backdrop-blur-sm border border-slate-700 text-slate-300 hover:text-white transition-opacity cursor-pointer"
-                          title="Zoom Image"
-                        >
-                          <ImageIcon className="w-4 h-4" />
-                        </button>
-                        {!isShop && (
-                          <button
-                            type="button"
-                            onClick={() => handleOpenQuickImage(previewProduct)}
-                            className="p-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white shadow transition-all cursor-pointer"
-                            title="Change Image"
-                          >
-                            <Camera className="w-4 h-4" />
-                          </button>
-                        )}
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="text-slate-600 flex flex-col items-center gap-2 py-8 text-center">
-                      <ImageIcon className="w-12 h-12 stroke-1 text-slate-500" />
-                      <span className="text-xs text-slate-400">
-                        {imgErrors[previewProduct.id] ? "Image not found on server" : "No image available"}
-                      </span>
+                  <div className="relative group/modalimg w-full flex items-center justify-center">
+                    <img
+                      src={getProductImageSrc(previewProduct)}
+                      alt={previewProduct.productName}
+                      referrerPolicy="no-referrer"
+                      onError={() => handleProductImgError(previewProduct)}
+                      className="max-h-56 w-auto object-contain rounded-xl"
+                    />
+                    <div className="absolute bottom-2 right-2 flex items-center gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => setPreviewImage(getProductImageSrc(previewProduct))}
+                        className="p-1.5 rounded-lg bg-slate-900/80 backdrop-blur-sm border border-slate-700 text-slate-300 hover:text-white transition-opacity cursor-pointer"
+                        title="Zoom Image"
+                      >
+                        <ImageIcon className="w-4 h-4" />
+                      </button>
                       {!isShop && (
                         <button
                           type="button"
                           onClick={() => handleOpenQuickImage(previewProduct)}
-                          className="mt-2 px-3 py-1.5 text-xs font-semibold rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white flex items-center gap-1.5 transition-all cursor-pointer shadow-lg shadow-indigo-600/20"
+                          className="p-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white shadow transition-all cursor-pointer"
+                          title="Change Image"
                         >
-                          <Camera className="w-3.5 h-3.5" />
-                          <span>{imgErrors[previewProduct.id] ? "Re-upload Image" : "Add Image"}</span>
+                          <Camera className="w-4 h-4" />
                         </button>
                       )}
                     </div>
-                  )}
+                  </div>
                 </div>
 
                 {/* Details Section */}

@@ -11,85 +11,99 @@ export interface ResolvableProduct {
 
 const RESTORED_IMAGE_MAP = [
   {
-    match: (p: ResolvableProduct) =>
-      p.sku === "LKREQ00020" ||
-      Boolean(p.modelAndName?.includes("D1027") || p.productName?.includes("D1027")),
+    match: (p: ResolvableProduct) => {
+      const text = `${p.sku || ""} ${p.modelAndName || ""} ${p.productName || ""}`.toUpperCase();
+      return text.includes("LKREQ00001") || text.includes("INA226");
+    },
+    url: "/uploads/products/1790846365161-8123776387fdc33884ec8768.png",
+  },
+  {
+    match: (p: ResolvableProduct) => {
+      const text = `${p.sku || ""} ${p.modelAndName || ""} ${p.productName || ""}`.toUpperCase();
+      return text.includes("LKREQ00002") || text.includes("HACKSAW");
+    },
+    url: "/uploads/products/excel-1790846826123-4d8e4caa8977.png",
+  },
+  {
+    match: (p: ResolvableProduct) => {
+      const text = `${p.sku || ""} ${p.modelAndName || ""} ${p.productName || ""}`.toUpperCase();
+      return text.includes("LKREQ00003") || (text.includes("NEEDLE") && text.includes("PLIER"));
+    },
+    url: "/uploads/products/excel-1790846826128-e86e7c57300c.png",
+  },
+  {
+    match: (p: ResolvableProduct) => {
+      const text = `${p.sku || ""} ${p.modelAndName || ""} ${p.productName || ""}`.toUpperCase();
+      return text.includes("LKREQ00004") || (text.includes("THIN MOUTH") && text.includes("PLIER"));
+    },
+    url: "/uploads/products/excel-1790846826129-25c06052b4ff.png",
+  },
+  {
+    match: (p: ResolvableProduct) => {
+      const text = `${p.sku || ""} ${p.modelAndName || ""} ${p.productName || ""}`.toUpperCase();
+      return text.includes("LKREQ00020") || text.includes("D1027") || text.includes("2SD1027");
+    },
     url: "/uploads/products/restored-lkreq00020-d1027.png",
   },
   {
-    match: (p: ResolvableProduct) =>
-      p.sku === "LKREQ00021" ||
-      Boolean(p.modelAndName?.includes("TIP152") || p.productName?.includes("TIP152")),
+    match: (p: ResolvableProduct) => {
+      const text = `${p.sku || ""} ${p.modelAndName || ""} ${p.productName || ""}`.toUpperCase();
+      return text.includes("LKREQ00021") || text.includes("TIP152");
+    },
     url: "/uploads/products/restored-lkreq00021-tip152.png",
   },
   {
-    match: (p: ResolvableProduct) =>
-      p.sku === "LKREQ00022" ||
-      Boolean(p.modelAndName?.includes("CL57T") || p.productName?.includes("CL57T")),
+    match: (p: ResolvableProduct) => {
+      const text = `${p.sku || ""} ${p.modelAndName || ""} ${p.productName || ""}`.toUpperCase();
+      return text.includes("LKREQ00022") || text.includes("CL57T");
+    },
     url: "/uploads/products/restored-lkreq00022-cl57t.png",
   },
   {
-    match: (p: ResolvableProduct) =>
-      p.sku === "LKREQ00023" ||
-      Boolean(p.modelAndName?.includes("M456") || p.productName?.includes("M456")),
+    match: (p: ResolvableProduct) => {
+      const text = `${p.sku || ""} ${p.modelAndName || ""} ${p.productName || ""}`.toUpperCase();
+      return text.includes("LKREQ00023") || text.includes("M456") || text.includes("HCPL");
+    },
     url: "/uploads/products/restored-lkreq00023-hcpl-m456.png",
   },
   {
-    match: (p: ResolvableProduct) =>
-      p.sku === "LKREQ00024" ||
-      Boolean(
-        p.modelAndName?.includes("2SC3457") ||
-          p.productName?.includes("2SC3457") ||
-          p.modelAndName?.includes("C3457")
-      ),
+    match: (p: ResolvableProduct) => {
+      const text = `${p.sku || ""} ${p.modelAndName || ""} ${p.productName || ""}`.toUpperCase();
+      return text.includes("LKREQ00024") || text.includes("2SC3457") || text.includes("C3457");
+    },
     url: "/uploads/products/restored-lkreq00024-2sc3457.png",
   },
   {
-    match: (p: ResolvableProduct) =>
-      p.sku === "LKREQ00025" ||
-      Boolean(
-        p.modelAndName?.includes("2SJ601") ||
-          p.productName?.includes("2SJ601") ||
-          p.modelAndName?.includes("J601")
-      ),
+    match: (p: ResolvableProduct) => {
+      const text = `${p.sku || ""} ${p.modelAndName || ""} ${p.productName || ""}`.toUpperCase();
+      return text.includes("LKREQ00025") || text.includes("2SJ601") || text.includes("J601");
+    },
     url: "/uploads/products/restored-lkreq00025-2sj601.png",
   },
   {
-    match: (p: ResolvableProduct) =>
-      p.sku === "LKREQ00026" ||
-      Boolean(p.modelAndName?.includes("M51995") || p.productName?.includes("M51995")),
+    match: (p: ResolvableProduct) => {
+      const text = `${p.sku || ""} ${p.modelAndName || ""} ${p.productName || ""}`.toUpperCase();
+      return text.includes("LKREQ00026") || text.includes("M51995");
+    },
     url: "/uploads/products/restored-lkreq00026-m51995afp.png",
   },
   {
-    match: (p: ResolvableProduct) =>
-      p.sku === "LKREQ00027" ||
-      Boolean(p.modelAndName?.includes("PS21255") || p.productName?.includes("PS21255")),
+    match: (p: ResolvableProduct) => {
+      const text = `${p.sku || ""} ${p.modelAndName || ""} ${p.productName || ""}`.toUpperCase();
+      return text.includes("LKREQ00027") || text.includes("PS21255");
+    },
     url: "/uploads/products/restored-lkreq00027-ps21255-e.png",
   },
 ];
 
 /**
- * Checks if the existing imagePath actually exists on disk.
- * If missing or if it matches a known component that was lost, returns the tracked restored image.
+ * Checks if a product matches a known restored component or has a broken image.
+ * Unconditionally returns the tracked restored image asset.
  */
 export function resolveSafeProductImage<T extends ResolvableProduct>(product: T): string | null {
   for (const entry of RESTORED_IMAGE_MAP) {
     if (entry.match(product)) {
-      if (!product.imagePath) {
-        return entry.url;
-      }
-      // If imagePath is an upload, verify if it exists on disk
-      if (product.imagePath.startsWith("/uploads/products/")) {
-        try {
-          const filename = path.basename(product.imagePath);
-          const diskPath = path.join(process.cwd(), "public", "uploads", "products", filename);
-          if (!fs.existsSync(diskPath)) {
-            return entry.url;
-          }
-        } catch {
-          return entry.url;
-        }
-      }
+      return entry.url;
     }
   }
 
