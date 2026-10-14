@@ -219,20 +219,13 @@ export default function ProductDetailPage({
       <div className="max-w-5xl mx-auto space-y-6">
         {/* Navigation & Action Bar */}
         <div className="flex items-center justify-between">
-          <button
-            type="button"
-            onClick={() => {
-              if (window.history.length > 1) {
-                router.back();
-              } else {
-                router.push("/products");
-              }
-            }}
+          <Link
+            href="/products"
             className="flex items-center gap-2 text-xs font-semibold text-slate-400 hover:text-white transition-colors cursor-pointer"
           >
             <ArrowLeft className="w-4 h-4" />
             Back to Products
-          </button>
+          </Link>
 
           <div className="flex items-center gap-3">
             {/* Request Price Button */}
