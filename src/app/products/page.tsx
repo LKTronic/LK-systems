@@ -256,6 +256,34 @@ export default function ProductsPage() {
   // Broken image fallback tracking (never shows broken image box)
   const [imgErrors, setImgErrors] = useState<Record<number, boolean>>({});
 
+  const getRestoredFallback = (p: Product): string | null => {
+    if (p.sku === "LKREQ00020" || p.modelAndName?.includes("D1027") || p.productName?.includes("D1027")) return "/uploads/products/restored-lkreq00020-d1027.png";
+    if (p.sku === "LKREQ00021" || p.modelAndName?.includes("TIP152") || p.productName?.includes("TIP152")) return "/uploads/products/restored-lkreq00021-tip152.png";
+    if (p.sku === "LKREQ00022" || p.modelAndName?.includes("CL57T") || p.productName?.includes("CL57T")) return "/uploads/products/restored-lkreq00022-cl57t.png";
+    if (p.sku === "LKREQ00023" || p.modelAndName?.includes("M456") || p.productName?.includes("M456")) return "/uploads/products/restored-lkreq00023-hcpl-m456.png";
+    if (p.sku === "LKREQ00024" || p.modelAndName?.includes("2SC3457") || p.productName?.includes("2SC3457") || p.modelAndName?.includes("C3457")) return "/uploads/products/restored-lkreq00024-2sc3457.png";
+    if (p.sku === "LKREQ00025" || p.modelAndName?.includes("2SJ601") || p.productName?.includes("2SJ601") || p.modelAndName?.includes("J601")) return "/uploads/products/restored-lkreq00025-2sj601.png";
+    if (p.sku === "LKREQ00026" || p.modelAndName?.includes("M51995") || p.productName?.includes("M51995")) return "/uploads/products/restored-lkreq00026-m51995afp.png";
+    if (p.sku === "LKREQ00027" || p.modelAndName?.includes("PS21255") || p.productName?.includes("PS21255")) return "/uploads/products/restored-lkreq00027-ps21255-e.png";
+    return null;
+  };
+
+  const handleProductImgError = (p: Product) => {
+    const fallback = getRestoredFallback(p);
+    if (fallback && p.imagePath !== fallback) {
+      setProducts((prev) =>
+        prev.map((item) => (item.id === p.id ? { ...item, imagePath: fallback } : item))
+      );
+      fetch(`/api/products/${p.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ imagePath: fallback }),
+      }).catch(() => {});
+    } else {
+      setImgErrors((prev) => ({ ...prev, [p.id]: true }));
+    }
+  };
+
   // Quick Image Upload / Replace Modal State (for ADMIN & SUPERADMIN)
   const [quickImageProduct, setQuickImageProduct] = useState<Product | null>(null);
   const [quickImageUrl, setQuickImageUrl] = useState<string | null>(null);
@@ -1268,7 +1296,7 @@ export default function ProductsPage() {
                                 src={p.imagePath}
                                 alt={nameDisplay}
                                 referrerPolicy="no-referrer"
-                                onError={() => setImgErrors((prev) => ({ ...prev, [p.id]: true }))}
+                                onError={() => handleProductImgError(p)}
                                 className="w-full h-full object-contain p-2 group-hover/img:scale-105 transition-transform duration-300"
                               />
                               <div className="absolute bottom-1.5 right-1.5 flex items-center gap-1 opacity-0 group-hover/img:opacity-100 transition-opacity">
@@ -1752,7 +1780,7 @@ export default function ProductsPage() {
                                   src={p.imagePath}
                                   alt={nameDisplay}
                                   referrerPolicy="no-referrer"
-                                  onError={() => setImgErrors((prev) => ({ ...prev, [p.id]: true }))}
+                                  onError={() => handleProductImgError(p)}
                                   className={`${
                                     isShop ? "w-16 h-16 rounded-xl" : "w-9 h-9 rounded-lg"
                                   } object-cover border border-slate-700 bg-slate-950 group-hover:border-indigo-500 group-hover:scale-105 transition-all shadow-md mx-auto`}

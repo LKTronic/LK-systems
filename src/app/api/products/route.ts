@@ -15,6 +15,7 @@ import {
   getShopProductPriorityRank,
 } from "@/lib/fuzzySearch";
 import { getNextRecordNo, getNextSku, withSequenceLock } from "@/lib/recordNo";
+import { resolveSafeProductImage } from "@/lib/imageResolver";
 
 // GET /api/products (List products with search, pagination, category, supplier, and status filters)
 export async function GET(request: NextRequest) {
@@ -337,8 +338,23 @@ export async function GET(request: NextRequest) {
       ]);
     }
 
+    const resolvedProducts = products.map((p: any) => {
+      const safeUrl = resolveSafeProductImage(p);
+      // Auto-heal database record if safeUrl changed and is different from current imagePath
+      if (safeUrl && safeUrl !== p.imagePath) {
+        prisma.product
+          .update({
+            where: { id: p.id },
+            data: { imagePath: safeUrl },
+          })
+          .catch(() => {});
+        return { ...p, imagePath: safeUrl };
+      }
+      return p;
+    });
+
     return NextResponse.json({
-      products,
+      products: resolvedProducts,
       pagination: {
         total,
         page,

@@ -4,6 +4,7 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { productSchema } from "@/lib/validations/product";
 import { fetchOriginalWebProduct } from "@/lib/webStoreAutoSync";
+import { resolveSafeProductImage } from "@/lib/imageResolver";
 
 // GET /api/products/:id
 export async function GET(
@@ -50,6 +51,17 @@ export async function GET(
 
     if (!product) {
       return NextResponse.json({ error: "Product not found" }, { status: 404 });
+    }
+
+    const safeUrl = resolveSafeProductImage(product);
+    if (safeUrl && safeUrl !== product.imagePath) {
+      prisma.product
+        .update({
+          where: { id },
+          data: { imagePath: safeUrl },
+        })
+        .catch(() => {});
+      product.imagePath = safeUrl;
     }
 
     return NextResponse.json(product);

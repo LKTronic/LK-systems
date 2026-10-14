@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { resolveSafeProductImage } from "@/lib/imageResolver";
 
 // GET /api/shop/offline-catalog (Fast compressed product catalog snapshot for Shop counter offline IndexedDB)
 export async function GET(request: NextRequest) {
@@ -62,7 +63,10 @@ export async function GET(request: NextRequest) {
         version: latestUpdate ? new Date(latestUpdate).getTime() : Date.now(),
         count: products.length,
         timestamp: new Date().toISOString(),
-        products,
+        products: products.map((p) => ({
+          ...p,
+          imagePath: resolveSafeProductImage(p),
+        })),
       },
       {
         headers: {
