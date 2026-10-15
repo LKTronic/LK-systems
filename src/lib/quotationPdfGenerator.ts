@@ -246,11 +246,13 @@ export async function generateQuotationPdf(
   // ================= PAGE 1 =================
   applyLetterhead(doc, selectedRegNo, bgBase64);
 
-  // Metadata Box (Right) - Solid white fill with black border
-  const boxX = 110;
-  const boxY = 46;
-  const boxW = 88;
-  const boxH = 30;
+  // Exact Word Metadata Box (Right):
+  // X = 109.3 mm, Y = 60.5 mm, Width = 93.7 mm, Height = 29.5 mm
+  // Positioned cleanly below the circular logo & "Services" (which ends at 59mm)
+  const boxX = 109.3;
+  const boxY = 60.5;
+  const boxW = 93.7;
+  const boxH = 29.5;
 
   doc.setFillColor(255, 255, 255);
   doc.setDrawColor(0, 0, 0);
@@ -278,28 +280,30 @@ export async function generateQuotationPdf(
     doc.setTextColor(0, 0, 0);
     doc.text(r.label, boxX + 3.5, curMetaY);
     doc.text(String(r.val), boxX + boxW - 3.5, curMetaY, { align: "right" });
-    curMetaY += 5.2;
+    curMetaY += 5.1;
   }
 
-  // Quotation To (Left)
-  const toX = 12;
-  const toY = 56;
+  // Exact Word QUOTATION TO (Left):
+  // X = 25.4 mm, Y = 82.2 mm
+  const toX = 25.4;
+  const toY = 82.2;
   doc.setFont("helvetica", "bold");
-  doc.setFontSize(9.5);
+  doc.setFontSize(10.5);
   doc.setTextColor(0, 0, 0);
   doc.text("QUOTATION TO -", toX, toY);
 
   doc.setFont("helvetica", "normal");
-  doc.setFontSize(9);
+  doc.setFontSize(9.5);
   doc.setTextColor(0, 0, 0);
   const toLines = doc.splitTextToSize(
     data.quotationTo || "Valued Customer",
-    90
+    75
   );
   doc.text(toLines, toX, toY + 5.5);
 
-  // Items Table
-  const tableStartY = Math.max(82, toY + 5.5 + toLines.length * 4.5 + 4);
+  // Exact Word Items Table:
+  // startY = 108 mm, Margin left 21mm, right 21mm (total width: 168mm)
+  const tableStartY = Math.max(108, toY + 5.5 + toLines.length * 4.8 + 3);
 
   const tableData = data.items.map((item, idx) => {
     const productCellText = formatProductServiceCell(
@@ -319,7 +323,7 @@ export async function generateQuotationPdf(
     ];
   });
 
-  // Footer rows: Total Amount and optional Advance payment breakdown
+  // Footer row: Exact Word template has ONLY Total Amount in the table
   const tableFoot: any[] = [
     [
       {
@@ -329,7 +333,7 @@ export async function generateQuotationPdf(
       },
       {
         content: "Total Amount",
-        colSpan: 3,
+        colSpan: 4,
         styles: {
           halign: "center",
           fontStyle: "bold",
@@ -340,9 +344,9 @@ export async function generateQuotationPdf(
       },
       {
         content: formatRs(data.totalAmount),
-        colSpan: 2,
+        colSpan: 1,
         styles: {
-          halign: "right",
+          halign: "center",
           fontStyle: "bold",
           fontSize: 9.5,
           textColor: [0, 0, 0],
@@ -352,77 +356,9 @@ export async function generateQuotationPdf(
     ],
   ];
 
-  if (
-    data.paymentMethod === "ADVANCE_PAYMENT" &&
-    data.advancePercent != null
-  ) {
-    const advAmount = (data.totalAmount * data.advancePercent) / 100;
-    const balAmount = data.totalAmount - advAmount;
-
-    tableFoot.push([
-      {
-        content: "",
-        colSpan: 1,
-        styles: { lineWidth: 0.35, fillColor: [255, 255, 255] },
-      },
-      {
-        content: `Advance Payable (${data.advancePercent}%)`,
-        colSpan: 3,
-        styles: {
-          halign: "center",
-          fontStyle: "bold",
-          fontSize: 8.5,
-          textColor: [0, 0, 0],
-          fillColor: [255, 255, 255],
-        },
-      },
-      {
-        content: formatRs(advAmount),
-        colSpan: 2,
-        styles: {
-          halign: "right",
-          fontStyle: "bold",
-          fontSize: 8.5,
-          textColor: [0, 0, 0],
-          fillColor: [255, 255, 255],
-        },
-      },
-    ]);
-
-    tableFoot.push([
-      {
-        content: "",
-        colSpan: 1,
-        styles: { lineWidth: 0.35, fillColor: [255, 255, 255] },
-      },
-      {
-        content: "Balance Due on Delivery",
-        colSpan: 3,
-        styles: {
-          halign: "center",
-          fontStyle: "bold",
-          fontSize: 8.5,
-          textColor: [0, 0, 0],
-          fillColor: [255, 255, 255],
-        },
-      },
-      {
-        content: formatRs(balAmount),
-        colSpan: 2,
-        styles: {
-          halign: "right",
-          fontStyle: "bold",
-          fontSize: 8.5,
-          textColor: [0, 0, 0],
-          fillColor: [255, 255, 255],
-        },
-      },
-    ]);
-  }
-
   autoTable(doc, {
     startY: tableStartY,
-    margin: { left: 12, right: 12 },
+    margin: { left: 21, right: 21 },
     head: [
       [
         { content: "No.", styles: { halign: "center" } },
@@ -443,7 +379,7 @@ export async function generateQuotationPdf(
       lineWidth: 0.35,
       textColor: [0, 0, 0],
       fontSize: 8.5,
-      cellPadding: 3,
+      cellPadding: 2.5,
       valign: "middle",
       fillColor: [255, 255, 255],
     },
@@ -454,12 +390,12 @@ export async function generateQuotationPdf(
       fillColor: [255, 255, 255],
     },
     columnStyles: {
-      0: { cellWidth: 10, halign: "center" },
-      1: { cellWidth: 32, halign: "center" },
-      2: { cellWidth: 72, halign: "left" },
-      3: { cellWidth: 18, halign: "center" },
-      4: { cellWidth: 27, halign: "right" },
-      5: { cellWidth: 27, halign: "right" },
+      0: { cellWidth: 12, halign: "center" },
+      1: { cellWidth: 38, halign: "center" },
+      2: { cellWidth: 45, halign: "left" },
+      3: { cellWidth: 16, halign: "center" },
+      4: { cellWidth: 28, halign: "center" },
+      5: { cellWidth: 29, halign: "center" },
     },
     willDrawPage: (hookData) => {
       // If table spans to additional pages, re-apply letterhead header & footer
@@ -501,12 +437,13 @@ export async function generateQuotationPdf(
   doc.addPage();
   applyLetterhead(doc, selectedRegNo, bgBase64);
 
-  let curY = 52;
+  // Starts at Y = 70 mm to cleanly clear the circular logo banner (which ends at 59mm)
+  let curY = 70;
   doc.setFont("helvetica", "bold");
-  doc.setFontSize(10.5);
+  doc.setFontSize(11);
   doc.setTextColor(0, 0, 0);
-  doc.text("General Terms and Conditions for the Client", 14, curY);
-  curY += 7;
+  doc.text("General Terms and Conditions for the Client", 21, curY);
+  curY += 7.5;
 
   const generalBullets = [
     "Ownership of goods shall remain with LK TRONICS until full payment is settled.",
@@ -518,9 +455,9 @@ export async function generateQuotationPdf(
   doc.setFont("helvetica", "normal");
   doc.setFontSize(8.5);
   for (const b of generalBullets) {
-    drawCheckmark(doc, 15, curY);
-    const split = doc.splitTextToSize(b, 172);
-    doc.text(split, 21, curY);
+    drawCheckmark(doc, 22, curY);
+    const split = doc.splitTextToSize(b, 160);
+    doc.text(split, 28, curY);
     curY += split.length * 4.2 + 2.5;
   }
 
@@ -548,13 +485,13 @@ export async function generateQuotationPdf(
     doc.setFont("helvetica", "bold");
     doc.setFontSize(9.5);
     doc.setTextColor(0, 0, 0);
-    doc.text(sec.title, 14, curY);
+    doc.text(sec.title, 21, curY);
     curY += 4.5;
 
     doc.setFont("helvetica", "normal");
     doc.setFontSize(8.5);
-    const split = doc.splitTextToSize(sec.body, 182);
-    doc.text(split, 14, curY);
+    const split = doc.splitTextToSize(sec.body, 168);
+    doc.text(split, 21, curY);
     curY += split.length * 4.1 + 4.5;
   }
 
@@ -562,29 +499,30 @@ export async function generateQuotationPdf(
   doc.addPage();
   applyLetterhead(doc, selectedRegNo, bgBase64);
 
-  curY = 52;
+  // Starts at Y = 70 mm to cleanly clear the circular logo banner
+  curY = 70;
   doc.setFont("helvetica", "bold");
   doc.setFontSize(9.5);
   doc.setTextColor(0, 0, 0);
-  doc.text("Payment Terms", 14, curY);
+  doc.text("Payment Terms", 21, curY);
   curY += 4.5;
 
   doc.setFont("helvetica", "normal");
   doc.setFontSize(8.5);
   const paySplit = doc.splitTextToSize(
     "Payment shall be effected based on the agreed payment method (Full Payment / 80% Advance Payment / Credit) selected by the client and confirmed at the time of order. No processing or delivery will commence until the agreed payment terms are fulfilled.",
-    182
+    168
   );
-  doc.text(paySplit, 14, curY);
+  doc.text(paySplit, 21, curY);
   curY += paySplit.length * 4.1 + 8;
 
   // Bank Details Box
   doc.setFont("helvetica", "bold");
   doc.setFontSize(9.5);
-  doc.text("Bank Details", 14, curY);
+  doc.text("Bank Details", 21, curY);
   curY += 5;
 
-  const bankBoxX = 14;
+  const bankBoxX = 21;
   const bankBoxY = curY;
   const bankBoxW = 120;
   const bankBoxH = 26;
