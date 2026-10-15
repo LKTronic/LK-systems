@@ -646,7 +646,7 @@ export default function EditQuotationPage({
               </div>
             </div>
 
-            {/* Prepared By (Dropdown & Auto-suggest) */}
+            {/* Prepared By (Single Dropdown) */}
             <div>
               <label className="block text-xs font-medium text-slate-400 mb-1.5 flex items-center justify-between">
                 <span>Prepared By</span>
@@ -655,48 +655,26 @@ export default function EditQuotationPage({
                 </span>
               </label>
 
-              <div className="space-y-1.5">
-                <div className="relative">
-                  <input
-                    type="text"
-                    list="edit-prepared-by-suggestions"
-                    value={preparedBy}
-                    onChange={(e) => setPreparedBy(e.target.value)}
-                    placeholder="Type or select staff name..."
-                    className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-teal-500 font-sans"
-                  />
-                  <datalist id="edit-prepared-by-suggestions">
-                    {usersList.map((u) => (
-                      <option key={u.id} value={u.name || u.username}>
-                        {u.name} (@{u.username})
-                      </option>
-                    ))}
-                  </datalist>
-                </div>
-
-                {usersList.length > 0 && (
-                  <div className="flex items-center gap-2 pt-0.5">
-                    <span className="text-[11px] text-slate-400 shrink-0">Select User:</span>
-                    <select
-                      value={preparedBy}
-                      onChange={(e) => {
-                        if (e.target.value) setPreparedBy(e.target.value);
-                      }}
-                      className="w-full bg-slate-900 border border-slate-700 rounded-md px-2 py-1 text-xs text-slate-200 focus:outline-none focus:border-teal-500"
-                    >
-                      <option value="">-- Choose from available users --</option>
-                      {usersList.map((u) => {
-                        const displayName = u.name || u.username;
-                        return (
-                          <option key={u.id} value={displayName}>
-                            {displayName} ({u.username})
-                          </option>
-                        );
-                      })}
-                    </select>
-                  </div>
+              <select
+                value={preparedBy}
+                onChange={(e) => setPreparedBy(e.target.value)}
+                className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-teal-500 font-sans cursor-pointer"
+              >
+                {preparedBy && !usersList.some((u) => (u.name || u.username) === preparedBy) && (
+                  <option value={preparedBy}>{preparedBy}</option>
                 )}
-              </div>
+                {usersList.length === 0 && !preparedBy && (
+                  <option value="">Loading users...</option>
+                )}
+                {usersList.map((u) => {
+                  const displayName = u.name || u.username;
+                  return (
+                    <option key={u.id} value={displayName}>
+                      {displayName} ({u.username})
+                    </option>
+                  );
+                })}
+              </select>
             </div>
           </div>
 
