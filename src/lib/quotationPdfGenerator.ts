@@ -15,8 +15,8 @@ export interface QuotationPdfItem {
 
 export interface QuotationPdfData {
   quotationNo: string;
-  preparedDate: string; // YYYY-MM-DD
-  expireDate: string; // YYYY-MM-DD
+  preparedDate: string; // YYYY-MM-DD or YYYY/MM/DD
+  expireDate: string; // YYYY-MM-DD or YYYY/MM/DD
   paymentMethod: string; // "FULL_PAYMENT" | "CREDIT" | "ADVANCE_PAYMENT"
   advancePercent?: number | null;
   preparedBy: string;
@@ -34,11 +34,39 @@ export interface QuotationPdfData {
 
 /**
  * Load image as base64 data URL for embedding into jsPDF
+ * Supports both browser fetch and Node.js filesystem fallback
  */
 async function loadImageAsBase64(url: string): Promise<string | null> {
   if (!url) return null;
+  if (url.startsWith("data:")) return url;
+
+  // Node.js environment fallback (tests, SSR)
+  if (typeof window === "undefined") {
+    try {
+      const nodeFs = "fs";
+      const nodePath = "path";
+      const fs = await import(/* webpackIgnore: true */ nodeFs);
+      const path = await import(/* webpackIgnore: true */ nodePath);
+      const cleanUrl = url.startsWith("/") ? url.slice(1) : url;
+      const fullPath = path.isAbsolute(url)
+        ? url
+        : path.join(process.cwd(), "public", cleanUrl);
+
+      if (fs.existsSync(fullPath)) {
+        const ext = path.extname(fullPath).toLowerCase().replace(".", "");
+        const mime =
+          ext === "jpg" || ext === "jpeg" ? "image/jpeg" : "image/png";
+        const buffer = fs.readFileSync(fullPath);
+        return `data:${mime};base64,${buffer.toString("base64")}`;
+      }
+    } catch {
+      // ignore Node fallback errors
+    }
+  }
+
+  // Browser environment
   try {
-    const res = await fetch(url, { mode: "cors" });
+    const res = await fetch(url);
     if (!res.ok) return null;
     const blob = await res.blob();
     return new Promise((resolve) => {
@@ -55,13 +83,29 @@ async function loadImageAsBase64(url: string): Promise<string | null> {
 }
 
 /**
- * Format currency to LKR format
+ * Format currency to LKR format (e.g. "LKR 1,500.00")
  */
 export function formatLKR(amount: number): string {
-  return "LKR " + (Number(amount) || 0).toLocaleString("en-US", {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  });
+  return (
+    "LKR " +
+    (Number(amount) || 0).toLocaleString("en-US", {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    })
+  );
+}
+
+/**
+ * Format currency to template format (e.g. "Rs 15,270.00")
+ */
+export function formatRs(amount: number): string {
+  return (
+    "Rs " +
+    (Number(amount) || 0).toLocaleString("en-US", {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    })
+  );
 }
 
 /**
@@ -81,126 +125,116 @@ export function formatPaymentMethodLabel(
 }
 
 /**
- * Generate and download Quotation PDF
- * Note: Modular template structure — easily customizable when user provides their specific layout!
+ * Helper to draw clean vector checkmark for Terms & Conditions
  */
-export async function generateQuotationPdf(data: QuotationPdfData): Promise<void> {
+function drawCheckmark(d: jsPDF, x: number, y: number): void {
+  d.setDrawColor(20, 120, 60);
+  d.setLineWidth(0.45);
+  d.line(x, y - 1, x + 1.2, y + 0.8);
+  d.line(x + 1.2, y + 0.8, x + 3.2, y - 2.2);
+}
+
+/**
+ * Helper to apply branded letterhead background and dynamic top bar to any page
+ */
+function applyLetterhead(
+  doc: jsPDF,
+  customRegNo: string,
+  bgBase64: string | null
+): void {
+  // 1. Draw full A4 page letterhead background (circuit board graphics + logo + footer)
+  if (bgBase64) {
+    try {
+      doc.addImage(bgBase64, "JPEG", 0, 0, 210, 297, undefined, "FAST");
+    } catch {
+      // Fallback if background fails
+    }
+  }
+
+  // 2. Draw dynamic top teal bar with user-selected Registration Number
+  doc.setFillColor(74, 144, 152); // exact template teal
+  doc.rect(0, 23.3, 210, 6.8, "F");
+
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(7.2);
+  doc.setTextColor(215, 235, 238);
+  doc.text("LK TRONICS,HIGH-LEVEL ROAD,HOMAGAMA,SRI LANKA.", 10, 27.6);
+  doc.text(
+    `TEL : 011 4 215 515 | REG NO - ${customRegNo}`,
+    200,
+    27.6,
+    { align: "right" }
+  );
+}
+
+/**
+ * Format Product/Service cell content:
+ * 1. Description
+ * 2. Empty spacer line
+ * 3. Stock status: "(instocks)" or "(Shipping from overseas - ...)"
+ * 4. Warranty: ONLY if valid warranty is specified. If no warranty, omitted!
+ */
+export function formatProductServiceCell(
+  description: string,
+  stockStatus?: string | null,
+  leadTime?: string | null,
+  warranty?: string | null
+): string {
+  const rawLead = (leadTime || "12-21").trim();
+  const formattedLead =
+    rawLead.toLowerCase().includes("working") ||
+    rawLead.toLowerCase().includes("day")
+      ? rawLead
+      : `${rawLead} working days`;
+
+  const stockText =
+    stockStatus === "OVERSEAS"
+      ? `(Shipping from overseas - ${formattedLead})`
+      : "(instocks)";
+
+  const rawWarranty = (warranty || "").trim();
+  const isNoWarranty =
+    !rawWarranty ||
+    rawWarranty.toLowerCase() === "no warranty" ||
+    rawWarranty.toLowerCase() === "no-warranty" ||
+    rawWarranty.toLowerCase() === "none" ||
+    rawWarranty.toLowerCase() === "n/a" ||
+    rawWarranty.toLowerCase() === "no";
+
+  const warrantyText = isNoWarranty
+    ? ""
+    : rawWarranty.startsWith("(") && rawWarranty.endsWith(")")
+    ? rawWarranty
+    : `(${rawWarranty})`;
+
+  const descParts = [description.trim(), "", stockText];
+  if (warrantyText) {
+    descParts.push(warrantyText);
+  }
+  return descParts.join("\n");
+}
+
+/**
+ * Generate and download Quotation PDF matching official 4-page Word template (20261015QJ01.docx)
+ */
+export async function generateQuotationPdf(
+  data: QuotationPdfData
+): Promise<void> {
   const doc = new jsPDF({
     orientation: "portrait",
     unit: "mm",
     format: "a4",
   });
 
-  const pageWidth = doc.internal.pageSize.getWidth();
-  const pageHeight = doc.internal.pageSize.getHeight();
-  const margin = 14;
+  const selectedRegNo = (data.registrationNo || "P-V 00336036").trim();
 
-  // Try to load logo
-  const logoBase64 = await loadImageAsBase64("/logo.png");
+  // Pre-load template assets
+  const [bgBase64, brandsBase64] = await Promise.all([
+    loadImageAsBase64("/template_assets/letterhead_bg.jpg"),
+    loadImageAsBase64("/template_assets/brands_sheet.png"),
+  ]);
 
-  // --- HEADER SECTION ---
-  if (logoBase64) {
-    try {
-      doc.addImage(logoBase64, "PNG", margin, 12, 35, 14, undefined, "FAST");
-    } catch {
-      // Fallback text if logo fails to render
-      doc.setFont("helvetica", "bold");
-      doc.setFontSize(18);
-      doc.setTextColor(24, 76, 120);
-      doc.text(data.companyName || "LK TRONICS", margin, 20);
-    }
-  } else {
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(18);
-    doc.setTextColor(24, 76, 120);
-    doc.text(data.companyName || "LK TRONICS", margin, 20);
-  }
-
-  // Company details (Right aligned header)
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(8.5);
-  doc.setTextColor(90, 100, 110);
-  const regNoString = data.registrationNo || "P-V 00336036";
-  const companyInfo = [
-    data.companyName || "LK Tronics (Pvt) Ltd",
-    `Reg No: ${regNoString}`,
-    data.companyAddress || "No. 123, Galle Road, Colombo, Sri Lanka",
-    "Hotline: +94 11 234 5678 / +94 77 123 4567",
-    "Email: info@lk-tronics.com | Web: www.lk-tronics.com",
-  ];
-  let compY = 11;
-  for (const line of companyInfo) {
-    doc.text(line, pageWidth - margin, compY, { align: "right" });
-    compY += 4.1;
-  }
-
-  // Horizontal Accent Divider
-  doc.setDrawColor(24, 76, 120);
-  doc.setLineWidth(0.8);
-  doc.line(margin, 34, pageWidth - margin, 34);
-
-  // Document Title Banner
-  doc.setFillColor(245, 248, 252);
-  doc.roundedRect(margin, 38, pageWidth - margin * 2, 12, 2, 2, "F");
-
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(14);
-  doc.setTextColor(24, 76, 120);
-  doc.text("COMMERCIAL QUOTATION", margin + 4, 46);
-
-  doc.setFontSize(11);
-  doc.setTextColor(40, 50, 60);
-  doc.text(data.quotationNo, pageWidth - margin - 4, 46, { align: "right" });
-
-  // --- METADATA SECTION: TWO COLUMNS (Quotation To vs Meta Info) ---
-  const metaStartY = 56;
-
-  // Left Column: Quotation To
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(9);
-  doc.setTextColor(24, 76, 120);
-  doc.text("QUOTATION TO:", margin, metaStartY);
-
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(9);
-  doc.setTextColor(45, 55, 72);
-  const customerLines = doc.splitTextToSize(data.quotationTo || "Valued Customer", 85);
-  doc.text(customerLines, margin, metaStartY + 5);
-
-  // Right Column: Quotation Details Box
-  const boxX = pageWidth - margin - 85;
-  const boxWidth = 85;
-
-  doc.setFillColor(250, 250, 250);
-  doc.setDrawColor(226, 232, 240);
-  doc.roundedRect(boxX, metaStartY - 2, boxWidth, 33, 2, 2, "FD");
-
-  const metaItems = [
-    { label: "Registration No:", val: regNoString },
-    { label: "Quotation Date:", val: data.preparedDate },
-    { label: "Valid Until:", val: data.expireDate },
-    {
-      label: "Payment Terms:",
-      val: formatPaymentMethodLabel(data.paymentMethod, data.advancePercent),
-    },
-    { label: "Prepared By:", val: data.preparedBy || "Staff" },
-  ];
-
-  let metaY = metaStartY + 3.5;
-  for (const item of metaItems) {
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(8.2);
-    doc.setTextColor(71, 85, 105);
-    doc.text(item.label, boxX + 4, metaY);
-
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(8.2);
-    doc.setTextColor(15, 23, 42);
-    doc.text(String(item.val), boxX + boxWidth - 4, metaY, { align: "right" });
-    metaY += 5.4;
-  }
-
-  // Pre-load images for table rows
+  // Pre-load row thumbnail images
   const itemImagesBase64: { [idx: number]: string | null } = {};
   for (let i = 0; i < data.items.length; i++) {
     const item = data.items[i];
@@ -209,77 +243,232 @@ export async function generateQuotationPdf(data: QuotationPdfData): Promise<void
     }
   }
 
-  // --- ITEMS TABLE ---
-  const tableStartY = Math.max(metaStartY + 32, metaStartY + customerLines.length * 4.5 + 8);
+  // ================= PAGE 1 =================
+  applyLetterhead(doc, selectedRegNo, bgBase64);
 
-  const tableBody = data.items.map((item, idx) => {
-    const rawLead = (item.leadTime || "12-21").trim();
-    const formattedLead =
-      rawLead.toLowerCase().includes("working") || rawLead.toLowerCase().includes("day")
-        ? rawLead
-        : `${rawLead} working days`;
+  // Metadata Box (Right) - Solid white fill with black border
+  const boxX = 110;
+  const boxY = 46;
+  const boxW = 88;
+  const boxH = 30;
 
-    const availabilityText =
-      item.stockStatus === "OVERSEAS"
-        ? `Overseas\n(${formattedLead})`
-        : "In Stock";
-    const warrantyText = item.warranty || "No Warranty";
+  doc.setFillColor(255, 255, 255);
+  doc.setDrawColor(0, 0, 0);
+  doc.setLineWidth(0.35);
+  doc.rect(boxX, boxY, boxW, boxH, "FD");
+
+  const formattedPrepDate = (data.preparedDate || "").replace(/-/g, "/");
+  const formattedExpDate = (data.expireDate || "").replace(/-/g, "/");
+
+  const metaRows = [
+    { label: "Quotation No:", val: data.quotationNo },
+    { label: "Quotation Prepared Date:", val: formattedPrepDate },
+    { label: "Quotation Expire Date:", val: formattedExpDate },
+    {
+      label: "Payment Method:",
+      val: formatPaymentMethodLabel(data.paymentMethod, data.advancePercent),
+    },
+    { label: "Prepared by:", val: data.preparedBy || "Staff" },
+  ];
+
+  let curMetaY = boxY + 5.2;
+  for (const r of metaRows) {
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(8.5);
+    doc.setTextColor(0, 0, 0);
+    doc.text(r.label, boxX + 3.5, curMetaY);
+    doc.text(String(r.val), boxX + boxW - 3.5, curMetaY, { align: "right" });
+    curMetaY += 5.2;
+  }
+
+  // Quotation To (Left)
+  const toX = 12;
+  const toY = 56;
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(9.5);
+  doc.setTextColor(0, 0, 0);
+  doc.text("QUOTATION TO -", toX, toY);
+
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(9);
+  doc.setTextColor(0, 0, 0);
+  const toLines = doc.splitTextToSize(
+    data.quotationTo || "Valued Customer",
+    90
+  );
+  doc.text(toLines, toX, toY + 5.5);
+
+  // Items Table
+  const tableStartY = Math.max(82, toY + 5.5 + toLines.length * 4.5 + 4);
+
+  const tableData = data.items.map((item, idx) => {
+    const productCellText = formatProductServiceCell(
+      item.description,
+      item.stockStatus,
+      item.leadTime,
+      item.warranty
+    );
 
     return [
       String(idx + 1),
-      "", // placeholder cell where image will be drawn
-      item.description,
-      availabilityText,
-      warrantyText,
+      "", // image cell (rendered in didDrawCell)
+      productCellText,
       String(item.quantity),
-      formatLKR(item.unitPrice),
-      formatLKR(item.totalPrice),
+      formatRs(item.unitPrice),
+      formatRs(item.totalPrice),
     ];
   });
 
+  // Footer rows: Total Amount and optional Advance payment breakdown
+  const tableFoot: any[] = [
+    [
+      {
+        content: "",
+        colSpan: 1,
+        styles: { lineWidth: 0.35, fillColor: [255, 255, 255] },
+      },
+      {
+        content: "Total Amount",
+        colSpan: 3,
+        styles: {
+          halign: "center",
+          fontStyle: "bold",
+          fontSize: 9.5,
+          textColor: [0, 0, 0],
+          fillColor: [255, 255, 255],
+        },
+      },
+      {
+        content: formatRs(data.totalAmount),
+        colSpan: 2,
+        styles: {
+          halign: "right",
+          fontStyle: "bold",
+          fontSize: 9.5,
+          textColor: [0, 0, 0],
+          fillColor: [255, 255, 255],
+        },
+      },
+    ],
+  ];
+
+  if (
+    data.paymentMethod === "ADVANCE_PAYMENT" &&
+    data.advancePercent != null
+  ) {
+    const advAmount = (data.totalAmount * data.advancePercent) / 100;
+    const balAmount = data.totalAmount - advAmount;
+
+    tableFoot.push([
+      {
+        content: "",
+        colSpan: 1,
+        styles: { lineWidth: 0.35, fillColor: [255, 255, 255] },
+      },
+      {
+        content: `Advance Payable (${data.advancePercent}%)`,
+        colSpan: 3,
+        styles: {
+          halign: "center",
+          fontStyle: "bold",
+          fontSize: 8.5,
+          textColor: [0, 0, 0],
+          fillColor: [255, 255, 255],
+        },
+      },
+      {
+        content: formatRs(advAmount),
+        colSpan: 2,
+        styles: {
+          halign: "right",
+          fontStyle: "bold",
+          fontSize: 8.5,
+          textColor: [0, 0, 0],
+          fillColor: [255, 255, 255],
+        },
+      },
+    ]);
+
+    tableFoot.push([
+      {
+        content: "",
+        colSpan: 1,
+        styles: { lineWidth: 0.35, fillColor: [255, 255, 255] },
+      },
+      {
+        content: "Balance Due on Delivery",
+        colSpan: 3,
+        styles: {
+          halign: "center",
+          fontStyle: "bold",
+          fontSize: 8.5,
+          textColor: [0, 0, 0],
+          fillColor: [255, 255, 255],
+        },
+      },
+      {
+        content: formatRs(balAmount),
+        colSpan: 2,
+        styles: {
+          halign: "right",
+          fontStyle: "bold",
+          fontSize: 8.5,
+          textColor: [0, 0, 0],
+          fillColor: [255, 255, 255],
+        },
+      },
+    ]);
+  }
+
   autoTable(doc, {
     startY: tableStartY,
-    margin: { left: margin, right: margin },
+    margin: { left: 12, right: 12 },
     head: [
       [
-        "#",
-        "Image",
-        "Product / Service",
-        "Availability",
-        "Warranty",
-        "Qty",
-        "Unit Price",
-        "Total Price",
+        { content: "No.", styles: { halign: "center" } },
+        { content: "Image", styles: { halign: "center" } },
+        { content: "Product/Service", styles: { halign: "center" } },
+        { content: "Quantity", styles: { halign: "center" } },
+        { content: "Unit Price", styles: { halign: "center" } },
+        { content: "Total Price", styles: { halign: "center" } },
       ],
     ],
-    body: tableBody,
-    theme: "striped",
+    body: tableData,
+    foot: tableFoot,
+    theme: "plain",
+    tableLineColor: [0, 0, 0],
+    tableLineWidth: 0.35,
+    styles: {
+      lineColor: [0, 0, 0],
+      lineWidth: 0.35,
+      textColor: [0, 0, 0],
+      fontSize: 8.5,
+      cellPadding: 3,
+      valign: "middle",
+      fillColor: [255, 255, 255],
+    },
     headStyles: {
-      fillColor: [24, 76, 120],
-      textColor: [255, 255, 255],
       fontStyle: "bold",
       fontSize: 8.5,
-      halign: "left",
-      cellPadding: 2.5,
+      textColor: [0, 0, 0],
+      fillColor: [255, 255, 255],
     },
     columnStyles: {
-      0: { cellWidth: 8, halign: "center" },
-      1: { cellWidth: 16, halign: "center" },
-      2: { cellWidth: "auto" },
-      3: { cellWidth: 26, halign: "center", fontSize: 7.5 },
-      4: { cellWidth: 20, halign: "center", fontSize: 8 },
-      5: { cellWidth: 12, halign: "center" },
-      6: { cellWidth: 26, halign: "right" },
-      7: { cellWidth: 28, halign: "right", fontStyle: "bold" },
+      0: { cellWidth: 10, halign: "center" },
+      1: { cellWidth: 32, halign: "center" },
+      2: { cellWidth: 72, halign: "left" },
+      3: { cellWidth: 18, halign: "center" },
+      4: { cellWidth: 27, halign: "right" },
+      5: { cellWidth: 27, halign: "right" },
     },
-    styles: {
-      fontSize: 8,
-      cellPadding: 2.5,
-      valign: "middle",
-      overflow: "linebreak",
+    willDrawPage: (hookData) => {
+      // If table spans to additional pages, re-apply letterhead header & footer
+      if (hookData.pageNumber > 1) {
+        applyLetterhead(doc, selectedRegNo, bgBase64);
+      }
     },
     didDrawCell: (hookData) => {
-      // Draw thumbnail image inside column index 1
+      // Draw thumbnail image inside column index 1 (Image)
       if (hookData.section === "body" && hookData.column.index === 1) {
         const rowIdx = hookData.row.index;
         const img = itemImagesBase64[rowIdx];
@@ -287,110 +476,191 @@ export async function generateQuotationPdf(data: QuotationPdfData): Promise<void
           try {
             const cellW = hookData.cell.width;
             const cellH = hookData.cell.height;
-            const imgSize = Math.min(cellW - 4, cellH - 4, 14);
+            const imgSize = Math.min(cellW - 4, cellH - 4, 26);
             const x = hookData.cell.x + (cellW - imgSize) / 2;
             const y = hookData.cell.y + (cellH - imgSize) / 2;
-            doc.addImage(img, "JPEG", x, y, imgSize, imgSize, undefined, "FAST");
+            doc.addImage(
+              img,
+              "JPEG",
+              x,
+              y,
+              imgSize,
+              imgSize,
+              undefined,
+              "FAST"
+            );
           } catch {
-            // Ignore image render failures
+            // Ignore individual image render failures
           }
         }
       }
     },
   });
 
-  // Position after table
-  const finalY = (doc as any).lastAutoTable?.finalY || tableStartY + 40;
+  // ================= PAGE 2: Terms and Conditions =================
+  doc.addPage();
+  applyLetterhead(doc, selectedRegNo, bgBase64);
 
-  // --- SUMMARY / TOTALS SECTION ---
-  const summaryWidth = 85;
-  const summaryX = pageWidth - margin - summaryWidth;
-  let summaryY = finalY + 6;
-
-  // Check if page break is needed for summary
-  if (summaryY + 45 > pageHeight - margin) {
-    doc.addPage();
-    summaryY = margin + 10;
-  }
-
-  // Summary background box
-  doc.setFillColor(250, 250, 250);
-  doc.setDrawColor(226, 232, 240);
-  doc.roundedRect(summaryX, summaryY, summaryWidth, 38, 2, 2, "FD");
-
-  // Subtotal line
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(9);
-  doc.setTextColor(71, 85, 105);
-  doc.text("Subtotal:", summaryX + 4, summaryY + 7);
-  doc.text(formatLKR(data.subtotal), summaryX + summaryWidth - 4, summaryY + 7, {
-    align: "right",
-  });
-
-  let nextSummaryY = summaryY + 14;
-
-  // Advance Payment breakdown if selected
-  if (data.paymentMethod === "ADVANCE_PAYMENT" && data.advancePercent != null) {
-    const advanceAmount = (data.totalAmount * data.advancePercent) / 100;
-    const balanceDue = data.totalAmount - advanceAmount;
-
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(8.5);
-    doc.setTextColor(180, 83, 9); // Amber
-    doc.text(`Advance Payable (${data.advancePercent}%):`, summaryX + 4, nextSummaryY);
-    doc.text(formatLKR(advanceAmount), summaryX + summaryWidth - 4, nextSummaryY, {
-      align: "right",
-    });
-
-    nextSummaryY += 6;
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(8.5);
-    doc.setTextColor(71, 85, 105);
-    doc.text("Balance Due on Delivery:", summaryX + 4, nextSummaryY);
-    doc.text(formatLKR(balanceDue), summaryX + summaryWidth - 4, nextSummaryY, {
-      align: "right",
-    });
-
-    nextSummaryY += 7;
-  }
-
-  // Grand Total banner
-  doc.setFillColor(24, 76, 120);
-  doc.roundedRect(
-    summaryX,
-    summaryY + 27,
-    summaryWidth,
-    11,
-    1,
-    1,
-    "F"
-  );
-
+  let curY = 52;
   doc.setFont("helvetica", "bold");
-  doc.setFontSize(10);
-  doc.setTextColor(255, 255, 255);
-  doc.text("GRAND TOTAL:", summaryX + 4, summaryY + 34);
-  doc.text(formatLKR(data.totalAmount), summaryX + summaryWidth - 4, summaryY + 34, {
-    align: "right",
-  });
+  doc.setFontSize(10.5);
+  doc.setTextColor(0, 0, 0);
+  doc.text("General Terms and Conditions for the Client", 14, curY);
+  curY += 7;
 
-  // --- FOOTER & SIGNATURE ---
-  const footerY = pageHeight - 24;
+  const generalBullets = [
+    "Ownership of goods shall remain with LK TRONICS until full payment is settled.",
+    "Orders once confirmed cannot be cancelled. In the event of cancellation, any advance paid will be non-refundable.",
+    "The company shall not be held liable for delays or failures due to events beyond reasonable control, including natural disasters, riots, pandemics, or supply chain disruptions.",
+    "This quotation and its pricing are confidential and intended solely for the client. Sharing or distributing it without consent is prohibited.",
+  ];
 
-  doc.setDrawColor(203, 213, 225);
-  doc.setLineWidth(0.4);
-  doc.line(margin, footerY - 4, pageWidth - margin, footerY - 4);
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(8.5);
+  for (const b of generalBullets) {
+    drawCheckmark(doc, 15, curY);
+    const split = doc.splitTextToSize(b, 172);
+    doc.text(split, 21, curY);
+    curY += split.length * 4.2 + 2.5;
+  }
+
+  curY += 3;
+  const sections = [
+    {
+      title: "Validity of Quotation",
+      body: "This quotation is valid for a period of Three (03) days from the date of issue. Upon expiry of this period, the prices, availability, and terms specified herein shall be subject to change and may be adjusted based on market conditions, supplier revisions, or other applicable factors.",
+    },
+    {
+      title: "Lead Time & Stock Status",
+      body: "For products sourced from overseas, the standard delivery lead time ranges from 12–21 business working days, calculated from the date of advance payment or receipt of an official purchase order. Items currently in stock at our Homagama warehouse will be delivered within 2–5 business working days. The stock availability status for each product is clearly specified in the respective product description column of this quotation. (Availability of in-stock products may change without prior notice. Customers are advised to confirm the current stock status with our sales team before issuing a purchase order or making any advance payment.)",
+    },
+    {
+      title: "Warranty Terms",
+      body: "Warranty coverage shall be granted based on the manufacturer's or supplier's policy. Damages arising from misuse, mishandling, improper installation, modifications, or external environmental factors are not covered under any circumstances. Where applicable, the warranty period and conditions will be specified in the respective product table within this quotation.",
+    },
+    {
+      title: "Delivery from Homagama Warehouse",
+      body: "If delivery charges are not specified in the quotation table, the client shall be responsible for either arranging collection of the goods from our store or bearing the applicable delivery cost, should delivery be required.",
+    },
+  ];
+
+  for (const sec of sections) {
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(9.5);
+    doc.setTextColor(0, 0, 0);
+    doc.text(sec.title, 14, curY);
+    curY += 4.5;
+
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(8.5);
+    const split = doc.splitTextToSize(sec.body, 182);
+    doc.text(split, 14, curY);
+    curY += split.length * 4.1 + 4.5;
+  }
+
+  // ================= PAGE 3: Payment, Bank Details & Signature =================
+  doc.addPage();
+  applyLetterhead(doc, selectedRegNo, bgBase64);
+
+  curY = 52;
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(9.5);
+  doc.setTextColor(0, 0, 0);
+  doc.text("Payment Terms", 14, curY);
+  curY += 4.5;
+
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(8.5);
+  const paySplit = doc.splitTextToSize(
+    "Payment shall be effected based on the agreed payment method (Full Payment / 80% Advance Payment / Credit) selected by the client and confirmed at the time of order. No processing or delivery will commence until the agreed payment terms are fulfilled.",
+    182
+  );
+  doc.text(paySplit, 14, curY);
+  curY += paySplit.length * 4.1 + 8;
+
+  // Bank Details Box
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(9.5);
+  doc.text("Bank Details", 14, curY);
+  curY += 5;
+
+  const bankBoxX = 14;
+  const bankBoxY = curY;
+  const bankBoxW = 120;
+  const bankBoxH = 26;
+
+  doc.setFillColor(255, 255, 255);
+  doc.setDrawColor(0, 0, 0);
+  doc.setLineWidth(0.35);
+  doc.rect(bankBoxX, bankBoxY, bankBoxW, bankBoxH, "FD");
+
+  const bankRows = [
+    { label: "Account Name", val: "LK TRONICS TRADING PVT LTD" },
+    { label: "Account Number", val: "047010021564" },
+    { label: "Bank Name", val: "Hatton National Bank" },
+    { label: "Bank Branch", val: "Biyagama" },
+  ];
+
+  let curBankY = bankBoxY + 5;
+  for (const b of bankRows) {
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(8.5);
+    doc.setTextColor(0, 0, 0);
+    doc.text(b.label, bankBoxX + 4, curBankY);
+    doc.setFont("helvetica", "normal");
+    doc.text(b.val, bankBoxX + 38, curBankY);
+    curBankY += 5.5;
+  }
 
   // Signature Block
-  const sigX = pageWidth - margin - 50;
+  const sigY = bankBoxY + 45;
+  const sigX = 145;
   doc.setFont("helvetica", "normal");
-  doc.setFontSize(8);
-  doc.setTextColor(71, 85, 105);
-  doc.text("Authorized Signature", sigX + 25, footerY + 8, { align: "center" });
-  doc.setDrawColor(100, 116, 139);
-  doc.line(sigX, footerY + 4, sigX + 50, footerY + 4);
+  doc.setFontSize(8.5);
+  doc.setTextColor(100, 100, 100);
+  doc.text("............................................", sigX, sigY);
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(9);
+  doc.setTextColor(0, 0, 0);
+  doc.text("Authorized by", sigX + 10, sigY + 5);
+
+  // Closing appreciation note
+  doc.setFont("helvetica", "bolditalic");
+  doc.setFontSize(9);
+  doc.setTextColor(30, 41, 59);
+  doc.text(
+    "We sincerely appreciate the opportunity to submit this quotation and look forward to\nsupporting your requirements.",
+    105,
+    sigY + 24,
+    { align: "center" }
+  );
+
+  // ================= PAGE 4: Brands We Do =================
+  doc.addPage();
+  applyLetterhead(doc, selectedRegNo, bgBase64);
+
+  // Render brands sheet centered on page 4
+  if (brandsBase64) {
+    try {
+      doc.addImage(
+        brandsBase64,
+        "PNG",
+        18,
+        48,
+        174,
+        230,
+        undefined,
+        "FAST"
+      );
+    } catch {
+      // Ignore if brand sheet rendering fails
+    }
+  }
 
   // Save / Trigger Download
-  const cleanFileName = (data.quotationNo || "Quotation").replace(/[^a-zA-Z0-9_-]/g, "_");
+  const cleanFileName = (data.quotationNo || "Quotation").replace(
+    /[^a-zA-Z0-9_-]/g,
+    "_"
+  );
   doc.save(`${cleanFileName}.pdf`);
 }

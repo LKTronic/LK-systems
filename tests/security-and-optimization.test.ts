@@ -501,6 +501,59 @@ describe("Quotation Calculations & Financial Validation", () => {
     assert.equal(balanceDue, 14130);
     assert.equal(advancePayable + balanceDue, subtotal);
   });
+
+  it("formats template currency format (Rs X,XXX.XX) accurately", async () => {
+    const { formatRs } = await import("../src/lib/quotationPdfGenerator");
+    assert.equal(formatRs(15270), "Rs 15,270.00");
+    assert.equal(formatRs(0), "Rs 0.00");
+    assert.equal(formatRs(450.5), "Rs 450.50");
+  });
+
+  it("formats Product/Service cell with stock status first, and conditional warranty", async () => {
+    const { formatProductServiceCell } = await import("../src/lib/quotationPdfGenerator");
+
+    // Case 1: In-stock item with warranty -> Stock first, then warranty
+    const cell1 = formatProductServiceCell(
+      "Original MeanWell NDR 120 Series 24V DC",
+      "IN_STOCK",
+      null,
+      "06 months warranty"
+    );
+    assert.ok(cell1.includes("(instocks)"), "Should include (instocks)");
+    assert.ok(cell1.includes("(06 months warranty)"), "Should include (06 months warranty)");
+    const instockIdx1 = cell1.indexOf("(instocks)");
+    const warrantyIdx1 = cell1.indexOf("(06 months warranty)");
+    assert.ok(instockIdx1 < warrantyIdx1, "(instocks) must appear before warranty");
+
+    // Case 2: Overseas item with lead time and warranty
+    const cell2 = formatProductServiceCell(
+      "Stepper Driver CL57T",
+      "OVERSEAS",
+      "12-21",
+      "1 Year Warranty"
+    );
+    assert.ok(cell2.includes("(Shipping from overseas - 12-21 working days)"), "Should include formatted lead time");
+    assert.ok(cell2.includes("(1 Year Warranty)"), "Should include warranty");
+
+    // Case 3: No Warranty -> Must NOT show warranty text at all
+    const cell3 = formatProductServiceCell(
+      "Resistor 10k Ohm",
+      "IN_STOCK",
+      null,
+      "No Warranty"
+    );
+    assert.ok(cell3.includes("(instocks)"), "Should include (instocks)");
+    assert.ok(!cell3.toLowerCase().includes("warranty"), "Should omit warranty when No Warranty");
+
+    // Case 4: Null or empty warranty -> Must NOT show warranty text
+    const cell4 = formatProductServiceCell(
+      "Capacitor 100uF",
+      "IN_STOCK",
+      null,
+      null
+    );
+    assert.ok(!cell4.toLowerCase().includes("warranty"), "Should omit warranty when null");
+  });
 });
 
 

@@ -55,3 +55,6 @@ SHOP_FAST_SEARCH_PLAN.md
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# scratch
+scratch/
