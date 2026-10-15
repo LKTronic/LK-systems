@@ -1048,14 +1048,11 @@ export default function EditQuotationPage({
                     <img
                       src={previewImage}
                       alt="Preview"
-                      className="max-h-48 max-w-full object-contain rounded-lg shadow-sm"
+                      className="max-h-52 max-w-full object-contain rounded-lg shadow-sm"
                       onError={() => {
-                        setImageUploadError("Unable to load image from the provided URL / path.");
+                        setImageUploadError("Unable to load image.");
                       }}
                     />
-                    <div className="mt-2 text-[11px] text-slate-400 font-mono break-all line-clamp-1 max-w-sm">
-                      {previewImage}
-                    </div>
                   </div>
                 ) : (
                   <div className="flex flex-col items-center gap-2 text-slate-500">
@@ -1081,7 +1078,7 @@ export default function EditQuotationPage({
               )}
 
               {/* Upload Button & File Input */}
-              <div className="flex items-center gap-3">
+              <div>
                 <input
                   ref={fileInputRef}
                   type="file"
@@ -1097,37 +1094,11 @@ export default function EditQuotationPage({
                   type="button"
                   onClick={() => fileInputRef.current?.click()}
                   disabled={isUploadingImage}
-                  className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-2 bg-slate-800 hover:bg-slate-700 text-teal-300 border border-slate-700 rounded-lg text-xs font-semibold transition-colors disabled:opacity-50"
+                  className="w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-slate-800 hover:bg-slate-700 text-teal-300 border border-slate-700 rounded-lg text-xs font-semibold transition-colors disabled:opacity-50"
                 >
                   <Upload className="w-4 h-4 text-teal-400" />
                   Upload from Computer
                 </button>
-              </div>
-
-              {/* Or Web / Local URL Input */}
-              <div className="space-y-1">
-                <label className="block text-[11px] font-medium text-slate-400">
-                  Or Paste Image URL / Path:
-                </label>
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    value={imageUrlInput}
-                    onChange={(e) => {
-                      setImageUrlInput(e.target.value);
-                      setPreviewImage(e.target.value.trim() || null);
-                    }}
-                    placeholder="https://... or /uploads/products/..."
-                    className="flex-1 bg-slate-950 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-teal-500"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setPreviewImage(imageUrlInput.trim() || null)}
-                    className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-xs font-medium border border-slate-700 transition-colors"
-                  >
-                    Preview
-                  </button>
-                </div>
               </div>
 
               <div className="text-[11px] text-slate-500 bg-slate-950/50 p-2.5 rounded-lg border border-slate-800/80 flex items-center gap-2">
