@@ -663,6 +663,20 @@ describe("Quotation Calculations & Financial Validation", () => {
     // 3. Default fallback
     assert.equal(getValidityDays({} as any), 3);
   });
+
+  it("includes imported products payment condition in General Terms and Conditions list", async () => {
+    const { DEFAULT_GENERAL_TERMS_BULLETS } = await import(
+      "../src/lib/quotationPdfGenerator"
+    );
+    assert.ok(
+      DEFAULT_GENERAL_TERMS_BULLETS.some((bullet) =>
+        bullet.includes(
+          "For imported products, the goods will be released from our warehouse only after the full payment has been completed"
+        )
+      ),
+      "Must include imported products full payment release clause in General Terms and Conditions"
+    );
+  });
 });
 
 

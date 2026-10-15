@@ -213,7 +213,11 @@ export async function loadImageAsBase64(url: string): Promise<string | null> {
       if (fs.existsSync(fullPath)) {
         const ext = path.extname(fullPath).toLowerCase().replace(".", "");
         const mime =
-          ext === "jpg" || ext === "jpeg" ? "image/jpeg" : "image/png";
+          ext === "png"
+            ? "image/png"
+            : ext === "jpg" || ext === "jpeg"
+            ? "image/jpeg"
+            : "image/png";
         const buffer = fs.readFileSync(fullPath);
         return `data:${mime};base64,${buffer.toString("base64")}`;
       }
@@ -252,6 +256,18 @@ export async function loadImageAsBase64(url: string): Promise<string | null> {
 
     if (!res.ok) return null;
     const blob = await res.blob();
+
+    // Preserve PNG format with transparency (do NOT rasterize to opaque JPEG)
+    if (blob.type === "image/png" || url.toLowerCase().includes(".png")) {
+      return new Promise((resolve) => {
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          resolve(reader.result as string);
+        };
+        reader.onerror = () => resolve(null);
+        reader.readAsDataURL(blob);
+      });
+    }
 
     // Standardize via offscreen canvas for crisp JPEG on white background
     const canvasResult = await convertBlobToJpegBase64(blob);
@@ -547,6 +563,17 @@ export function formatProductServiceCell(
 }
 
 /**
+ * Default General Terms and Conditions bullets for quotation PDF
+ */
+export const DEFAULT_GENERAL_TERMS_BULLETS = [
+  "Ownership of goods shall remain with LK TRONICS until full payment is settled.",
+  "For imported products, the goods will be released from our warehouse only after the full payment has been completed, including the remaining balance after the advance payment.",
+  "Orders once confirmed cannot be cancelled. In the event of cancellation, any advance paid will be non-refundable.",
+  "The company shall not be held liable for delays or failures due to events beyond reasonable control, including natural disasters, riots, pandemics, or supply chain disruptions.",
+  "This quotation and its pricing are confidential and intended solely for the client. Sharing or distributing it without consent is prohibited.",
+];
+
+/**
  * Generate and download Quotation PDF matching official 4-page Word template (20261015QJ01.docx)
  */
 export async function generateQuotationPdf(
@@ -656,12 +683,18 @@ export async function generateQuotationPdf(
   });
 
   // Footer row: Exact Word template has ONLY Total Amount in the table
+  // Keep row height small to match only the total price content
   const tableFoot: any[] = [
     [
       {
         content: "",
         colSpan: 1,
-        styles: { lineWidth: 0.35, fillColor: [255, 255, 255] },
+        styles: {
+          lineWidth: 0.35,
+          fillColor: [255, 255, 255],
+          minCellHeight: 9.5,
+          cellPadding: 2,
+        },
       },
       {
         content: "Total Amount",
@@ -669,9 +702,11 @@ export async function generateQuotationPdf(
         styles: {
           halign: "center",
           fontStyle: "bold",
-          fontSize: 10.5,
+          fontSize: 10,
           textColor: [0, 0, 0],
           fillColor: [255, 255, 255],
+          minCellHeight: 9.5,
+          cellPadding: 2,
         },
       },
       {
@@ -680,9 +715,11 @@ export async function generateQuotationPdf(
         styles: {
           halign: "center",
           fontStyle: "bold",
-          fontSize: 10.5,
+          fontSize: 10,
           textColor: [0, 0, 0],
           fillColor: [255, 255, 255],
+          minCellHeight: 9.5,
+          cellPadding: 2,
         },
       },
     ],
@@ -712,7 +749,7 @@ export async function generateQuotationPdf(
       textColor: [0, 0, 0],
       fontSize: 10,
       cellPadding: 4,
-      minCellHeight: 28,
+      minCellHeight: 35, // Increased row height for product body rows
       valign: "middle",
       fillColor: [255, 255, 255],
     },
@@ -725,15 +762,21 @@ export async function generateQuotationPdf(
       cellPadding: 3,
       valign: "middle",
     },
+    footStyles: {
+      minCellHeight: 9.5,
+      cellPadding: 2,
+      valign: "middle",
+      fillColor: [255, 255, 255],
+    },
     columnStyles: {
       0: { cellWidth: 12, halign: "center", valign: "middle" },
       1: {
         cellWidth: 34,
         halign: "center",
         valign: "middle",
-        minCellHeight: 28,
+        minCellHeight: 35,
       },
-      2: { cellWidth: 51, halign: "left", valign: "middle" },
+      2: { cellWidth: 51, halign: "left", valign: "middle", minCellHeight: 35 },
       3: { cellWidth: 15, halign: "center", valign: "middle" },
       4: { cellWidth: 28, halign: "center", valign: "middle" },
       5: { cellWidth: 28, halign: "center", valign: "middle" },
@@ -760,7 +803,7 @@ export async function generateQuotationPdf(
           try {
             const cellW = hookData.cell.width;
             const cellH = hookData.cell.height;
-            const imgSize = Math.min(cellW - 6, cellH - 6, 24);
+            const imgSize = Math.min(cellW - 6, cellH - 6, 28);
             const x = hookData.cell.x + (cellW - imgSize) / 2;
             const y = hookData.cell.y + (cellH - imgSize) / 2;
             const format = img.startsWith("data:image/png") ? "PNG" : "JPEG";
@@ -795,7 +838,7 @@ export async function generateQuotationPdf(
         doc.setFontSize(10);
         const descLines = doc.splitTextToSize(item.description.trim(), maxTextW);
 
-        // Highlight lines (stock status & warranty)
+        // Highlight lines (stock status & warranty) using smaller 8pt font
         const hlLines = getProductHighlightLines(
           item.stockStatus,
           item.leadTime,
@@ -803,7 +846,7 @@ export async function generateQuotationPdf(
         );
 
         doc.setFont("helvetica", "italic");
-        doc.setFontSize(9.5);
+        doc.setFontSize(8);
         const wrappedHlLines: string[] = [];
         for (const hl of hlLines) {
           const split = doc.splitTextToSize(hl, maxTextW);
@@ -811,14 +854,15 @@ export async function generateQuotationPdf(
         }
 
         const lineH = 4.4;
-        const spacerH = 2.5;
+        const hlLineH = 3.8;
+        const spacerH = 2.0;
         const totalContentH =
-          descLines.length * lineH + spacerH + wrappedHlLines.length * lineH;
+          descLines.length * lineH + spacerH + wrappedHlLines.length * hlLineH;
 
         let curY =
           cell.y +
-          Math.max(4, (cell.height - totalContentH) / 2) +
-          3.2;
+          Math.max(3, (cell.height - totalContentH) / 2) +
+          3.0;
 
         // Draw description lines (normal, 10pt)
         doc.setFont("helvetica", "normal");
@@ -833,24 +877,24 @@ export async function generateQuotationPdf(
 
         curY += spacerH;
 
-        // Draw yellow highlighted stock & warranty lines (italic, 9.5pt, #FFFF00 highlight)
+        // Draw yellow highlighted stock & warranty lines (italic, 8pt, #FFFF00 highlight)
         doc.setFont("helvetica", "italic");
-        doc.setFontSize(9.5);
+        doc.setFontSize(8);
         for (const hLine of wrappedHlLines) {
           const strW = doc.getTextWidth(hLine);
-          const padHL = 1.0;
+          const padHL = 0.8;
           const rectW = Math.min(strW + padHL * 2, maxTextW);
-          const rectH = 4.2;
+          const rectH = 3.6;
 
           // Bright yellow highlight box behind text
           doc.setFillColor(255, 255, 0);
-          doc.rect(cell.x + padX, curY - 3.2, rectW, rectH, "F");
+          doc.rect(cell.x + padX, curY - 2.8, rectW, rectH, "F");
 
           // Text over highlight
           doc.setTextColor(0, 0, 0);
           doc.text(hLine, cell.x + padX + padHL, curY);
 
-          curY += 4.5;
+          curY += 4.0;
         }
       }
     },
@@ -868,12 +912,7 @@ export async function generateQuotationPdf(
   doc.text("General Terms and Conditions for the Client", 21, curY);
   curY += 8;
 
-  const generalBullets = [
-    "Ownership of goods shall remain with LK TRONICS until full payment is settled.",
-    "Orders once confirmed cannot be cancelled. In the event of cancellation, any advance paid will be non-refundable.",
-    "The company shall not be held liable for delays or failures due to events beyond reasonable control, including natural disasters, riots, pandemics, or supply chain disruptions.",
-    "This quotation and its pricing are confidential and intended solely for the client. Sharing or distributing it without consent is prohibited.",
-  ];
+  const generalBullets = DEFAULT_GENERAL_TERMS_BULLETS;
 
   doc.setFont("helvetica", "normal");
   doc.setFontSize(10);
@@ -1073,15 +1112,17 @@ export async function generateQuotationPdf(
   applyLetterhead(doc, selectedRegNo, bgBase64);
 
   // Render brands sheet centered on page 4
+  // In Word docx: cx = 155.18 mm, cy = 219.50 mm, positioned below top header
+  // Keep x centered on A4: (210 - 155) / 2 = 27.5 mm, y = 50 mm
   if (brandsBase64) {
     try {
       doc.addImage(
         brandsBase64,
         "PNG",
-        18,
-        48,
-        174,
-        230,
+        27.5,
+        50,
+        155,
+        219,
         undefined,
         "FAST"
       );
