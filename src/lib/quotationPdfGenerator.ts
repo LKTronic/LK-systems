@@ -156,13 +156,13 @@ function applyLetterhead(
   doc.rect(0, 23.3, 210, 6.8, "F");
 
   doc.setFont("helvetica", "bold");
-  doc.setFontSize(7.2);
+  doc.setFontSize(10);
   doc.setTextColor(215, 235, 238);
-  doc.text("LK TRONICS,HIGH-LEVEL ROAD,HOMAGAMA,SRI LANKA.", 10, 27.6);
+  doc.text("LK TRONICS,HIGH-LEVEL ROAD,HOMAGAMA,SRI LANKA.", 10, 27.8);
   doc.text(
     `TEL : 011 4 215 515 | REG NO - ${customRegNo}`,
     200,
-    27.6,
+    27.8,
     { align: "right" }
   );
 }
@@ -247,12 +247,12 @@ export async function generateQuotationPdf(
   applyLetterhead(doc, selectedRegNo, bgBase64);
 
   // Exact Word Metadata Box (Right):
-  // X = 109.3 mm, Y = 60.5 mm, Width = 93.7 mm, Height = 29.5 mm
+  // X = 109.3 mm, Y = 60.5 mm, Width = 93.7 mm, Height = 34 mm
   // Positioned cleanly below the circular logo & "Services" (which ends at 59mm)
   const boxX = 109.3;
   const boxY = 60.5;
   const boxW = 93.7;
-  const boxH = 29.5;
+  const boxH = 34;
 
   doc.setFillColor(255, 255, 255);
   doc.setDrawColor(0, 0, 0);
@@ -273,14 +273,14 @@ export async function generateQuotationPdf(
     { label: "Prepared by:", val: data.preparedBy || "Staff" },
   ];
 
-  let curMetaY = boxY + 5.2;
+  let curMetaY = boxY + 5.8;
   for (const r of metaRows) {
     doc.setFont("helvetica", "normal");
-    doc.setFontSize(8.5);
+    doc.setFontSize(10);
     doc.setTextColor(0, 0, 0);
     doc.text(r.label, boxX + 3.5, curMetaY);
     doc.text(String(r.val), boxX + boxW - 3.5, curMetaY, { align: "right" });
-    curMetaY += 5.1;
+    curMetaY += 5.8;
   }
 
   // Exact Word QUOTATION TO (Left):
@@ -288,12 +288,12 @@ export async function generateQuotationPdf(
   const toX = 25.4;
   const toY = 82.2;
   doc.setFont("helvetica", "bold");
-  doc.setFontSize(10.5);
+  doc.setFontSize(11);
   doc.setTextColor(0, 0, 0);
   doc.text("QUOTATION TO -", toX, toY);
 
   doc.setFont("helvetica", "normal");
-  doc.setFontSize(9.5);
+  doc.setFontSize(10);
   doc.setTextColor(0, 0, 0);
   const toLines = doc.splitTextToSize(
     data.quotationTo || "Valued Customer",
@@ -303,7 +303,7 @@ export async function generateQuotationPdf(
 
   // Exact Word Items Table:
   // startY = 108 mm, Margin left 21mm, right 21mm (total width: 168mm)
-  const tableStartY = Math.max(108, toY + 5.5 + toLines.length * 4.8 + 3);
+  const tableStartY = Math.max(108, toY + 5.5 + toLines.length * 5.2 + 3);
 
   const tableData = data.items.map((item, idx) => {
     const productCellText = formatProductServiceCell(
@@ -337,7 +337,7 @@ export async function generateQuotationPdf(
         styles: {
           halign: "center",
           fontStyle: "bold",
-          fontSize: 9.5,
+          fontSize: 10.5,
           textColor: [0, 0, 0],
           fillColor: [255, 255, 255],
         },
@@ -348,7 +348,7 @@ export async function generateQuotationPdf(
         styles: {
           halign: "center",
           fontStyle: "bold",
-          fontSize: 9.5,
+          fontSize: 10.5,
           textColor: [0, 0, 0],
           fillColor: [255, 255, 255],
         },
@@ -378,20 +378,20 @@ export async function generateQuotationPdf(
       lineColor: [0, 0, 0],
       lineWidth: 0.35,
       textColor: [0, 0, 0],
-      fontSize: 8.5,
+      fontSize: 10,
       cellPadding: 2.5,
       valign: "middle",
       fillColor: [255, 255, 255],
     },
     headStyles: {
       fontStyle: "bold",
-      fontSize: 8.5,
+      fontSize: 10,
       textColor: [0, 0, 0],
       fillColor: [255, 255, 255],
     },
     columnStyles: {
-      0: { cellWidth: 12, halign: "center" },
-      1: { cellWidth: 38, halign: "center" },
+      0: { cellWidth: 14, halign: "center" },
+      1: { cellWidth: 36, halign: "center" },
       2: { cellWidth: 45, halign: "left" },
       3: { cellWidth: 16, halign: "center" },
       4: { cellWidth: 28, halign: "center" },
@@ -440,10 +440,10 @@ export async function generateQuotationPdf(
   // Starts at Y = 70 mm to cleanly clear the circular logo banner (which ends at 59mm)
   let curY = 70;
   doc.setFont("helvetica", "bold");
-  doc.setFontSize(11);
+  doc.setFontSize(12);
   doc.setTextColor(0, 0, 0);
   doc.text("General Terms and Conditions for the Client", 21, curY);
-  curY += 7.5;
+  curY += 8;
 
   const generalBullets = [
     "Ownership of goods shall remain with LK TRONICS until full payment is settled.",
@@ -453,12 +453,12 @@ export async function generateQuotationPdf(
   ];
 
   doc.setFont("helvetica", "normal");
-  doc.setFontSize(8.5);
+  doc.setFontSize(10);
   for (const b of generalBullets) {
     drawCheckmark(doc, 22, curY);
-    const split = doc.splitTextToSize(b, 160);
+    const split = doc.splitTextToSize(b, 158);
     doc.text(split, 28, curY);
-    curY += split.length * 4.2 + 2.5;
+    curY += split.length * 4.8 + 2.5;
   }
 
   curY += 3;
@@ -483,16 +483,16 @@ export async function generateQuotationPdf(
 
   for (const sec of sections) {
     doc.setFont("helvetica", "bold");
-    doc.setFontSize(9.5);
+    doc.setFontSize(11);
     doc.setTextColor(0, 0, 0);
     doc.text(sec.title, 21, curY);
-    curY += 4.5;
+    curY += 5;
 
     doc.setFont("helvetica", "normal");
-    doc.setFontSize(8.5);
+    doc.setFontSize(10);
     const split = doc.splitTextToSize(sec.body, 168);
     doc.text(split, 21, curY);
-    curY += split.length * 4.1 + 4.5;
+    curY += split.length * 4.6 + 4.5;
   }
 
   // ================= PAGE 3: Payment, Bank Details & Signature =================
@@ -502,30 +502,30 @@ export async function generateQuotationPdf(
   // Starts at Y = 70 mm to cleanly clear the circular logo banner
   curY = 70;
   doc.setFont("helvetica", "bold");
-  doc.setFontSize(9.5);
+  doc.setFontSize(11);
   doc.setTextColor(0, 0, 0);
   doc.text("Payment Terms", 21, curY);
-  curY += 4.5;
+  curY += 5;
 
   doc.setFont("helvetica", "normal");
-  doc.setFontSize(8.5);
+  doc.setFontSize(10);
   const paySplit = doc.splitTextToSize(
     "Payment shall be effected based on the agreed payment method (Full Payment / 80% Advance Payment / Credit) selected by the client and confirmed at the time of order. No processing or delivery will commence until the agreed payment terms are fulfilled.",
     168
   );
   doc.text(paySplit, 21, curY);
-  curY += paySplit.length * 4.1 + 8;
+  curY += paySplit.length * 4.6 + 8;
 
   // Bank Details Box
   doc.setFont("helvetica", "bold");
-  doc.setFontSize(9.5);
+  doc.setFontSize(11);
   doc.text("Bank Details", 21, curY);
   curY += 5;
 
   const bankBoxX = 21;
   const bankBoxY = curY;
-  const bankBoxW = 120;
-  const bankBoxH = 26;
+  const bankBoxW = 125;
+  const bankBoxH = 30;
 
   doc.setFillColor(255, 255, 255);
   doc.setDrawColor(0, 0, 0);
@@ -539,37 +539,37 @@ export async function generateQuotationPdf(
     { label: "Bank Branch", val: "Biyagama" },
   ];
 
-  let curBankY = bankBoxY + 5;
+  let curBankY = bankBoxY + 5.5;
   for (const b of bankRows) {
     doc.setFont("helvetica", "bold");
-    doc.setFontSize(8.5);
+    doc.setFontSize(10);
     doc.setTextColor(0, 0, 0);
     doc.text(b.label, bankBoxX + 4, curBankY);
     doc.setFont("helvetica", "normal");
-    doc.text(b.val, bankBoxX + 38, curBankY);
-    curBankY += 5.5;
+    doc.text(b.val, bankBoxX + 42, curBankY);
+    curBankY += 6.2;
   }
 
   // Signature Block
-  const sigY = bankBoxY + 45;
+  const sigY = bankBoxY + 50;
   const sigX = 145;
   doc.setFont("helvetica", "normal");
-  doc.setFontSize(8.5);
+  doc.setFontSize(10);
   doc.setTextColor(100, 100, 100);
   doc.text("............................................", sigX, sigY);
   doc.setFont("helvetica", "bold");
-  doc.setFontSize(9);
+  doc.setFontSize(10);
   doc.setTextColor(0, 0, 0);
-  doc.text("Authorized by", sigX + 10, sigY + 5);
+  doc.text("Authorized by", sigX + 10, sigY + 5.5);
 
   // Closing appreciation note
   doc.setFont("helvetica", "bolditalic");
-  doc.setFontSize(9);
+  doc.setFontSize(10.5);
   doc.setTextColor(30, 41, 59);
   doc.text(
     "We sincerely appreciate the opportunity to submit this quotation and look forward to\nsupporting your requirements.",
     105,
-    sigY + 24,
+    sigY + 25,
     { align: "center" }
   );
 
