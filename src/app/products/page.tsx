@@ -65,6 +65,7 @@ interface Product {
   stockStatus?: string | null;
   status: "PENDING" | "ACTIVE" | "EXPIRED" | "PRICE_NOT_AVAILABLE" | "NOT_REQUESTED" | "QUOTED";
   createdAt: string;
+  updatedAt?: string | null;
   supplierNote?: string | null;
   additionalNote?: string | null;
   category?: {
@@ -1730,8 +1731,8 @@ export default function ProductsPage() {
                             }
 
                             const dateToShow = isPending
-                              ? (p.createdAt || p.productDate)
-                              : (p.priceUpdatedAt || p.createdAt || p.productDate);
+                              ? (p.productDate || p.updatedAt || p.createdAt)
+                              : (p.priceUpdatedAt || p.productDate || p.createdAt);
 
                             return (
                               <div className="inline-flex flex-col items-center">
