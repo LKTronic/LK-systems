@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
@@ -25,6 +25,10 @@ import {
   AlertCircle,
   Package,
   Percent,
+  Upload,
+  Clipboard,
+  ImagePlus,
+  X,
 } from "lucide-react";
 
 interface ItemRow {
@@ -81,6 +85,15 @@ export default function CreateQuotationPage() {
   const [productSearchQuery, setProductSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState<ProductSearchResult[]>([]);
   const [isSearchingProducts, setIsSearchingProducts] = useState(false);
+
+  // Image Upload / Preview / Paste Modal State
+  const [isImageModalOpen, setIsImageModalOpen] = useState(false);
+  const [targetImageIndex, setTargetImageIndex] = useState<number | null>(null);
+  const [previewImage, setPreviewImage] = useState<string | null>(null);
+  const [imageUrlInput, setImageUrlInput] = useState<string>("");
+  const [isUploadingImage, setIsUploadingImage] = useState(false);
+  const [imageUploadError, setImageUploadError] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   // Initialize dates and default quotation number
   useEffect(() => {
@@ -166,7 +179,106 @@ export default function CreateQuotationPage() {
     });
   };
 
-  // Search PMS Inventory for Product Picker
+  // --- IMAGE MODAL HANDLERS ---
+  const openImageModal = (index: number) => {
+    setTargetImageIndex(index);
+    const currentPath = items[index]?.imagePath || null;
+    setPreviewImage(currentPath);
+    setImageUrlInput(currentPath || "");
+    setImageUploadError(null);
+    setIsImageModalOpen(true);
+  };
+
+  const handleImageFileUpload = async (file: File) => {
+    if (!file) return;
+    setIsUploadingImage(true);
+    setImageUploadError(null);
+
+    // Instant local preview
+    const localBlobUrl = URL.createObjectURL(file);
+    setPreviewImage(localBlobUrl);
+
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+
+      const res = await fetch("/api/upload", {
+        method: "POST",
+        body: formData,
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || "Image upload failed");
+      }
+
+      setPreviewImage(data.url);
+      setImageUrlInput(data.url);
+    } catch (err: any) {
+      console.error("Upload error:", err);
+      setImageUploadError(err.message || "Failed to upload image. Please try another image.");
+    } finally {
+      setIsUploadingImage(false);
+    }
+  };
+
+  // Listen to Global Paste (Ctrl+V) when Image Modal is open
+  useEffect(() => {
+    if (!isImageModalOpen) return;
+
+    const handleWindowPaste = (e: ClipboardEvent) => {
+      const clipboardItems = e.clipboardData?.items;
+      if (!clipboardItems) return;
+
+      for (let i = 0; i < clipboardItems.length; i++) {
+        const item = clipboardItems[i];
+        if (item.type.indexOf("image") !== -1) {
+          const file = item.getAsFile();
+          if (file) {
+            e.preventDefault();
+            handleImageFileUpload(file);
+            return;
+          }
+        }
+      }
+
+      // If text was pasted, check if it's an image link
+      const text = e.clipboardData.getData("text")?.trim();
+      if (
+        text &&
+        (text.startsWith("http://") ||
+          text.startsWith("https://") ||
+          text.startsWith("/") ||
+          text.startsWith("data:image/"))
+      ) {
+        setPreviewImage(text);
+        setImageUrlInput(text);
+      }
+    };
+
+    window.addEventListener("paste", handleWindowPaste);
+    return () => window.removeEventListener("paste", handleWindowPaste);
+  }, [isImageModalOpen]);
+
+  const applyImageToRow = () => {
+    if (targetImageIndex !== null) {
+      updateItemRow(targetImageIndex, "imagePath", previewImage ? previewImage.trim() : null);
+    }
+    setIsImageModalOpen(false);
+    setTargetImageIndex(null);
+  };
+
+  const removeImageFromRow = () => {
+    if (targetImageIndex !== null) {
+      updateItemRow(targetImageIndex, "imagePath", null);
+    }
+    setPreviewImage(null);
+    setImageUrlInput("");
+    setIsImageModalOpen(false);
+    setTargetImageIndex(null);
+  };
+
+  // --- PRODUCT SEARCH (PMS Catalog) ---
   useEffect(() => {
     if (!isProductModalOpen) return;
 
@@ -192,7 +304,6 @@ export default function CreateQuotationPage() {
     return () => clearTimeout(timer);
   }, [productSearchQuery, isProductModalOpen]);
 
-  // Select Product from Search Modal
   const handleSelectProduct = (product: ProductSearchResult) => {
     if (targetItemIndex === null) return;
 
@@ -606,10 +717,15 @@ export default function CreateQuotationPage() {
                         {index + 1}
                       </td>
 
-                      {/* Image Preview & Upload/Pick */}
+                      {/* Image Preview & Popup Trigger */}
                       <td className="py-3 px-3 text-center">
                         <div className="flex flex-col items-center gap-1">
-                          <div className="w-14 h-14 rounded-lg bg-slate-950 border border-slate-800 flex items-center justify-center overflow-hidden relative group/img">
+                          <button
+                            type="button"
+                            onClick={() => openImageModal(index)}
+                            title="Click to view, upload, or paste image"
+                            className="w-14 h-14 rounded-lg bg-slate-950 border border-slate-800 hover:border-teal-500/80 transition-colors flex items-center justify-center overflow-hidden relative group/img cursor-pointer"
+                          >
                             {item.imagePath ? (
                               <img
                                 src={item.imagePath}
@@ -620,24 +736,18 @@ export default function CreateQuotationPage() {
                                 }}
                               />
                             ) : (
-                              <ImageIcon className="w-5 h-5 text-slate-600" />
+                              <div className="flex flex-col items-center justify-center text-slate-600 group-hover/img:text-teal-400">
+                                <ImagePlus className="w-5 h-5" />
+                              </div>
                             )}
-                          </div>
+                          </button>
 
                           <button
                             type="button"
-                            onClick={() => {
-                              const url = prompt(
-                                "Enter image URL or path for this product:",
-                                item.imagePath || ""
-                              );
-                              if (url !== null) {
-                                updateItemRow(index, "imagePath", url.trim() || null);
-                              }
-                            }}
-                            className="text-[10px] text-teal-400 hover:underline"
+                            onClick={() => openImageModal(index)}
+                            className="text-[10px] text-teal-400 hover:underline cursor-pointer"
                           >
-                            {item.imagePath ? "Change" : "Add Img"}
+                            {item.imagePath ? "Change" : "+ Image"}
                           </button>
                         </div>
                       </td>
@@ -829,7 +939,169 @@ export default function CreateQuotationPage() {
         </div>
       </div>
 
-      {/* Product Search Modal */}
+      {/* --- IMAGE PREVIEW, UPLOAD & CLIPBOARD PASTE POPUP MODAL --- */}
+      {isImageModalOpen && (
+        <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-lg shadow-2xl flex flex-col overflow-hidden animate-in zoom-in-95">
+            {/* Modal Header */}
+            <div className="p-4 border-b border-slate-800 flex items-center justify-between bg-slate-950/60">
+              <div className="flex items-center gap-2 text-white font-semibold text-sm">
+                <ImageIcon className="w-4 h-4 text-teal-400" />
+                <span>
+                  Product Image for Item #{(targetImageIndex ?? 0) + 1}
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsImageModalOpen(false)}
+                className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800 transition-colors"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="p-5 space-y-4">
+              {/* Image Preview Box (Also Paste & Drag-and-Drop Zone) */}
+              <div className="relative group rounded-xl border-2 border-dashed border-slate-700 hover:border-teal-500/70 bg-slate-950 flex flex-col items-center justify-center min-h-[220px] p-4 text-center transition-colors">
+                {isUploadingImage ? (
+                  <div className="flex flex-col items-center gap-2 text-teal-400">
+                    <Loader2 className="w-8 h-8 animate-spin" />
+                    <span className="text-xs font-medium">Uploading & optimizing image...</span>
+                  </div>
+                ) : previewImage ? (
+                  <div className="relative w-full flex flex-col items-center">
+                    <img
+                      src={previewImage}
+                      alt="Preview"
+                      className="max-h-48 max-w-full object-contain rounded-lg shadow-sm"
+                      onError={() => {
+                        setImageUploadError("Unable to load image from the provided URL / path.");
+                      }}
+                    />
+                    <div className="mt-2 text-[11px] text-slate-400 font-mono break-all line-clamp-1 max-w-sm">
+                      {previewImage}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex flex-col items-center gap-2 text-slate-500">
+                    <div className="w-12 h-12 rounded-full bg-slate-900 flex items-center justify-center text-slate-400">
+                      <Clipboard className="w-6 h-6 text-teal-400" />
+                    </div>
+                    <p className="text-xs font-medium text-slate-300">
+                      Paste image directly from clipboard (<span className="text-teal-400 font-mono">Ctrl + V</span>)
+                    </p>
+                    <p className="text-[11px] text-slate-500">
+                      or click the upload button below to select from your computer
+                    </p>
+                  </div>
+                )}
+              </div>
+
+              {/* Error Alert */}
+              {imageUploadError && (
+                <div className="text-xs p-2.5 bg-red-950/60 border border-red-800 text-red-300 rounded-lg flex items-center gap-2">
+                  <AlertCircle className="w-4 h-4 shrink-0 text-red-400" />
+                  <span className="flex-1">{imageUploadError}</span>
+                </div>
+              )}
+
+              {/* Upload Button & File Input */}
+              <div className="flex items-center gap-3">
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp,image/jpg"
+                  className="hidden"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) handleImageFileUpload(file);
+                  }}
+                />
+
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={isUploadingImage}
+                  className="flex-1 inline-flex items-center justify-center gap-2 px-4 py-2 bg-slate-800 hover:bg-slate-700 text-teal-300 border border-slate-700 rounded-lg text-xs font-semibold transition-colors disabled:opacity-50"
+                >
+                  <Upload className="w-4 h-4 text-teal-400" />
+                  Upload from Computer
+                </button>
+              </div>
+
+              {/* Or Web / Local URL Input */}
+              <div className="space-y-1">
+                <label className="block text-[11px] font-medium text-slate-400">
+                  Or Paste Image URL / Path:
+                </label>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={imageUrlInput}
+                    onChange={(e) => {
+                      setImageUrlInput(e.target.value);
+                      setPreviewImage(e.target.value.trim() || null);
+                    }}
+                    placeholder="https://... or /uploads/products/..."
+                    className="flex-1 bg-slate-950 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-teal-500"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setPreviewImage(imageUrlInput.trim() || null)}
+                    className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-xs font-medium border border-slate-700 transition-colors"
+                  >
+                    Preview
+                  </button>
+                </div>
+              </div>
+
+              <div className="text-[11px] text-slate-500 bg-slate-950/50 p-2.5 rounded-lg border border-slate-800/80 flex items-center gap-2">
+                <span className="text-teal-400 font-semibold">Tip:</span>
+                <span>
+                  Capture any area with Windows Snipping Tool (<span className="text-slate-300 font-mono">Win+Shift+S</span>) and press <span className="text-slate-300 font-mono">Ctrl+V</span> here to paste instantly.
+                </span>
+              </div>
+            </div>
+
+            {/* Modal Footer */}
+            <div className="p-4 border-t border-slate-800 bg-slate-950/60 flex items-center justify-between">
+              <div>
+                {previewImage && (
+                  <button
+                    type="button"
+                    onClick={removeImageFromRow}
+                    className="text-xs text-red-400 hover:text-red-300 flex items-center gap-1 transition-colors"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    Remove Image
+                  </button>
+                )}
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setIsImageModalOpen(false)}
+                  className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-xs font-medium transition-colors"
+                >
+                  Cancel
+                </button>
+
+                <button
+                  type="button"
+                  onClick={applyImageToRow}
+                  className="px-4 py-2 bg-teal-600 hover:bg-teal-500 text-white rounded-lg text-xs font-semibold shadow-md transition-colors"
+                >
+                  Apply Image
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* --- PRODUCT SEARCH MODAL (PMS CATALOG) --- */}
       {isProductModalOpen && (
         <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-xs flex items-center justify-center p-4">
           <div className="bg-slate-900 border border-slate-800 rounded-xl w-full max-w-2xl max-h-[80vh] flex flex-col shadow-2xl animate-in zoom-in-95">
