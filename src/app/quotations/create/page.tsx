@@ -129,8 +129,19 @@ export default function CreateQuotationPage() {
       });
   }, []);
 
-  // Active Users list for Prepared By dropdown / auto-suggest
-  const [usersList, setUsersList] = useState<Array<{ id: number; name: string; username: string }>>([]);
+interface UserListItem {
+  id: number;
+  name: string;
+  username: string;
+  department?: { id?: number; name?: string } | null;
+}
+
+const formatPreparedBy = (u: UserListItem) => {
+  const baseName = u.name || u.username;
+  return u.department?.name ? `${baseName} / ${u.department.name}` : baseName;
+};
+
+  const [usersList, setUsersList] = useState<UserListItem[]>([]);
 
   // Fetch all active users for Prepared By picker
   useEffect(() => {
@@ -144,13 +155,25 @@ export default function CreateQuotationPage() {
       .catch((err) => console.error("Error fetching users list:", err));
   }, []);
 
-  // Auto-detect preparedBy from session
+  // Auto-detect preparedBy from session with department
   useEffect(() => {
     if (session?.user) {
-      const detected = session.user.name || (session.user as any).username || "Staff";
-      setPreparedBy(detected);
+      const sessionName = session.user.name || "";
+      const sessionUsername = (session.user as any).username || "";
+
+      const matching = usersList.find(
+        (u) =>
+          (sessionUsername && u.username.toLowerCase() === sessionUsername.toLowerCase()) ||
+          (sessionName && u.name.toLowerCase() === sessionName.toLowerCase())
+      );
+
+      if (matching) {
+        setPreparedBy(formatPreparedBy(matching));
+      } else if (!preparedBy) {
+        setPreparedBy(sessionName || sessionUsername || "Staff");
+      }
     }
-  }, [session]);
+  }, [session, usersList]);
 
   // Calculations
   const subtotal = items.reduce((sum, item) => {
@@ -609,17 +632,17 @@ export default function CreateQuotationPage() {
                 onChange={(e) => setPreparedBy(e.target.value)}
                 className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-teal-500 font-sans cursor-pointer"
               >
-                {preparedBy && !usersList.some((u) => (u.name || u.username) === preparedBy) && (
+                {preparedBy && !usersList.some((u) => formatPreparedBy(u) === preparedBy) && (
                   <option value={preparedBy}>{preparedBy}</option>
                 )}
                 {usersList.length === 0 && !preparedBy && (
                   <option value="">Loading users...</option>
                 )}
                 {usersList.map((u) => {
-                  const displayName = u.name || u.username;
+                  const label = formatPreparedBy(u);
                   return (
-                    <option key={u.id} value={displayName}>
-                      {displayName} ({u.username})
+                    <option key={u.id} value={label}>
+                      {label}
                     </option>
                   );
                 })}

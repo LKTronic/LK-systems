@@ -85,8 +85,20 @@ export default function EditQuotationPage({
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  // Active Users list for Prepared By dropdown / auto-suggest
-  const [usersList, setUsersList] = useState<Array<{ id: number; name: string; username: string }>>([]);
+interface UserListItem {
+  id: number;
+  name: string;
+  username: string;
+  department?: { id?: number; name?: string } | null;
+}
+
+const formatPreparedBy = (u: UserListItem) => {
+  const baseName = u.name || u.username;
+  return u.department?.name ? `${baseName} / ${u.department.name}` : baseName;
+};
+
+  // Active Users list for Prepared By dropdown
+  const [usersList, setUsersList] = useState<UserListItem[]>([]);
 
   // Product Search Modal State
   const [isProductModalOpen, setIsProductModalOpen] = useState(false);
@@ -664,17 +676,17 @@ export default function EditQuotationPage({
                 onChange={(e) => setPreparedBy(e.target.value)}
                 className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-teal-500 font-sans cursor-pointer"
               >
-                {preparedBy && !usersList.some((u) => (u.name || u.username) === preparedBy) && (
+                {preparedBy && !usersList.some((u) => formatPreparedBy(u) === preparedBy) && (
                   <option value={preparedBy}>{preparedBy}</option>
                 )}
                 {usersList.length === 0 && !preparedBy && (
                   <option value="">Loading users...</option>
                 )}
                 {usersList.map((u) => {
-                  const displayName = u.name || u.username;
+                  const label = formatPreparedBy(u);
                   return (
-                    <option key={u.id} value={displayName}>
-                      {displayName} ({u.username})
+                    <option key={u.id} value={label}>
+                      {label}
                     </option>
                   );
                 })}
