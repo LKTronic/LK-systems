@@ -36,6 +36,10 @@ interface ItemRow {
   productId?: number | null;
   description: string;
   imagePath?: string | null;
+  stockStatus: "IN_STOCK" | "OVERSEAS";
+  leadTime: string; // default "12-21 working days"
+  warranty: string; // "No Warranty", "06 Months", "1 Year", or custom
+  warrantyType: "NO" | "6M" | "1Y" | "CUSTOM";
   quantity: number;
   unitPrice: number;
 }
@@ -46,6 +50,9 @@ interface ProductSearchResult {
   productName: string;
   priceLKR: number | string | null;
   imagePath?: string | null;
+  warrantyPeriod?: string | null;
+  leadTime?: string | null;
+  stockStatus?: string | null;
 }
 
 export default function CreateQuotationPage() {
@@ -67,6 +74,10 @@ export default function CreateQuotationPage() {
       id: "item-1",
       description: "",
       imagePath: null,
+      stockStatus: "IN_STOCK",
+      leadTime: "12-21 working days",
+      warranty: "No Warranty",
+      warrantyType: "NO",
       quantity: 1,
       unitPrice: 0,
     },
@@ -169,6 +180,10 @@ export default function CreateQuotationPage() {
         id: `item-${Date.now()}-${Math.random()}`,
         description: "",
         imagePath: null,
+        stockStatus: "IN_STOCK",
+        leadTime: "12-21 working days",
+        warranty: "No Warranty",
+        warrantyType: "NO",
         quantity: 1,
         unitPrice: 0,
       },
@@ -327,6 +342,20 @@ export default function CreateQuotationPage() {
     updateItemRow(targetItemIndex, "unitPrice", price);
     updateItemRow(targetItemIndex, "imagePath", product.imagePath || null);
 
+    if (product.warrantyPeriod) {
+      const w = product.warrantyPeriod.trim();
+      updateItemRow(targetItemIndex, "warranty", w);
+      if (w.toLowerCase().includes("no")) updateItemRow(targetItemIndex, "warrantyType", "NO");
+      else if (w.toLowerCase().includes("6") || w.toLowerCase().includes("06")) updateItemRow(targetItemIndex, "warrantyType", "6M");
+      else if (w.toLowerCase().includes("1") || w.toLowerCase().includes("one") || w.toLowerCase().includes("year")) updateItemRow(targetItemIndex, "warrantyType", "1Y");
+      else updateItemRow(targetItemIndex, "warrantyType", "CUSTOM");
+    }
+
+    if (product.leadTime) {
+      updateItemRow(targetItemIndex, "leadTime", product.leadTime);
+      updateItemRow(targetItemIndex, "stockStatus", "OVERSEAS");
+    }
+
     setIsProductModalOpen(false);
     setTargetItemIndex(null);
   };
@@ -386,6 +415,9 @@ export default function CreateQuotationPage() {
             productId: it.productId || null,
             description: it.description.trim(),
             imagePath: it.imagePath || null,
+            stockStatus: it.stockStatus,
+            leadTime: it.stockStatus === "OVERSEAS" ? (it.leadTime || "12-21 working days") : null,
+            warranty: it.warranty || "No Warranty",
             quantity: Math.max(1, Number(it.quantity) || 1),
             unitPrice: Math.max(0, Number(it.unitPrice) || 0),
           })),
@@ -428,6 +460,9 @@ export default function CreateQuotationPage() {
             itemIndex: idx + 1,
             description: it.description.trim(),
             imagePath: it.imagePath || null,
+            stockStatus: it.stockStatus,
+            leadTime: it.stockStatus === "OVERSEAS" ? (it.leadTime || "12-21 working days") : null,
+            warranty: it.warranty || "No Warranty",
             quantity: q,
             unitPrice: p,
             totalPrice: q * p,
@@ -743,9 +778,11 @@ export default function CreateQuotationPage() {
               <thead>
                 <tr className="bg-slate-950/70 border-b border-slate-800 text-[11px] uppercase tracking-wider text-slate-400 font-semibold">
                   <th className="py-3 px-3 w-12 text-center">No</th>
-                  <th className="py-3 px-3 w-24 text-center">Image</th>
-                  <th className="py-3 px-4 min-w-[280px]">Product / Service</th>
-                  <th className="py-3 px-3 w-28 text-center">Quantity</th>
+                  <th className="py-3 px-3 w-20 text-center">Image</th>
+                  <th className="py-3 px-4 min-w-[240px]">Product / Service</th>
+                  <th className="py-3 px-3 min-w-[190px]">Stock / Lead Time</th>
+                  <th className="py-3 px-3 min-w-[170px]">Warranty</th>
+                  <th className="py-3 px-3 w-24 text-center">Quantity</th>
                   <th className="py-3 px-4 w-36 text-right">Unit Price (LKR)</th>
                   <th className="py-3 px-4 w-40 text-right">Total Price (LKR)</th>
                   <th className="py-3 px-3 w-14 text-center">Action</th>
@@ -829,6 +866,78 @@ export default function CreateQuotationPage() {
                               <span className="hidden sm:inline">Pick</span>
                             </button>
                           </div>
+                        </div>
+                      </td>
+
+                      {/* Stock / Availability & Lead Time */}
+                      <td className="py-3 px-3">
+                        <div className="space-y-1.5">
+                          <select
+                            value={item.stockStatus}
+                            onChange={(e) => {
+                              const val = e.target.value as "IN_STOCK" | "OVERSEAS";
+                              updateItemRow(index, "stockStatus", val);
+                              if (val === "OVERSEAS" && !item.leadTime) {
+                                updateItemRow(index, "leadTime", "12-21 working days");
+                              }
+                            }}
+                            className="w-full bg-slate-950 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-teal-500"
+                          >
+                            <option value="IN_STOCK">In Stock</option>
+                            <option value="OVERSEAS">Shipping from Overseas</option>
+                          </select>
+
+                          {item.stockStatus === "OVERSEAS" && (
+                            <div className="flex items-center gap-1.5 animate-in fade-in">
+                              <span className="text-[10px] text-amber-400 font-medium shrink-0">Lead:</span>
+                              <input
+                                type="text"
+                                value={item.leadTime || "12-21 working days"}
+                                onChange={(e) =>
+                                  updateItemRow(index, "leadTime", e.target.value)
+                                }
+                                placeholder="12-21 working days"
+                                className="w-full bg-slate-900 border border-amber-600/50 rounded px-2 py-1 text-xs text-amber-200 focus:outline-none focus:border-amber-400 font-mono"
+                              />
+                            </div>
+                          )}
+                        </div>
+                      </td>
+
+                      {/* Warranty */}
+                      <td className="py-3 px-3">
+                        <div className="space-y-1.5">
+                          <select
+                            value={item.warrantyType}
+                            onChange={(e) => {
+                              const type = e.target.value as "NO" | "6M" | "1Y" | "CUSTOM";
+                              updateItemRow(index, "warrantyType", type);
+                              if (type === "NO") updateItemRow(index, "warranty", "No Warranty");
+                              else if (type === "6M") updateItemRow(index, "warranty", "06 Months");
+                              else if (type === "1Y") updateItemRow(index, "warranty", "1 Year");
+                              else if (type === "CUSTOM" && !item.warranty) updateItemRow(index, "warranty", "");
+                            }}
+                            className="w-full bg-slate-950 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-teal-500"
+                          >
+                            <option value="NO">No Warranty</option>
+                            <option value="6M">06 Months</option>
+                            <option value="1Y">1 Year</option>
+                            <option value="CUSTOM">Custom</option>
+                          </select>
+
+                          {item.warrantyType === "CUSTOM" && (
+                            <div className="animate-in fade-in">
+                              <input
+                                type="text"
+                                value={item.warranty}
+                                onChange={(e) =>
+                                  updateItemRow(index, "warranty", e.target.value)
+                                }
+                                placeholder="e.g. 2 Years / 3 Months"
+                                className="w-full bg-slate-900 border border-teal-600/50 rounded px-2 py-1 text-xs text-white focus:outline-none focus:border-teal-400"
+                              />
+                            </div>
+                          )}
                         </div>
                       </td>
 

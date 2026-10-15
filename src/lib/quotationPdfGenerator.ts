@@ -5,6 +5,9 @@ export interface QuotationPdfItem {
   itemIndex: number;
   description: string;
   imagePath?: string | null;
+  stockStatus?: string | null; // "IN_STOCK" or "OVERSEAS"
+  leadTime?: string | null;
+  warranty?: string | null;
   quantity: number;
   unitPrice: number;
   totalPrice: number;
@@ -206,10 +209,18 @@ export async function generateQuotationPdf(data: QuotationPdfData): Promise<void
   const tableStartY = Math.max(metaStartY + 32, metaStartY + customerLines.length * 4.5 + 8);
 
   const tableBody = data.items.map((item, idx) => {
+    const availabilityText =
+      item.stockStatus === "OVERSEAS"
+        ? `Overseas\n(${item.leadTime || "12-21 days"})`
+        : "In Stock";
+    const warrantyText = item.warranty || "No Warranty";
+
     return [
       String(idx + 1),
       "", // placeholder cell where image will be drawn
       item.description,
+      availabilityText,
+      warrantyText,
       String(item.quantity),
       formatLKR(item.unitPrice),
       formatLKR(item.totalPrice),
@@ -219,28 +230,41 @@ export async function generateQuotationPdf(data: QuotationPdfData): Promise<void
   autoTable(doc, {
     startY: tableStartY,
     margin: { left: margin, right: margin },
-    head: [["#", "Image", "Product / Service", "Qty", "Unit Price", "Total Price"]],
+    head: [
+      [
+        "#",
+        "Image",
+        "Product / Service",
+        "Availability",
+        "Warranty",
+        "Qty",
+        "Unit Price",
+        "Total Price",
+      ],
+    ],
     body: tableBody,
     theme: "striped",
     headStyles: {
       fillColor: [24, 76, 120],
       textColor: [255, 255, 255],
       fontStyle: "bold",
-      fontSize: 9,
+      fontSize: 8.5,
       halign: "left",
-      cellPadding: 3,
+      cellPadding: 2.5,
     },
     columnStyles: {
-      0: { cellWidth: 10, halign: "center" },
-      1: { cellWidth: 20, halign: "center" },
+      0: { cellWidth: 8, halign: "center" },
+      1: { cellWidth: 16, halign: "center" },
       2: { cellWidth: "auto" },
-      3: { cellWidth: 16, halign: "center" },
-      4: { cellWidth: 32, halign: "right" },
-      5: { cellWidth: 34, halign: "right", fontStyle: "bold" },
+      3: { cellWidth: 26, halign: "center", fontSize: 7.5 },
+      4: { cellWidth: 20, halign: "center", fontSize: 8 },
+      5: { cellWidth: 12, halign: "center" },
+      6: { cellWidth: 26, halign: "right" },
+      7: { cellWidth: 28, halign: "right", fontStyle: "bold" },
     },
     styles: {
-      fontSize: 8.5,
-      cellPadding: 3,
+      fontSize: 8,
+      cellPadding: 2.5,
       valign: "middle",
       overflow: "linebreak",
     },
