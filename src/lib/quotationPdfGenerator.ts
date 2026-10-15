@@ -33,16 +33,103 @@ export interface QuotationPdfData {
 }
 
 /**
- * Load image as base64 data URL for embedding into jsPDF
- * Supports both browser fetch and Node.js filesystem fallback
+ * Bank Details interface
  */
-async function loadImageAsBase64(url: string): Promise<string | null> {
+export interface BankDetails {
+  accountName: string;
+  accountNumber: string;
+  bankName: string;
+  bankBranch: string;
+}
+
+/**
+ * Return bank details dynamically based on Registration Number:
+ * - If WF19731 / W-F 19731:
+ *     LK TRONICS / 1000525586 / Commercial Bank / Homagama
+ * - If PV00336036 / P-V 00336036 (or default):
+ *     LK TRONICS TRADING PVT LTD / 047010021564 / Hatton National Bank / Biyagama
+ */
+export function getBankDetails(registrationNo?: string | null): BankDetails {
+  const clean = (registrationNo || "")
+    .replace(/[^a-zA-Z0-9]/g, "")
+    .toUpperCase();
+  if (clean.includes("WF19731") || clean.includes("19731")) {
+    return {
+      accountName: "LK TRONICS",
+      accountNumber: "1000525586",
+      bankName: "Commercial Bank",
+      bankBranch: "Homagama",
+    };
+  }
+  return {
+    accountName: "LK TRONICS TRADING PVT LTD",
+    accountNumber: "047010021564",
+    bankName: "Hatton National Bank",
+    bankBranch: "Biyagama",
+  };
+}
+
+/**
+ * Convert an image Blob to standard JPEG base64 data URL via canvas
+ * Ensures any format (PNG with transparency, WebP, AVIF) is cleanly rasterized
+ * with an opaque white background suitable for jsPDF.
+ */
+function convertBlobToJpegBase64(blob: Blob): Promise<string | null> {
+  if (typeof window === "undefined") return Promise.resolve(null);
+  return new Promise((resolve) => {
+    const img = new Image();
+    const objectUrl = URL.createObjectURL(blob);
+    img.onload = () => {
+      try {
+        const canvas = document.createElement("canvas");
+        canvas.width = img.naturalWidth || img.width || 200;
+        canvas.height = img.naturalHeight || img.height || 200;
+        const ctx = canvas.getContext("2d");
+        if (!ctx) {
+          URL.revokeObjectURL(objectUrl);
+          resolve(null);
+          return;
+        }
+        ctx.fillStyle = "#ffffff";
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.drawImage(img, 0, 0);
+        const dataUrl = canvas.toDataURL("image/jpeg", 0.92);
+        URL.revokeObjectURL(objectUrl);
+        resolve(dataUrl);
+      } catch {
+        URL.revokeObjectURL(objectUrl);
+        resolve(null);
+      }
+    };
+    img.onerror = () => {
+      URL.revokeObjectURL(objectUrl);
+      resolve(null);
+    };
+    img.src = objectUrl;
+  });
+}
+
+/**
+ * Load image as base64 data URL for embedding into jsPDF
+ * Supports both browser fetch (with server proxy for external URLs to bypass CORS)
+ * and Node.js filesystem fallback
+ */
+export async function loadImageAsBase64(url: string): Promise<string | null> {
   if (!url) return null;
   if (url.startsWith("data:")) return url;
 
   // Node.js environment fallback (tests, SSR)
   if (typeof window === "undefined") {
     try {
+      if (url.startsWith("http://") || url.startsWith("https://")) {
+        const res = await fetch(url);
+        if (!res.ok) return null;
+        const arrayBuffer = await res.arrayBuffer();
+        const buffer = Buffer.from(arrayBuffer);
+        const mime = res.headers.get("content-type") || "image/jpeg";
+        return `data:${mime};base64,${buffer.toString("base64")}`;
+      }
+
       const nodeFs = "fs";
       const nodePath = "path";
       const fs = await import(/* webpackIgnore: true */ nodeFs);
@@ -62,13 +149,44 @@ async function loadImageAsBase64(url: string): Promise<string | null> {
     } catch {
       // ignore Node fallback errors
     }
+    return null;
   }
 
   // Browser environment
   try {
-    const res = await fetch(url);
+    const isHttp = url.startsWith("http://") || url.startsWith("https://");
+    let fetchUrl = url;
+
+    // Route external URLs through /api/proxy-image to prevent CORS block
+    if (isHttp) {
+      try {
+        const parsed = new URL(url);
+        if (parsed.origin !== window.location.origin) {
+          fetchUrl = `/api/proxy-image?url=${encodeURIComponent(url)}`;
+        }
+      } catch {
+        fetchUrl = `/api/proxy-image?url=${encodeURIComponent(url)}`;
+      }
+    }
+
+    let res = await fetch(fetchUrl);
+    if (!res.ok && fetchUrl !== url) {
+      // Fallback: try direct fetch
+      try {
+        res = await fetch(url);
+      } catch {
+        // continue
+      }
+    }
+
     if (!res.ok) return null;
     const blob = await res.blob();
+
+    // Standardize via offscreen canvas for crisp JPEG on white background
+    const canvasResult = await convertBlobToJpegBase64(blob);
+    if (canvasResult) return canvasResult;
+
+    // Fallback to FileReader
     return new Promise((resolve) => {
       const reader = new FileReader();
       reader.onloadend = () => {
@@ -125,13 +243,19 @@ export function formatPaymentMethodLabel(
 }
 
 /**
- * Helper to draw clean vector checkmark for Terms & Conditions
+ * Helper to draw crisp vector checkmark for Terms & Conditions list
+ * Perfectly aligned with 10pt text baseline
  */
 function drawCheckmark(d: jsPDF, x: number, y: number): void {
-  d.setDrawColor(20, 120, 60);
-  d.setLineWidth(0.45);
-  d.line(x, y - 1, x + 1.2, y + 0.8);
-  d.line(x + 1.2, y + 0.8, x + 3.2, y - 2.2);
+  d.saveGraphicsState();
+  d.setDrawColor(0, 0, 0);
+  d.setLineWidth(0.55);
+  d.setLineCap("round");
+  d.setLineJoin("round");
+  // Short tick down to baseline, long tick up to cap height
+  d.line(x, y - 1.4, x + 1.2, y - 0.2);
+  d.line(x + 1.2, y - 0.2, x + 3.4, y - 3.0);
+  d.restoreGraphicsState();
 }
 
 /**
@@ -379,7 +503,8 @@ export async function generateQuotationPdf(
       lineWidth: 0.35,
       textColor: [0, 0, 0],
       fontSize: 10,
-      cellPadding: 2.5,
+      cellPadding: 4,
+      minCellHeight: 28,
       valign: "middle",
       fillColor: [255, 255, 255],
     },
@@ -388,14 +513,22 @@ export async function generateQuotationPdf(
       fontSize: 10,
       textColor: [0, 0, 0],
       fillColor: [255, 255, 255],
+      minCellHeight: 11,
+      cellPadding: 3,
+      valign: "middle",
     },
     columnStyles: {
-      0: { cellWidth: 14, halign: "center" },
-      1: { cellWidth: 36, halign: "center" },
-      2: { cellWidth: 45, halign: "left" },
-      3: { cellWidth: 16, halign: "center" },
-      4: { cellWidth: 28, halign: "center" },
-      5: { cellWidth: 29, halign: "center" },
+      0: { cellWidth: 12, halign: "center", valign: "middle" },
+      1: {
+        cellWidth: 34,
+        halign: "center",
+        valign: "middle",
+        minCellHeight: 28,
+      },
+      2: { cellWidth: 51, halign: "left", valign: "middle" },
+      3: { cellWidth: 15, halign: "center", valign: "middle" },
+      4: { cellWidth: 28, halign: "center", valign: "middle" },
+      5: { cellWidth: 28, halign: "center", valign: "middle" },
     },
     willDrawPage: (hookData) => {
       // If table spans to additional pages, re-apply letterhead header & footer
@@ -412,12 +545,13 @@ export async function generateQuotationPdf(
           try {
             const cellW = hookData.cell.width;
             const cellH = hookData.cell.height;
-            const imgSize = Math.min(cellW - 4, cellH - 4, 26);
+            const imgSize = Math.min(cellW - 6, cellH - 6, 24);
             const x = hookData.cell.x + (cellW - imgSize) / 2;
             const y = hookData.cell.y + (cellH - imgSize) / 2;
+            const format = img.startsWith("data:image/png") ? "PNG" : "JPEG";
             doc.addImage(
               img,
-              "JPEG",
+              format,
               x,
               y,
               imgSize,
@@ -456,8 +590,8 @@ export async function generateQuotationPdf(
   doc.setFontSize(10);
   for (const b of generalBullets) {
     drawCheckmark(doc, 22, curY);
-    const split = doc.splitTextToSize(b, 158);
-    doc.text(split, 28, curY);
+    const split = doc.splitTextToSize(b, 161);
+    doc.text(split, 27.5, curY);
     curY += split.length * 4.8 + 2.5;
   }
 
@@ -524,7 +658,7 @@ export async function generateQuotationPdf(
 
   const bankBoxX = 21;
   const bankBoxY = curY;
-  const bankBoxW = 125;
+  const bankBoxW = 135;
   const bankBoxH = 30;
 
   doc.setFillColor(255, 255, 255);
@@ -532,11 +666,12 @@ export async function generateQuotationPdf(
   doc.setLineWidth(0.35);
   doc.rect(bankBoxX, bankBoxY, bankBoxW, bankBoxH, "FD");
 
+  const bankInfo = getBankDetails(selectedRegNo);
   const bankRows = [
-    { label: "Account Name", val: "LK TRONICS TRADING PVT LTD" },
-    { label: "Account Number", val: "047010021564" },
-    { label: "Bank Name", val: "Hatton National Bank" },
-    { label: "Bank Branch", val: "Biyagama" },
+    { label: "Account Name", val: bankInfo.accountName },
+    { label: "Account Number", val: bankInfo.accountNumber },
+    { label: "Bank Name", val: bankInfo.bankName },
+    { label: "Bank Branch", val: bankInfo.bankBranch },
   ];
 
   let curBankY = bankBoxY + 5.5;
@@ -546,7 +681,7 @@ export async function generateQuotationPdf(
     doc.setTextColor(0, 0, 0);
     doc.text(b.label, bankBoxX + 4, curBankY);
     doc.setFont("helvetica", "normal");
-    doc.text(b.val, bankBoxX + 42, curBankY);
+    doc.text(b.val, bankBoxX + 45, curBankY);
     curBankY += 6.2;
   }
 

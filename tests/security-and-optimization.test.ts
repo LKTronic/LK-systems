@@ -554,6 +554,43 @@ describe("Quotation Calculations & Financial Validation", () => {
     );
     assert.ok(!cell4.toLowerCase().includes("warranty"), "Should omit warranty when null");
   });
+
+  it("dynamically returns bank details based on selected Registration Number", async () => {
+    const { getBankDetails } = await import("../src/lib/quotationPdfGenerator");
+
+    // Case 1: WF19731 or W-F 19731 -> LK TRONICS / Commercial Bank Homagama
+    const wfDetails1 = getBankDetails("W-F 19731");
+    assert.equal(wfDetails1.accountName, "LK TRONICS");
+    assert.equal(wfDetails1.accountNumber, "1000525586");
+    assert.equal(wfDetails1.bankName, "Commercial Bank");
+    assert.equal(wfDetails1.bankBranch, "Homagama");
+
+    const wfDetails2 = getBankDetails("WF19731");
+    assert.equal(wfDetails2.accountName, "LK TRONICS");
+    assert.equal(wfDetails2.accountNumber, "1000525586");
+    assert.equal(wfDetails2.bankName, "Commercial Bank");
+    assert.equal(wfDetails2.bankBranch, "Homagama");
+
+    // Case 2: P-V 00336036 or pv00336036 -> LK TRONICS TRADING PVT LTD / Hatton National Bank Biyagama
+    const pvDetails1 = getBankDetails("P-V 00336036");
+    assert.equal(pvDetails1.accountName, "LK TRONICS TRADING PVT LTD");
+    assert.equal(pvDetails1.accountNumber, "047010021564");
+    assert.equal(pvDetails1.bankName, "Hatton National Bank");
+    assert.equal(pvDetails1.bankBranch, "Biyagama");
+
+    const pvDetails2 = getBankDetails("pv00336036");
+    assert.equal(pvDetails2.accountName, "LK TRONICS TRADING PVT LTD");
+    assert.equal(pvDetails2.accountNumber, "047010021564");
+    assert.equal(pvDetails2.bankName, "Hatton National Bank");
+    assert.equal(pvDetails2.bankBranch, "Biyagama");
+
+    // Case 3: Default / null / undefined fallback
+    const defaultDetails = getBankDetails(null);
+    assert.equal(defaultDetails.accountName, "LK TRONICS TRADING PVT LTD");
+    assert.equal(defaultDetails.accountNumber, "047010021564");
+    assert.equal(defaultDetails.bankName, "Hatton National Bank");
+    assert.equal(defaultDetails.bankBranch, "Biyagama");
+  });
 });
 
 
