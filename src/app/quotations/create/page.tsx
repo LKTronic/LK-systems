@@ -118,6 +118,21 @@ export default function CreateQuotationPage() {
       });
   }, []);
 
+  // Active Users list for Prepared By dropdown / auto-suggest
+  const [usersList, setUsersList] = useState<Array<{ id: number; name: string; username: string }>>([]);
+
+  // Fetch all active users for Prepared By picker
+  useEffect(() => {
+    fetch("/api/users/list")
+      .then((res) => res.json())
+      .then((data) => {
+        if (Array.isArray(data.users)) {
+          setUsersList(data.users);
+        }
+      })
+      .catch((err) => console.error("Error fetching users list:", err));
+  }, []);
+
   // Auto-detect preparedBy from session
   useEffect(() => {
     if (session?.user) {
@@ -544,7 +559,7 @@ export default function CreateQuotationPage() {
               </p>
             </div>
 
-            {/* Prepared By (Auto-detected) */}
+            {/* Prepared By (Dropdown & Auto-suggest) */}
             <div>
               <label className="block text-xs font-medium text-slate-400 mb-1.5 flex items-center justify-between">
                 <span>Prepared By</span>
@@ -552,13 +567,49 @@ export default function CreateQuotationPage() {
                   <UserCheck className="w-3 h-3" /> Auto-detected
                 </span>
               </label>
-              <input
-                type="text"
-                value={preparedBy}
-                onChange={(e) => setPreparedBy(e.target.value)}
-                placeholder="User / Staff Name"
-                className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-teal-500"
-              />
+
+              <div className="space-y-1.5">
+                <div className="relative">
+                  <input
+                    type="text"
+                    list="prepared-by-suggestions"
+                    value={preparedBy}
+                    onChange={(e) => setPreparedBy(e.target.value)}
+                    placeholder="Type or select staff name..."
+                    className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-teal-500 font-sans"
+                  />
+                  <datalist id="prepared-by-suggestions">
+                    {usersList.map((u) => (
+                      <option key={u.id} value={u.name || u.username}>
+                        {u.name} (@{u.username})
+                      </option>
+                    ))}
+                  </datalist>
+                </div>
+
+                {usersList.length > 0 && (
+                  <div className="flex items-center gap-2 pt-0.5">
+                    <span className="text-[11px] text-slate-400 shrink-0">Select User:</span>
+                    <select
+                      value={preparedBy}
+                      onChange={(e) => {
+                        if (e.target.value) setPreparedBy(e.target.value);
+                      }}
+                      className="w-full bg-slate-900 border border-slate-700 rounded-md px-2 py-1 text-xs text-slate-200 focus:outline-none focus:border-teal-500"
+                    >
+                      <option value="">-- Choose from available users --</option>
+                      {usersList.map((u) => {
+                        const displayName = u.name || u.username;
+                        return (
+                          <option key={u.id} value={displayName}>
+                            {displayName} ({u.username})
+                          </option>
+                        );
+                      })}
+                    </select>
+                  </div>
+                )}
+              </div>
             </div>
           </div>
 
