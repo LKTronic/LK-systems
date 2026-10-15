@@ -15,14 +15,33 @@ export async function GET() {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const departments = await prisma.department.findMany({
-      include: {
-        _count: {
-          select: { users: true },
+    let departments: any[] = [];
+    if (typeof (prisma as any)?.department?.findMany === "function") {
+      departments = await (prisma as any).department.findMany({
+        include: {
+          _count: {
+            select: { users: true },
+          },
         },
-      },
-      orderBy: { name: "asc" },
-    });
+        orderBy: { name: "asc" },
+      });
+    } else {
+      const rawRows = await prisma.$queryRawUnsafe<
+        Array<{ id: number; name: string; createdAt: Date; updatedAt: Date; userCount: number | bigint }>
+      >(
+        `SELECT d.id, d.name, d.createdAt, d.updatedAt,
+           (SELECT COUNT(*) FROM User u WHERE u.departmentId = d.id) as userCount
+         FROM Department d
+         ORDER BY d.name ASC`
+      );
+      departments = rawRows.map((r) => ({
+        id: r.id,
+        name: r.name,
+        createdAt: r.createdAt,
+        updatedAt: r.updatedAt,
+        _count: { users: Number(r.userCount) || 0 },
+      }));
+    }
 
     return NextResponse.json(
       { departments },
@@ -65,11 +84,20 @@ export async function POST(request: NextRequest) {
     }
 
     // Check duplicate department name
-    const existing = await prisma.department.findFirst({
-      where: {
-        name: rawName,
-      },
-    });
+    let existing: any = null;
+    if (typeof (prisma as any)?.department?.findFirst === "function") {
+      existing = await (prisma as any).department.findFirst({
+        where: {
+          name: rawName,
+        },
+      });
+    } else {
+      const rows = await prisma.$queryRawUnsafe<Array<{ id: number; name: string }>>(
+        "SELECT id, name FROM Department WHERE name = ? LIMIT 1",
+        rawName
+      );
+      existing = rows[0] || null;
+    }
 
     if (existing) {
       return NextResponse.json(
@@ -78,11 +106,24 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const newDept = await prisma.department.create({
-      data: {
-        name: rawName,
-      },
-    });
+    let newDept: any = null;
+    if (typeof (prisma as any)?.department?.create === "function") {
+      newDept = await (prisma as any).department.create({
+        data: {
+          name: rawName,
+        },
+      });
+    } else {
+      await prisma.$executeRawUnsafe(
+        "INSERT INTO Department (name, createdAt, updatedAt) VALUES (?, NOW(), NOW())",
+        rawName
+      );
+      const rows = await prisma.$queryRawUnsafe<Array<{ id: number; name: string; createdAt: Date; updatedAt: Date }>>(
+        "SELECT id, name, createdAt, updatedAt FROM Department WHERE name = ? ORDER BY id DESC LIMIT 1",
+        rawName
+      );
+      newDept = rows[0];
+    }
 
     return NextResponse.json({ department: newDept }, { status: 201 });
   } catch (error: any) {
