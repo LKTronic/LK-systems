@@ -16,6 +16,7 @@ import {
   AlertCircle,
   CheckCircle2,
   Filter,
+  Pencil,
 } from "lucide-react";
 
 interface Quotation {
@@ -304,6 +305,14 @@ export default function QuotationsListPage() {
 
                       <td className="py-3.5 px-4 text-center">
                         <div className="flex items-center justify-center gap-2">
+                          <Link
+                            href={`/quotations/${q.id}/edit`}
+                            title="Edit Quotation"
+                            className="p-1.5 bg-slate-800 hover:bg-slate-700 text-teal-400 border border-slate-700 rounded-md transition-colors"
+                          >
+                            <Pencil className="w-4 h-4" />
+                          </Link>
+
                           <button
                             type="button"
                             onClick={() => handleDownloadPdf(q)}
