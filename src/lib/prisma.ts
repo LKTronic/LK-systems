@@ -79,5 +79,18 @@ if (!(prisma as any).department) {
       );
       return rows[0];
     },
+    delete: async (args: any) => {
+      const id = args?.where?.id;
+      if (!id) return null;
+      await (prisma as any).$executeRawUnsafe(
+        "UPDATE User SET departmentId = NULL WHERE departmentId = ?",
+        id
+      );
+      await (prisma as any).$executeRawUnsafe(
+        "DELETE FROM Department WHERE id = ?",
+        id
+      );
+      return { id };
+    },
   };
 }
