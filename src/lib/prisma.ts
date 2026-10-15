@@ -6,10 +6,12 @@ const globalForPrisma = globalThis as unknown as {
 };
 
 // Increment to invalidate stale in-memory Prisma client on schema/enum changes
-const SCHEMA_VERSION = 2;
+const SCHEMA_VERSION = 4;
 
 export const prisma =
-  globalForPrisma.prisma && globalForPrisma.prismaVersion === SCHEMA_VERSION
+  globalForPrisma.prisma &&
+  globalForPrisma.prismaVersion === SCHEMA_VERSION &&
+  Boolean((globalForPrisma.prisma as any)?.department)
     ? globalForPrisma.prisma
     : new PrismaClient({
         log: ["error", "warn"],

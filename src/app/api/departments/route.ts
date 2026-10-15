@@ -67,9 +67,7 @@ export async function POST(request: NextRequest) {
     // Check duplicate department name
     const existing = await prisma.department.findFirst({
       where: {
-        name: {
-          equals: rawName,
-        },
+        name: rawName,
       },
     });
 
