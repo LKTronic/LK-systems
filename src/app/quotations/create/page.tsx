@@ -6,7 +6,11 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { AppLayout } from "@/components/AppLayout";
 import { formatLKR } from "@/lib/formatters";
-import { generateQuotationPdf, QuotationPdfItem } from "@/lib/quotationPdfGenerator";
+import {
+  generateQuotationPdf,
+  QuotationPdfItem,
+  formatValidityPeriodText,
+} from "@/lib/quotationPdfGenerator";
 import {
   FileText,
   Calendar,
@@ -64,6 +68,7 @@ export default function CreateQuotationPage() {
   const [quotationNo, setQuotationNo] = useState("");
   const [preparedDate, setPreparedDate] = useState("");
   const [expireDate, setExpireDate] = useState("");
+  const [validityDays, setValidityDays] = useState<number | string>(3);
   const [paymentMethod, setPaymentMethod] = useState("FULL_PAYMENT"); // FULL_PAYMENT, CREDIT, ADVANCE_PAYMENT
   const [advancePercent, setAdvancePercent] = useState<number | string>(50);
   const [preparedBy, setPreparedBy] = useState("");
@@ -113,8 +118,9 @@ export default function CreateQuotationPage() {
     setPreparedDate(todayStr);
 
     const expiry = new Date();
-    expiry.setDate(today.getDate() + 30);
+    expiry.setDate(today.getDate() + 3);
     setExpireDate(expiry.toISOString().split("T")[0]);
+    setValidityDays(3);
 
     // Fetch next sequential quotation number
     fetch("/api/quotations/next-number")
@@ -500,6 +506,7 @@ const formatPreparedBy = (u: UserListItem) => {
         quotationNo: quotationNo.trim(),
         preparedDate,
         expireDate,
+        validityDays: Number(validityDays) || 3,
         paymentMethod,
         advancePercent: paymentMethod === "ADVANCE_PAYMENT" ? numericAdvancePercent : null,
         preparedBy: preparedBy.trim(),
@@ -668,11 +675,11 @@ const formatPreparedBy = (u: UserListItem) => {
             </div>
           </div>
 
-          {/* Card 2: Dates (Prepared Date & Expiry Date) */}
+          {/* Card 2: Dates & Validity Schedule */}
           <div className="bg-slate-900/80 border border-slate-800 rounded-xl p-5 space-y-4 shadow-sm">
             <div className="flex items-center gap-2 text-teal-400 font-semibold text-sm border-b border-slate-800 pb-2">
               <Calendar className="w-4 h-4" />
-              Date Schedule
+              Date Schedule &amp; Validity
             </div>
 
             {/* Prepared Date */}
@@ -683,9 +690,50 @@ const formatPreparedBy = (u: UserListItem) => {
               <input
                 type="date"
                 value={preparedDate}
-                onChange={(e) => setPreparedDate(e.target.value)}
+                onChange={(e) => {
+                  const newPrep = e.target.value;
+                  setPreparedDate(newPrep);
+                  const days = Number(validityDays) || 3;
+                  if (newPrep) {
+                    const p = new Date(newPrep);
+                    if (!isNaN(p.getTime())) {
+                      p.setDate(p.getDate() + days);
+                      setExpireDate(p.toISOString().split("T")[0]);
+                    }
+                  }
+                }}
                 className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-teal-500 [color-scheme:dark]"
               />
+            </div>
+
+            {/* Validity of Quotation (Days) */}
+            <div>
+              <label className="block text-xs font-medium text-slate-400 mb-1.5">
+                Validity of Quotation (Days) <span className="text-red-400">*</span>
+              </label>
+              <input
+                type="number"
+                min="1"
+                max="365"
+                value={validityDays}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  setValidityDays(val);
+                  const days = parseInt(val, 10);
+                  if (preparedDate && !isNaN(days) && days > 0) {
+                    const p = new Date(preparedDate);
+                    if (!isNaN(p.getTime())) {
+                      p.setDate(p.getDate() + days);
+                      setExpireDate(p.toISOString().split("T")[0]);
+                    }
+                  }
+                }}
+                className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-teal-500 font-mono"
+                placeholder="3"
+              />
+              <p className="text-[11px] text-teal-400 mt-1 font-mono">
+                PDF text: &ldquo;{formatValidityPeriodText(Number(validityDays) || 3)}&rdquo;
+              </p>
             </div>
 
             {/* Expiry Date */}
@@ -696,7 +744,18 @@ const formatPreparedBy = (u: UserListItem) => {
               <input
                 type="date"
                 value={expireDate}
-                onChange={(e) => setExpireDate(e.target.value)}
+                onChange={(e) => {
+                  const newExp = e.target.value;
+                  setExpireDate(newExp);
+                  if (preparedDate && newExp) {
+                    const p = new Date(preparedDate).getTime();
+                    const exp = new Date(newExp).getTime();
+                    const diff = Math.round((exp - p) / (1000 * 60 * 60 * 24));
+                    if (diff > 0) {
+                      setValidityDays(diff);
+                    }
+                  }
+                }}
                 className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-teal-500 [color-scheme:dark]"
               />
             </div>

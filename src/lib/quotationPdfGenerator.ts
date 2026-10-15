@@ -17,6 +17,7 @@ export interface QuotationPdfData {
   quotationNo: string;
   preparedDate: string; // YYYY-MM-DD or YYYY/MM/DD
   expireDate: string; // YYYY-MM-DD or YYYY/MM/DD
+  validityDays?: number | string | null;
   paymentMethod: string; // "FULL_PAYMENT" | "CREDIT" | "ADVANCE_PAYMENT"
   advancePercent?: number | null;
   preparedBy: string;
@@ -30,6 +31,76 @@ export interface QuotationPdfData {
   companyAddress?: string;
   companyPhone?: string;
   companyEmail?: string;
+}
+
+/**
+ * Convert number (1-999) to English words
+ */
+const ONES = [
+  "Zero", "One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine",
+  "Ten", "Eleven", "Twelve", "Thirteen", "Fourteen", "Fifteen", "Sixteen",
+  "Seventeen", "Eighteen", "Nineteen",
+];
+const TENS = [
+  "", "", "Twenty", "Thirty", "Forty", "Fifty", "Sixty", "Seventy", "Eighty", "Ninety",
+];
+
+export function numberToWords(num: number): string {
+  const n = Math.abs(Math.round(num));
+  if (n < 20) return ONES[n] || String(n);
+  if (n < 100) {
+    const tens = TENS[Math.floor(n / 10)];
+    const remainder = n % 10;
+    return remainder > 0 ? `${tens}-${ONES[remainder]}` : tens;
+  }
+  if (n < 1000) {
+    const hundreds = ONES[Math.floor(n / 100)] + " Hundred";
+    const remainder = n % 100;
+    return remainder > 0 ? `${hundreds} ${numberToWords(remainder)}` : hundreds;
+  }
+  return String(n);
+}
+
+/**
+ * Format validity period text matching template format:
+ * e.g. 3 -> "Three (03) days"
+ * e.g. 7 -> "Seven (07) days"
+ * e.g. 1 -> "One (01) day"
+ */
+export function formatValidityPeriodText(days: number): string {
+  const d = Math.max(1, Math.round(Number(days) || 3));
+  const word = numberToWords(d);
+  const padded = d < 10 ? `0${d}` : String(d);
+  const unit = d === 1 ? "day" : "days";
+  return `${word} (${padded}) ${unit}`;
+}
+
+/**
+ * Calculate validity days from QuotationPdfData:
+ * 1. Uses explicit data.validityDays if provided
+ * 2. Or calculates from expireDate - preparedDate
+ * 3. Fallback to 3 days (official template default)
+ */
+export function getValidityDays(data: QuotationPdfData): number {
+  if (
+    data.validityDays !== undefined &&
+    data.validityDays !== null &&
+    !isNaN(Number(data.validityDays)) &&
+    Number(data.validityDays) > 0
+  ) {
+    return Math.round(Number(data.validityDays));
+  }
+  if (data.preparedDate && data.expireDate) {
+    try {
+      const p = new Date(data.preparedDate).getTime();
+      const e = new Date(data.expireDate).getTime();
+      const diff = Math.round((e - p) / (1000 * 60 * 60 * 24));
+      if (diff > 0) return diff;
+    } catch {
+      // fallback
+    }
+  }
+  return 3;
 }
 
 /**
@@ -818,11 +889,14 @@ export async function generateQuotationPdf(
     data.items
   );
 
+  const validityDays = getValidityDays(data);
+  const validityText = formatValidityPeriodText(validityDays);
+
   const sections = [
     {
       title: "Validity of Quotation",
       type: "plain" as const,
-      body: "This quotation is valid for a period of Three (03) days from the date of issue. Upon expiry of this period, the prices, availability, and terms specified herein shall be subject to change and may be adjusted based on market conditions, supplier revisions, or other applicable factors.",
+      body: `This quotation is valid for a period of ${validityText} from the date of issue. Upon expiry of this period, the prices, availability, and terms specified herein shall be subject to change and may be adjusted based on market conditions, supplier revisions, or other applicable factors.`,
     },
     {
       title: "Lead Time & Stock Status",
@@ -890,14 +964,51 @@ export async function generateQuotationPdf(
   doc.text("Payment Terms", 21, curY);
   curY += 5;
 
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(10);
-  const paySplit = doc.splitTextToSize(
-    "Payment shall be effected based on the agreed payment method (Full Payment / 80% Advance Payment / Credit) selected by the client and confirmed at the time of order. No processing or delivery will commence until the agreed payment terms are fulfilled.",
-    168
-  );
-  doc.text(paySplit, 21, curY);
-  curY += paySplit.length * 4.6 + 8;
+  const advancePct =
+    data.advancePercent !== undefined &&
+    data.advancePercent !== null &&
+    Number(data.advancePercent) > 0
+      ? Number(data.advancePercent)
+      : 80;
+  const advanceLabel = `${advancePct}% Advance Payment`;
+
+  const isFull = data.paymentMethod === "FULL_PAYMENT";
+  const isAdvance = data.paymentMethod === "ADVANCE_PAYMENT";
+  const isCredit = data.paymentMethod === "CREDIT";
+
+  const paymentSegments = [
+    {
+      text: "Payment shall be effected based on the agreed payment method (",
+      highlight: false,
+    },
+    {
+      text: "Full Payment",
+      highlight: isFull,
+    },
+    {
+      text: " / ",
+      highlight: false,
+    },
+    {
+      text: advanceLabel,
+      highlight: isAdvance,
+    },
+    {
+      text: " / ",
+      highlight: false,
+    },
+    {
+      text: "Credit",
+      highlight: isCredit,
+    },
+    {
+      text: ") selected by the client and confirmed at the time of order. No processing or delivery will commence until the agreed payment terms are fulfilled.",
+      highlight: false,
+    },
+  ];
+
+  curY = renderHighlightedParagraph(doc, paymentSegments, 21, curY, 168, 4.6);
+  curY += 8;
 
   // Bank Details Box
   doc.setFont("helvetica", "bold");

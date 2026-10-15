@@ -625,6 +625,44 @@ describe("Quotation Calculations & Financial Validation", () => {
     assert.equal(empty.highlightInStock, true);
     assert.equal(empty.highlightOverseas, false);
   });
+
+  it("formats quotation validity period text in both words and digits", async () => {
+    const { formatValidityPeriodText, getValidityDays, numberToWords } = await import(
+      "../src/lib/quotationPdfGenerator"
+    );
+
+    // Number to words tests
+    assert.equal(numberToWords(1), "One");
+    assert.equal(numberToWords(3), "Three");
+    assert.equal(numberToWords(7), "Seven");
+    assert.equal(numberToWords(14), "Fourteen");
+    assert.equal(numberToWords(30), "Thirty");
+    assert.equal(numberToWords(45), "Forty-Five");
+
+    // Validity period text tests
+    assert.equal(formatValidityPeriodText(1), "One (01) day");
+    assert.equal(formatValidityPeriodText(3), "Three (03) days");
+    assert.equal(formatValidityPeriodText(7), "Seven (07) days");
+    assert.equal(formatValidityPeriodText(14), "Fourteen (14) days");
+    assert.equal(formatValidityPeriodText(30), "Thirty (30) days");
+
+    // getValidityDays tests
+    // 1. Explicit validityDays
+    assert.equal(getValidityDays({ validityDays: 5 } as any), 5);
+    assert.equal(getValidityDays({ validityDays: "10" } as any), 10);
+
+    // 2. Computed from preparedDate and expireDate
+    assert.equal(
+      getValidityDays({
+        preparedDate: "2026-10-15",
+        expireDate: "2026-10-22",
+      } as any),
+      7
+    );
+
+    // 3. Default fallback
+    assert.equal(getValidityDays({} as any), 3);
+  });
 });
 
 
