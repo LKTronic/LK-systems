@@ -209,9 +209,15 @@ export async function generateQuotationPdf(data: QuotationPdfData): Promise<void
   const tableStartY = Math.max(metaStartY + 32, metaStartY + customerLines.length * 4.5 + 8);
 
   const tableBody = data.items.map((item, idx) => {
+    const rawLead = (item.leadTime || "12-21").trim();
+    const formattedLead =
+      rawLead.toLowerCase().includes("working") || rawLead.toLowerCase().includes("day")
+        ? rawLead
+        : `${rawLead} working days`;
+
     const availabilityText =
       item.stockStatus === "OVERSEAS"
-        ? `Overseas\n(${item.leadTime || "12-21 days"})`
+        ? `Overseas\n(${formattedLead})`
         : "In Stock";
     const warrantyText = item.warranty || "No Warranty";
 

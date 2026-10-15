@@ -37,7 +37,7 @@ interface ItemRow {
   description: string;
   imagePath?: string | null;
   stockStatus: "IN_STOCK" | "OVERSEAS";
-  leadTime: string; // default "12-21 working days"
+  leadTime: string; // default "12-21"
   warranty: string; // "No Warranty", "06 Months", "1 Year", or custom
   warrantyType: "NO" | "6M" | "1Y" | "CUSTOM";
   quantity: number;
@@ -75,7 +75,7 @@ export default function CreateQuotationPage() {
       description: "",
       imagePath: null,
       stockStatus: "IN_STOCK",
-      leadTime: "12-21 working days",
+      leadTime: "12-21",
       warranty: "No Warranty",
       warrantyType: "NO",
       quantity: 1,
@@ -181,7 +181,7 @@ export default function CreateQuotationPage() {
         description: "",
         imagePath: null,
         stockStatus: "IN_STOCK",
-        leadTime: "12-21 working days",
+        leadTime: "12-21",
         warranty: "No Warranty",
         warrantyType: "NO",
         quantity: 1,
@@ -352,7 +352,8 @@ export default function CreateQuotationPage() {
     }
 
     if (product.leadTime) {
-      updateItemRow(targetItemIndex, "leadTime", product.leadTime);
+      const cleaned = product.leadTime.replace(/\s*working days\s*/i, "").replace(/\s*days\s*/i, "").trim() || product.leadTime;
+      updateItemRow(targetItemIndex, "leadTime", cleaned);
       updateItemRow(targetItemIndex, "stockStatus", "OVERSEAS");
     }
 
@@ -416,7 +417,7 @@ export default function CreateQuotationPage() {
             description: it.description.trim(),
             imagePath: it.imagePath || null,
             stockStatus: it.stockStatus,
-            leadTime: it.stockStatus === "OVERSEAS" ? (it.leadTime || "12-21 working days") : null,
+            leadTime: it.stockStatus === "OVERSEAS" ? (it.leadTime || "12-21") : null,
             warranty: it.warranty || "No Warranty",
             quantity: Math.max(1, Number(it.quantity) || 1),
             unitPrice: Math.max(0, Number(it.unitPrice) || 0),
@@ -461,7 +462,7 @@ export default function CreateQuotationPage() {
             description: it.description.trim(),
             imagePath: it.imagePath || null,
             stockStatus: it.stockStatus,
-            leadTime: it.stockStatus === "OVERSEAS" ? (it.leadTime || "12-21 working days") : null,
+            leadTime: it.stockStatus === "OVERSEAS" ? (it.leadTime || "12-21") : null,
             warranty: it.warranty || "No Warranty",
             quantity: q,
             unitPrice: p,
@@ -758,7 +759,7 @@ export default function CreateQuotationPage() {
                   <th className="py-3 px-3 w-12 text-center">No</th>
                   <th className="py-3 px-3 w-20 text-center">Image</th>
                   <th className="py-3 px-4 min-w-[240px]">Product / Service</th>
-                  <th className="py-3 px-3 min-w-[190px]">Stock / Lead Time</th>
+                  <th className="py-3 px-3 min-w-[215px]">Stock / Lead Time</th>
                   <th className="py-3 px-3 min-w-[170px]">Warranty</th>
                   <th className="py-3 px-3 w-24 text-center">Quantity</th>
                   <th className="py-3 px-4 w-36 text-right">Unit Price (LKR)</th>
@@ -856,7 +857,7 @@ export default function CreateQuotationPage() {
                               const val = e.target.value as "IN_STOCK" | "OVERSEAS";
                               updateItemRow(index, "stockStatus", val);
                               if (val === "OVERSEAS" && !item.leadTime) {
-                                updateItemRow(index, "leadTime", "12-21 working days");
+                                updateItemRow(index, "leadTime", "12-21");
                               }
                             }}
                             className="w-full bg-slate-950 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-teal-500"
@@ -867,16 +868,17 @@ export default function CreateQuotationPage() {
 
                           {item.stockStatus === "OVERSEAS" && (
                             <div className="flex items-center gap-1.5 animate-in fade-in">
-                              <span className="text-[10px] text-amber-400 font-medium shrink-0">Lead:</span>
+                              <span className="text-[10px] text-amber-400 font-medium shrink-0">Lead time:</span>
                               <input
                                 type="text"
-                                value={item.leadTime || "12-21 working days"}
+                                value={item.leadTime || "12-21"}
                                 onChange={(e) =>
                                   updateItemRow(index, "leadTime", e.target.value)
                                 }
-                                placeholder="12-21 working days"
-                                className="w-full bg-slate-900 border border-amber-600/50 rounded px-2 py-1 text-xs text-amber-200 focus:outline-none focus:border-amber-400 font-mono"
+                                placeholder="12-21"
+                                className="w-16 bg-slate-900 border border-amber-600/50 rounded px-1.5 py-1 text-xs text-amber-200 text-center focus:outline-none focus:border-amber-400 font-mono"
                               />
+                              <span className="text-[10px] text-amber-300/80 shrink-0">working days</span>
                             </div>
                           )}
                         </div>
