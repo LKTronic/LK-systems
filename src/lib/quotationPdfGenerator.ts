@@ -24,6 +24,7 @@ export interface QuotationPdfData {
   subtotal: number;
   totalAmount: number;
   notes?: string | null;
+  registrationNo?: string | null;
   items: QuotationPdfItem[];
   companyName?: string;
   companyAddress?: string;
@@ -119,16 +120,18 @@ export async function generateQuotationPdf(data: QuotationPdfData): Promise<void
   doc.setFont("helvetica", "normal");
   doc.setFontSize(8.5);
   doc.setTextColor(90, 100, 110);
+  const regNoString = data.registrationNo || "P-V 00336036";
   const companyInfo = [
     data.companyName || "LK Tronics (Pvt) Ltd",
+    `Reg No: ${regNoString}`,
     data.companyAddress || "No. 123, Galle Road, Colombo, Sri Lanka",
     "Hotline: +94 11 234 5678 / +94 77 123 4567",
     "Email: info@lk-tronics.com | Web: www.lk-tronics.com",
   ];
-  let compY = 14;
+  let compY = 11;
   for (const line of companyInfo) {
     doc.text(line, pageWidth - margin, compY, { align: "right" });
-    compY += 4.2;
+    compY += 4.1;
   }
 
   // Horizontal Accent Divider
@@ -170,9 +173,10 @@ export async function generateQuotationPdf(data: QuotationPdfData): Promise<void
 
   doc.setFillColor(250, 250, 250);
   doc.setDrawColor(226, 232, 240);
-  doc.roundedRect(boxX, metaStartY - 2, boxWidth, 28, 2, 2, "FD");
+  doc.roundedRect(boxX, metaStartY - 2, boxWidth, 33, 2, 2, "FD");
 
   const metaItems = [
+    { label: "Registration No:", val: regNoString },
     { label: "Quotation Date:", val: data.preparedDate },
     { label: "Valid Until:", val: data.expireDate },
     {
@@ -182,18 +186,18 @@ export async function generateQuotationPdf(data: QuotationPdfData): Promise<void
     { label: "Prepared By:", val: data.preparedBy || "Staff" },
   ];
 
-  let metaY = metaStartY + 4;
+  let metaY = metaStartY + 3.5;
   for (const item of metaItems) {
     doc.setFont("helvetica", "bold");
-    doc.setFontSize(8.5);
+    doc.setFontSize(8.2);
     doc.setTextColor(71, 85, 105);
     doc.text(item.label, boxX + 4, metaY);
 
     doc.setFont("helvetica", "normal");
-    doc.setFontSize(8.5);
+    doc.setFontSize(8.2);
     doc.setTextColor(15, 23, 42);
     doc.text(String(item.val), boxX + boxWidth - 4, metaY, { align: "right" });
-    metaY += 5.8;
+    metaY += 5.4;
   }
 
   // Pre-load images for table rows

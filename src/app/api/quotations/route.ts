@@ -95,6 +95,7 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const {
       quotationNo,
+      registrationNo = "P-V 00336036",
       preparedDate,
       expireDate,
       paymentMethod,

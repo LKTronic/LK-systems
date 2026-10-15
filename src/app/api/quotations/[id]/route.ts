@@ -72,6 +72,7 @@ export async function PUT(
 
     const body = await request.json();
     const {
+      registrationNo,
       quotationNo,
       preparedDate,
       expireDate,
@@ -134,6 +135,7 @@ export async function PUT(
       return await tx.quotation.update({
         where: { id },
         data: {
+          registrationNo: registrationNo !== undefined ? (registrationNo?.trim() || "P-V 00336036") : existing.registrationNo,
           quotationNo: quotationNo ? quotationNo.trim() : existing.quotationNo,
           preparedDate: preparedDate ? new Date(preparedDate) : existing.preparedDate,
           expireDate: expireDate ? new Date(expireDate) : existing.expireDate,

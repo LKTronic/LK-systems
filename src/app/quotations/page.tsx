@@ -21,6 +21,7 @@ import {
 
 interface Quotation {
   id: number;
+  registrationNo?: string | null;
   quotationNo: string;
   preparedDate: string;
   expireDate: string;
@@ -107,6 +108,7 @@ export default function QuotationsListPage() {
           : new Date(q.expireDate).toISOString().split("T")[0];
 
       await generateQuotationPdf({
+        registrationNo: q.registrationNo,
         quotationNo: q.quotationNo,
         preparedDate: prepDateStr,
         expireDate: expDateStr,

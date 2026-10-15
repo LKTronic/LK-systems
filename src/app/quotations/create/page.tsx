@@ -60,6 +60,7 @@ export default function CreateQuotationPage() {
   const router = useRouter();
 
   // Form Fields
+  const [registrationNo, setRegistrationNo] = useState("P-V 00336036");
   const [quotationNo, setQuotationNo] = useState("");
   const [preparedDate, setPreparedDate] = useState("");
   const [expireDate, setExpireDate] = useState("");
@@ -423,6 +424,7 @@ const formatPreparedBy = (u: UserListItem) => {
 
     try {
       const payload = {
+        registrationNo,
         quotationNo: quotationNo.trim(),
         preparedDate,
         expireDate,
@@ -494,6 +496,7 @@ const formatPreparedBy = (u: UserListItem) => {
         });
 
       await generateQuotationPdf({
+        registrationNo,
         quotationNo: quotationNo.trim(),
         preparedDate,
         expireDate,
@@ -597,6 +600,21 @@ const formatPreparedBy = (u: UserListItem) => {
             <div className="flex items-center gap-2 text-teal-400 font-semibold text-sm border-b border-slate-800 pb-2">
               <FileText className="w-4 h-4" />
               Quotation Information
+            </div>
+
+            {/* Registration Number */}
+            <div>
+              <label className="block text-xs font-medium text-slate-400 mb-1.5">
+                Registration Number <span className="text-red-400">*</span>
+              </label>
+              <select
+                value={registrationNo}
+                onChange={(e) => setRegistrationNo(e.target.value)}
+                className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-teal-500 font-mono cursor-pointer"
+              >
+                <option value="P-V 00336036">P-V 00336036</option>
+                <option value="W-F 19731">W-F 19731</option>
+              </select>
             </div>
 
             {/* Quotation Number */}
