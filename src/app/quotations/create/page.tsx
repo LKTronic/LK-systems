@@ -60,7 +60,6 @@ export default function CreateQuotationPage() {
   const [advancePercent, setAdvancePercent] = useState<number | string>(50);
   const [preparedBy, setPreparedBy] = useState("");
   const [quotationTo, setQuotationTo] = useState("");
-  const [notes, setNotes] = useState("");
 
   // Items State
   const [items, setItems] = useState<ItemRow[]>([
@@ -363,7 +362,7 @@ export default function CreateQuotationPage() {
         advancePercent: paymentMethod === "ADVANCE_PAYMENT" ? numericAdvancePercent : null,
         preparedBy: preparedBy.trim(),
         quotationTo: quotationTo.trim(),
-        notes: notes.trim() || null,
+        notes: null,
         status: "ISSUED",
         items: items
           .filter((it) => it.description.trim() !== "")
@@ -430,7 +429,7 @@ export default function CreateQuotationPage() {
         quotationTo: quotationTo.trim(),
         subtotal,
         totalAmount: grandTotal,
-        notes: notes.trim() || null,
+        notes: null,
         items: pdfItems,
       });
 
@@ -847,24 +846,10 @@ export default function CreateQuotationPage() {
           </div>
         </div>
 
-        {/* Bottom Section: Notes & Live Financial Summary */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          {/* Notes Card */}
-          <div className="bg-slate-900/80 border border-slate-800 rounded-xl p-5 shadow-sm space-y-2">
-            <label className="block text-xs font-semibold text-teal-400 uppercase tracking-wider">
-              Special Notes / Terms & Conditions
-            </label>
-            <textarea
-              rows={4}
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-              placeholder="e.g. 1 Year Official Manufacturer Warranty. Delivery within 3 working days upon confirmation."
-              className="w-full bg-slate-950 border border-slate-700 rounded-lg p-3 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-teal-500"
-            />
-          </div>
-
+        {/* Bottom Section: Live Financial Summary */}
+        <div className="flex justify-end">
           {/* Full Amount Summary Card */}
-          <div className="bg-slate-900/80 border border-slate-800 rounded-xl p-5 shadow-sm space-y-3">
+          <div className="w-full max-w-md bg-slate-900/80 border border-slate-800 rounded-xl p-5 shadow-sm space-y-3">
             <h4 className="text-xs font-semibold text-teal-400 uppercase tracking-wider border-b border-slate-800 pb-2">
               Quotation Summary & Totals
             </h4>

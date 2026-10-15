@@ -340,41 +340,12 @@ export async function generateQuotationPdf(data: QuotationPdfData): Promise<void
     align: "right",
   });
 
-  // Notes & Payment instructions (Left of summary)
-  if (data.notes) {
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(8.5);
-    doc.setTextColor(71, 85, 105);
-    doc.text("Special Notes / Instructions:", margin, summaryY + 6);
-
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(8);
-    doc.setTextColor(100, 116, 139);
-    const noteLines = doc.splitTextToSize(data.notes, summaryX - margin - 6);
-    doc.text(noteLines, margin, summaryY + 11);
-  }
-
   // --- FOOTER & SIGNATURE ---
   const footerY = pageHeight - 24;
 
   doc.setDrawColor(203, 213, 225);
   doc.setLineWidth(0.4);
   doc.line(margin, footerY - 4, pageWidth - margin, footerY - 4);
-
-  // Terms note
-  doc.setFont("helvetica", "italic");
-  doc.setFontSize(7.5);
-  doc.setTextColor(148, 163, 184);
-  doc.text(
-    "Thank you for choosing LK Tronics. This quotation is valid until the stated expiry date.",
-    margin,
-    footerY + 1
-  );
-  doc.text(
-    "Goods once sold are subject to our standard warranty and terms.",
-    margin,
-    footerY + 5
-  );
 
   // Signature Block
   const sigX = pageWidth - margin - 50;
