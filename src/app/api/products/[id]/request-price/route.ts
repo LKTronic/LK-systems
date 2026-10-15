@@ -60,6 +60,8 @@ export async function POST(
         where: { id },
         data: {
           status: "PENDING",
+          productDate: new Date(),
+          createdBy: userId,
           priceUSD: null,
           warrantyPeriod: null,
           priceValidity: null,
