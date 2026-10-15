@@ -335,7 +335,10 @@ export default function ProductDetailPage({
                       <p className="text-xs text-slate-400">
                         {isOnlineWeb ? (
                           product.status === "PENDING" ? (
-                            <>Requested on {formatDateDMY(product.updatedAt || product.createdAt)}</>
+                            <>
+                              Requested {product.author?.name ? `by ${product.author.name} ` : ""}on{" "}
+                              {formatDateDMY(product.productDate || product.updatedAt || product.createdAt)}
+                            </>
                           ) : (
                             <>
                               PMS Price Uploaded on {formatDateDMY(product.priceUpdatedAt || product.updatedAt)}
