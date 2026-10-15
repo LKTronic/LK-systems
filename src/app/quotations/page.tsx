@@ -15,7 +15,6 @@ import {
   Loader2,
   AlertCircle,
   CheckCircle2,
-  Filter,
   Pencil,
 } from "lucide-react";
 
@@ -49,8 +48,6 @@ export default function QuotationsListPage() {
   const [quotations, setQuotations] = useState<Quotation[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [search, setSearch] = useState("");
-  const [paymentMethod, setPaymentMethod] = useState("ALL");
-  const [statusFilter, setStatusFilter] = useState("ALL");
   const [downloadingId, setDownloadingId] = useState<number | null>(null);
   const [deletingId, setDeletingId] = useState<number | null>(null);
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(
@@ -62,8 +59,6 @@ export default function QuotationsListPage() {
     try {
       const params = new URLSearchParams();
       if (search.trim()) params.append("search", search.trim());
-      if (paymentMethod !== "ALL") params.append("paymentMethod", paymentMethod);
-      if (statusFilter !== "ALL") params.append("status", statusFilter);
       params.append("limit", "50");
 
       const res = await fetch(`/api/quotations?${params.toString()}`);
@@ -83,7 +78,7 @@ export default function QuotationsListPage() {
       fetchQuotations();
     }, 250);
     return () => clearTimeout(timer);
-  }, [search, paymentMethod, statusFilter]);
+  }, [search]);
 
   const handleDownloadPdf = async (q: Quotation) => {
     setDownloadingId(q.id);
@@ -202,9 +197,9 @@ export default function QuotationsListPage() {
           </div>
         )}
 
-        {/* Filters */}
-        <div className="bg-slate-900/80 border border-slate-800 rounded-xl p-4 flex flex-col md:flex-row gap-3 items-center justify-between shadow-sm">
-          <div className="relative flex-1 w-full">
+        {/* Search */}
+        <div className="bg-slate-900/80 border border-slate-800 rounded-xl p-4 shadow-sm">
+          <div className="relative w-full">
             <Search className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
             <input
               type="text"
@@ -213,23 +208,6 @@ export default function QuotationsListPage() {
               placeholder="Search quotation #, customer details, or author..."
               className="w-full bg-slate-950 border border-slate-700 rounded-lg pl-9 pr-4 py-2 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-teal-500"
             />
-          </div>
-
-          <div className="flex items-center gap-3 w-full md:w-auto">
-            <div className="flex items-center gap-2 text-xs text-slate-400 shrink-0">
-              <Filter className="w-3.5 h-3.5" />
-              <span>Payment:</span>
-            </div>
-            <select
-              value={paymentMethod}
-              onChange={(e) => setPaymentMethod(e.target.value)}
-              className="bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-teal-500"
-            >
-              <option value="ALL">All Methods</option>
-              <option value="FULL_PAYMENT">Full Payment</option>
-              <option value="CREDIT">Credit</option>
-              <option value="ADVANCE_PAYMENT">Advance Payment</option>
-            </select>
           </div>
         </div>
 
