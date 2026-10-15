@@ -730,7 +730,9 @@ export async function generateQuotationPdf(
 
   autoTable(doc, {
     startY: tableStartY,
-    margin: { left: 21, right: 21 },
+    margin: { top: 70, bottom: 28, left: 21, right: 21 },
+    rowPageBreak: "avoid",
+    showHead: "everyPage",
     head: [
       [
         { content: "No.", styles: { halign: "center" } },

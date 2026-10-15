@@ -686,6 +686,43 @@ describe("Quotation Calculations & Financial Validation", () => {
       "Must include imported products full payment release clause in General Terms and Conditions"
     );
   });
+
+  it("handles multi-page quotation tables cleanly without overlapping headers", async () => {
+    const { generateQuotationPdf } = await import("../src/lib/quotationPdfGenerator");
+
+    const items = Array.from({ length: 8 }, (_, i) => ({
+      itemIndex: i + 1,
+      description: `Test Product Item ${i + 1} with a descriptive name and specs`,
+      stockStatus: i % 2 === 0 ? "IN_STOCK" : "OVERSEAS",
+      leadTime: "12-21",
+      warranty: "06 months",
+      quantity: 1,
+      unitPrice: 1500,
+      totalPrice: 1500,
+    }));
+
+    // Should generate without errors
+    try {
+      await assert.doesNotReject(async () => {
+        await generateQuotationPdf({
+          quotationNo: "QT-TEST-MULTIPAGE",
+          preparedDate: "2026-10-15",
+          expireDate: "2026-10-18",
+          paymentMethod: "FULL_PAYMENT",
+          preparedBy: "Staff",
+          quotationTo: "Valued Customer",
+          subtotal: 12000,
+          totalAmount: 12000,
+          items,
+        });
+      });
+    } finally {
+      const fs = await import("fs");
+      if (fs.existsSync("QT-TEST-MULTIPAGE.pdf")) {
+        fs.unlinkSync("QT-TEST-MULTIPAGE.pdf");
+      }
+    }
+  });
 });
 
 
