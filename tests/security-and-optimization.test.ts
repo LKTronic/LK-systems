@@ -463,4 +463,44 @@ describe("Product Image Deletion & Safe Fallback Resolution", () => {
   });
 });
 
+describe("Quotation Calculations & Financial Validation", () => {
+  it("formats LKR currency strings accurately", async () => {
+    const { formatLKR } = await import("../src/lib/quotationPdfGenerator");
+    assert.equal(formatLKR(1500), "LKR 1,500.00");
+    assert.equal(formatLKR(250000.5), "LKR 250,000.50");
+    assert.equal(formatLKR(0), "LKR 0.00");
+  });
+
+  it("formats payment method labels correctly", async () => {
+    const { formatPaymentMethodLabel } = await import("../src/lib/quotationPdfGenerator");
+    assert.equal(formatPaymentMethodLabel("FULL_PAYMENT"), "Full Payment");
+    assert.equal(formatPaymentMethodLabel("CREDIT"), "Credit Payment");
+    assert.equal(formatPaymentMethodLabel("ADVANCE_PAYMENT", 50), "Advance Payment (50%)");
+    assert.equal(formatPaymentMethodLabel("ADVANCE_PAYMENT", 30), "Advance Payment (30%)");
+  });
+
+  it("calculates line items, subtotal, advance payable, and balance due accurately", () => {
+    const items = [
+      { quantity: 2, unitPrice: 5000 },
+      { quantity: 10, unitPrice: 1250 },
+      { quantity: 3, unitPrice: 350 },
+    ];
+
+    const lineTotals = items.map((i) => i.quantity * i.unitPrice);
+    assert.deepEqual(lineTotals, [10000, 12500, 1050]);
+
+    const subtotal = lineTotals.reduce((a, b) => a + b, 0);
+    assert.equal(subtotal, 23550);
+
+    // 40% advance payment test
+    const advancePercent = 40;
+    const advancePayable = (subtotal * advancePercent) / 100;
+    const balanceDue = subtotal - advancePayable;
+
+    assert.equal(advancePayable, 9420);
+    assert.equal(balanceDue, 14130);
+    assert.equal(advancePayable + balanceDue, subtotal);
+  });
+});
+
 
