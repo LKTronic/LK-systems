@@ -292,18 +292,20 @@ function applyLetterhead(
 }
 
 /**
- * Format Product/Service cell content:
- * 1. Description
- * 2. Empty spacer line
- * 3. Stock status: "(instocks)" or "(Shipping from overseas - ...)"
- * 4. Warranty: ONLY if valid warranty is specified. If no warranty, omitted!
+ * Return highlight lines (stock status & warranty) matching template formatting:
+ * - OVERSEAS:
+ *     "(Shipping from Overseas)"
+ *     "(Lead time 12-21 working days)"
+ * - IN_STOCK:
+ *     "(instocks)"
+ * - Warranty (if valid):
+ *     "(${warranty})"
  */
-export function formatProductServiceCell(
-  description: string,
+export function getProductHighlightLines(
   stockStatus?: string | null,
   leadTime?: string | null,
   warranty?: string | null
-): string {
+): string[] {
   const rawLead = (leadTime || "12-21").trim();
   const formattedLead =
     rawLead.toLowerCase().includes("working") ||
@@ -311,10 +313,13 @@ export function formatProductServiceCell(
       ? rawLead
       : `${rawLead} working days`;
 
-  const stockText =
-    stockStatus === "OVERSEAS"
-      ? `(Shipping from overseas - ${formattedLead})`
-      : "(instocks)";
+  const lines: string[] = [];
+  if (stockStatus === "OVERSEAS") {
+    lines.push("(Shipping from Overseas)");
+    lines.push(`(Lead time ${formattedLead})`);
+  } else {
+    lines.push("(instocks)");
+  }
 
   const rawWarranty = (warranty || "").trim();
   const isNoWarranty =
@@ -325,17 +330,32 @@ export function formatProductServiceCell(
     rawWarranty.toLowerCase() === "n/a" ||
     rawWarranty.toLowerCase() === "no";
 
-  const warrantyText = isNoWarranty
-    ? ""
-    : rawWarranty.startsWith("(") && rawWarranty.endsWith(")")
-    ? rawWarranty
-    : `(${rawWarranty})`;
-
-  const descParts = [description.trim(), "", stockText];
-  if (warrantyText) {
-    descParts.push(warrantyText);
+  if (!isNoWarranty) {
+    const warrantyText =
+      rawWarranty.startsWith("(") && rawWarranty.endsWith(")")
+        ? rawWarranty
+        : `(${rawWarranty})`;
+    lines.push(warrantyText);
   }
-  return descParts.join("\n");
+
+  return lines;
+}
+
+/**
+ * Format Product/Service cell content:
+ * 1. Description
+ * 2. Empty spacer line
+ * 3. Stock status & lead time
+ * 4. Warranty: ONLY if valid warranty is specified. If no warranty, omitted!
+ */
+export function formatProductServiceCell(
+  description: string,
+  stockStatus?: string | null,
+  leadTime?: string | null,
+  warranty?: string | null
+): string {
+  const hl = getProductHighlightLines(stockStatus, leadTime, warranty);
+  return [description.trim(), "", ...hl].join("\n");
 }
 
 /**
@@ -536,8 +556,15 @@ export async function generateQuotationPdf(
         applyLetterhead(doc, selectedRegNo, bgBase64);
       }
     },
+    willDrawCell: (hookData) => {
+      // Suppress default autoTable text rendering for column 2 (Product/Service)
+      // so we can render description + yellow-highlighted italic stock & warranty in didDrawCell
+      if (hookData.section === "body" && hookData.column.index === 2) {
+        hookData.cell.text = [];
+      }
+    },
     didDrawCell: (hookData) => {
-      // Draw thumbnail image inside column index 1 (Image)
+      // 1. Draw thumbnail image inside column index 1 (Image)
       if (hookData.section === "body" && hookData.column.index === 1) {
         const rowIdx = hookData.row.index;
         const img = itemImagesBase64[rowIdx];
@@ -562,6 +589,80 @@ export async function generateQuotationPdf(
           } catch {
             // Ignore individual image render failures
           }
+        }
+      }
+
+      // 2. Custom render column index 2 (Product/Service) with yellow highlighted stock & warranty
+      if (hookData.section === "body" && hookData.column.index === 2) {
+        const rowIdx = hookData.row.index;
+        const item = data.items[rowIdx];
+        if (!item) return;
+
+        const cell = hookData.cell;
+        const padX = 4;
+        const maxTextW = cell.width - padX * 2;
+
+        // Split description lines
+        doc.setFont("helvetica", "normal");
+        doc.setFontSize(10);
+        const descLines = doc.splitTextToSize(item.description.trim(), maxTextW);
+
+        // Highlight lines (stock status & warranty)
+        const hlLines = getProductHighlightLines(
+          item.stockStatus,
+          item.leadTime,
+          item.warranty
+        );
+
+        doc.setFont("helvetica", "italic");
+        doc.setFontSize(9.5);
+        const wrappedHlLines: string[] = [];
+        for (const hl of hlLines) {
+          const split = doc.splitTextToSize(hl, maxTextW);
+          wrappedHlLines.push(...split);
+        }
+
+        const lineH = 4.4;
+        const spacerH = 2.5;
+        const totalContentH =
+          descLines.length * lineH + spacerH + wrappedHlLines.length * lineH;
+
+        let curY =
+          cell.y +
+          Math.max(4, (cell.height - totalContentH) / 2) +
+          3.2;
+
+        // Draw description lines (normal, 10pt)
+        doc.setFont("helvetica", "normal");
+        doc.setFontSize(10);
+        doc.setTextColor(0, 0, 0);
+        for (const line of descLines) {
+          if (line.trim().length > 0) {
+            doc.text(line, cell.x + padX, curY);
+          }
+          curY += lineH;
+        }
+
+        curY += spacerH;
+
+        // Draw yellow highlighted stock & warranty lines (italic, 9.5pt, #FFFF00 highlight)
+        doc.setFont("helvetica", "italic");
+        doc.setFontSize(9.5);
+        for (const hLine of wrappedHlLines) {
+          const strW = doc.getTextWidth(hLine);
+          const padHL = 1.0;
+          const rectW = Math.min(strW + padHL * 2, maxTextW);
+          const rectH = 4.2;
+
+          // Bright yellow highlight box behind text
+          doc.setFillColor(255, 255, 0);
+          doc.rect(cell.x + padX, curY - 3.2, rectW, rectH, "F");
+
+          // Text over highlight
+          doc.setTextColor(0, 0, 0);
+          doc.text(hLine, cell.x + padX + padHL, curY);
+
+          curY += 4.5;
         }
       }
     },

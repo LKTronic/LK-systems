@@ -532,7 +532,8 @@ describe("Quotation Calculations & Financial Validation", () => {
       "12-21",
       "1 Year Warranty"
     );
-    assert.ok(cell2.includes("(Shipping from overseas - 12-21 working days)"), "Should include formatted lead time");
+    assert.ok(cell2.includes("(Shipping from Overseas)"), "Should include (Shipping from Overseas)");
+    assert.ok(cell2.includes("(Lead time 12-21 working days)"), "Should include formatted lead time");
     assert.ok(cell2.includes("(1 Year Warranty)"), "Should include warranty");
 
     // Case 3: No Warranty -> Must NOT show warranty text at all
