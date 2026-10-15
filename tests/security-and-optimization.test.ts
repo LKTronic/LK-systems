@@ -517,24 +517,33 @@ describe("Quotation Calculations & Financial Validation", () => {
       "Original MeanWell NDR 120 Series 24V DC",
       "IN_STOCK",
       null,
-      "06 months warranty"
+      "06 months"
     );
     assert.ok(cell1.includes("(instocks)"), "Should include (instocks)");
-    assert.ok(cell1.includes("(06 months warranty)"), "Should include (06 months warranty)");
+    assert.ok(cell1.includes("(06 months warranty)"), "Should format '06 months' as '(06 months warranty)'");
     const instockIdx1 = cell1.indexOf("(instocks)");
     const warrantyIdx1 = cell1.indexOf("(06 months warranty)");
     assert.ok(instockIdx1 < warrantyIdx1, "(instocks) must appear before warranty");
+
+    // Case 1b: Parenthesized input '(06 months)'
+    const cell1b = formatProductServiceCell(
+      "Original MeanWell NDR 120 Series 24V DC",
+      "IN_STOCK",
+      null,
+      "(06 months)"
+    );
+    assert.ok(cell1b.includes("(06 months warranty)"), "Should format '(06 months)' as '(06 months warranty)'");
 
     // Case 2: Overseas item with lead time and warranty
     const cell2 = formatProductServiceCell(
       "Stepper Driver CL57T",
       "OVERSEAS",
       "12-21",
-      "1 Year Warranty"
+      "1 Year"
     );
     assert.ok(cell2.includes("(Shipping from Overseas)"), "Should include (Shipping from Overseas)");
     assert.ok(cell2.includes("(Lead time 12-21 working days)"), "Should include formatted lead time");
-    assert.ok(cell2.includes("(1 Year Warranty)"), "Should include warranty");
+    assert.ok(cell2.includes("(1 Year warranty)"), "Should include '(1 Year warranty)'");
 
     // Case 3: No Warranty -> Must NOT show warranty text at all
     const cell3 = formatProductServiceCell(

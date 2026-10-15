@@ -525,7 +525,10 @@ export function getProductHighlightLines(
     lines.push("(instocks)");
   }
 
-  const rawWarranty = (warranty || "").trim();
+  const rawWarranty = (warranty || "")
+    .trim()
+    .replace(/^[\(\[]|[\)\]]$/g, "")
+    .trim();
   const isNoWarranty =
     !rawWarranty ||
     rawWarranty.toLowerCase() === "no warranty" ||
@@ -535,11 +538,11 @@ export function getProductHighlightLines(
     rawWarranty.toLowerCase() === "no";
 
   if (!isNoWarranty) {
-    const warrantyText =
-      rawWarranty.startsWith("(") && rawWarranty.endsWith(")")
-        ? rawWarranty
-        : `(${rawWarranty})`;
-    lines.push(warrantyText);
+    const hasWarrantyWord = rawWarranty.toLowerCase().includes("warranty");
+    const formattedWarranty = hasWarrantyWord
+      ? rawWarranty
+      : `${rawWarranty} warranty`;
+    lines.push(`(${formattedWarranty})`);
   }
 
   return lines;
@@ -1113,14 +1116,14 @@ export async function generateQuotationPdf(
 
   // Render brands sheet centered on page 4
   // In Word docx: cx = 155.18 mm, cy = 219.50 mm, positioned below top header
-  // Keep x centered on A4: (210 - 155) / 2 = 27.5 mm, y = 50 mm
+  // Keep x centered on A4: (210 - 155) / 2 = 27.5 mm, y = 40 mm (closer to top logo)
   if (brandsBase64) {
     try {
       doc.addImage(
         brandsBase64,
         "PNG",
         27.5,
-        50,
+        40,
         155,
         219,
         undefined,
