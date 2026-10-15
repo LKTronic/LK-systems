@@ -259,6 +259,123 @@ function drawCheckmark(d: jsPDF, x: number, y: number): void {
 }
 
 /**
+ * Return highlight flags for Lead Time & Stock Status on Page 2:
+ * - If all products in quotation are IN_STOCK:
+ *     highlight in-stock sentence ("Items currently in stock at our Homagama warehouse...")
+ * - If all products in quotation are OVERSEAS:
+ *     highlight overseas sentence ("sourced from overseas, the standard delivery lead time...")
+ * - If BOTH exist in the quotation:
+ *     highlight BOTH sentences
+ */
+export function getLeadTimeHighlightFlags(
+  items: Array<{ stockStatus?: string | null }>
+): {
+  highlightOverseas: boolean;
+  highlightInStock: boolean;
+} {
+  const hasOverseas = (items || []).some((it) => it.stockStatus === "OVERSEAS");
+  const hasInStock = (items || []).some(
+    (it) => !it.stockStatus || it.stockStatus === "IN_STOCK"
+  );
+
+  if (hasOverseas && hasInStock) {
+    return { highlightOverseas: true, highlightInStock: true };
+  }
+  if (hasOverseas) {
+    return { highlightOverseas: true, highlightInStock: false };
+  }
+  // Default to in-stock (as in the official Word template)
+  return { highlightOverseas: false, highlightInStock: true };
+}
+
+/**
+ * Helper to render a flowing paragraph with selective yellow background highlights on text segments.
+ * Accurately flows across multiple lines at 10pt font size.
+ */
+function renderHighlightedParagraph(
+  doc: jsPDF,
+  segments: Array<{ text: string; highlight: boolean }>,
+  startX: number,
+  startY: number,
+  maxWidth: number,
+  lineH: number = 4.6
+): number {
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(10);
+
+  const tokens: Array<{ word: string; highlight: boolean }> = [];
+  for (const seg of segments) {
+    const words = seg.text.split(" ");
+    for (let i = 0; i < words.length; i++) {
+      if (words[i].length > 0) {
+        tokens.push({ word: words[i], highlight: seg.highlight });
+      }
+    }
+  }
+
+  const spaceW = doc.getTextWidth(" ");
+  const lines: Array<Array<{ word: string; highlight: boolean }>> = [];
+  let curLine: Array<{ word: string; highlight: boolean }> = [];
+  let curLineW = 0;
+
+  for (const token of tokens) {
+    const wordW = doc.getTextWidth(token.word);
+    const addedW = curLine.length === 0 ? wordW : spaceW + wordW;
+
+    if (curLineW + addedW <= maxWidth) {
+      curLine.push(token);
+      curLineW += addedW;
+    } else {
+      lines.push(curLine);
+      curLine = [token];
+      curLineW = wordW;
+    }
+  }
+  if (curLine.length > 0) {
+    lines.push(curLine);
+  }
+
+  let curY = startY;
+  for (const line of lines) {
+    // Group adjacent words with identical highlight status
+    const lineSegments: Array<{
+      highlight: boolean;
+      words: string[];
+    }> = [];
+
+    for (const item of line) {
+      const last = lineSegments[lineSegments.length - 1];
+      if (last && last.highlight === item.highlight) {
+        last.words.push(item.word);
+      } else {
+        lineSegments.push({
+          highlight: item.highlight,
+          words: [item.word],
+        });
+      }
+    }
+
+    let curX = startX;
+    for (const seg of lineSegments) {
+      const text = seg.words.join(" ");
+      const segW = doc.getTextWidth(text);
+
+      if (seg.highlight) {
+        doc.setFillColor(255, 255, 0); // Bright yellow highlight (#FFFF00)
+        doc.rect(curX - 0.4, curY - 3.1, segW + 0.8, 4.0, "F");
+      }
+
+      doc.setTextColor(0, 0, 0);
+      doc.text(text, curX, curY);
+      curX += segW + spaceW;
+    }
+    curY += lineH;
+  }
+
+  return curY;
+}
+
+/**
  * Helper to apply branded letterhead background and dynamic top bar to any page
  */
 function applyLetterhead(
@@ -697,21 +814,47 @@ export async function generateQuotationPdf(
   }
 
   curY += 3;
+  const { highlightOverseas, highlightInStock } = getLeadTimeHighlightFlags(
+    data.items
+  );
+
   const sections = [
     {
       title: "Validity of Quotation",
+      type: "plain" as const,
       body: "This quotation is valid for a period of Three (03) days from the date of issue. Upon expiry of this period, the prices, availability, and terms specified herein shall be subject to change and may be adjusted based on market conditions, supplier revisions, or other applicable factors.",
     },
     {
       title: "Lead Time & Stock Status",
-      body: "For products sourced from overseas, the standard delivery lead time ranges from 12–21 business working days, calculated from the date of advance payment or receipt of an official purchase order. Items currently in stock at our Homagama warehouse will be delivered within 2–5 business working days. The stock availability status for each product is clearly specified in the respective product description column of this quotation. (Availability of in-stock products may change without prior notice. Customers are advised to confirm the current stock status with our sales team before issuing a purchase order or making any advance payment.)",
+      type: "lead_time" as const,
+      segments: [
+        { text: "For products", highlight: false },
+        {
+          text: "sourced from overseas, the standard delivery lead time ranges from 12–21 business working days,",
+          highlight: highlightOverseas,
+        },
+        {
+          text: "calculated from the date of advance payment or receipt of an official purchase order.",
+          highlight: false,
+        },
+        {
+          text: "Items currently in stock at our Homagama warehouse will be delivered within 2–5 business working days.",
+          highlight: highlightInStock,
+        },
+        {
+          text: "The stock availability status for each product is clearly specified in the respective product description column of this quotation. (Availability of in-stock products may change without prior notice. Customers are advised to confirm the current stock status with our sales team before issuing a purchase order or making any advance payment.)",
+          highlight: false,
+        },
+      ],
     },
     {
       title: "Warranty Terms",
+      type: "plain" as const,
       body: "Warranty coverage shall be granted based on the manufacturer's or supplier's policy. Damages arising from misuse, mishandling, improper installation, modifications, or external environmental factors are not covered under any circumstances. Where applicable, the warranty period and conditions will be specified in the respective product table within this quotation.",
     },
     {
       title: "Delivery from Homagama Warehouse",
+      type: "plain" as const,
       body: "If delivery charges are not specified in the quotation table, the client shall be responsible for either arranging collection of the goods from our store or bearing the applicable delivery cost, should delivery be required.",
     },
   ];
@@ -723,11 +866,16 @@ export async function generateQuotationPdf(
     doc.text(sec.title, 21, curY);
     curY += 5;
 
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(10);
-    const split = doc.splitTextToSize(sec.body, 168);
-    doc.text(split, 21, curY);
-    curY += split.length * 4.6 + 4.5;
+    if (sec.type === "lead_time" && sec.segments) {
+      curY = renderHighlightedParagraph(doc, sec.segments, 21, curY, 168, 4.6);
+      curY += 4.5;
+    } else if (sec.body) {
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(10);
+      const split = doc.splitTextToSize(sec.body, 168);
+      doc.text(split, 21, curY);
+      curY += split.length * 4.6 + 4.5;
+    }
   }
 
   // ================= PAGE 3: Payment, Bank Details & Signature =================

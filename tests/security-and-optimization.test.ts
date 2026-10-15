@@ -592,6 +592,39 @@ describe("Quotation Calculations & Financial Validation", () => {
     assert.equal(defaultDetails.bankName, "Hatton National Bank");
     assert.equal(defaultDetails.bankBranch, "Biyagama");
   });
+
+  it("determines lead time highlight flags based on quotation stock status", async () => {
+    const { getLeadTimeHighlightFlags } = await import("../src/lib/quotationPdfGenerator");
+
+    // Case 1: All items in stock
+    const inStockOnly = getLeadTimeHighlightFlags([
+      { stockStatus: "IN_STOCK" },
+      { stockStatus: null },
+    ]);
+    assert.equal(inStockOnly.highlightInStock, true);
+    assert.equal(inStockOnly.highlightOverseas, false);
+
+    // Case 2: All items overseas
+    const overseasOnly = getLeadTimeHighlightFlags([
+      { stockStatus: "OVERSEAS" },
+      { stockStatus: "OVERSEAS" },
+    ]);
+    assert.equal(overseasOnly.highlightInStock, false);
+    assert.equal(overseasOnly.highlightOverseas, true);
+
+    // Case 3: Mixed items (both in-stock and overseas)
+    const mixed = getLeadTimeHighlightFlags([
+      { stockStatus: "IN_STOCK" },
+      { stockStatus: "OVERSEAS" },
+    ]);
+    assert.equal(mixed.highlightInStock, true);
+    assert.equal(mixed.highlightOverseas, true);
+
+    // Case 4: Empty items array defaults to in-stock
+    const empty = getLeadTimeHighlightFlags([]);
+    assert.equal(empty.highlightInStock, true);
+    assert.equal(empty.highlightOverseas, false);
+  });
 });
 
 
