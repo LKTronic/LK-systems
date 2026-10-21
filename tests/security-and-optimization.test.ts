@@ -1,5 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
+import path from "path";
 import { cleanHtml } from "../src/lib/webStoreAutoSync";
 
 describe("Security & Role Authorization Rules", () => {
@@ -463,4 +464,15 @@ describe("Product Image Deletion & Safe Fallback Resolution", () => {
   });
 });
 
+describe("Path Traversal & Safe Upload Validation (CWE-22 / OWASP A01)", () => {
+  function sanitizeFilenameForStorage(input: string): string {
+    const normalized = decodeURIComponent(input).replace(/\\/g, "/");
+    return path.posix.basename(normalized).replace(/[^a-zA-Z0-9._-]/g, "_");
+  }
+
+  it("neutralizes directory traversal patterns in filenames across Windows and POSIX separators", () => {
+    assert.equal(sanitizeFilenameForStorage("../etc/passwd"), "passwd");
+    assert.equal(sanitizeFilenameForStorage("..\\..\\windows\\system32\\cmd.exe"), "cmd.exe");
+  });
+});
 

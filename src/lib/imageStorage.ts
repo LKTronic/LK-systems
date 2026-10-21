@@ -41,7 +41,7 @@ export async function backupImageToDatabase(
 ): Promise<void> {
   try {
     await ensureImageBackupTable();
-    const cleanFilename = path.basename(filename);
+    const cleanFilename = path.basename(filename.replace(/\\/g, "/"));
     const base64Data = buffer.toString("base64");
 
     await prisma.$executeRawUnsafe(
@@ -65,7 +65,7 @@ export async function getImageFromDatabase(
 ): Promise<{ buffer: Buffer; mimeType: string } | null> {
   try {
     await ensureImageBackupTable();
-    const cleanFilename = path.basename(filename);
+    const cleanFilename = path.basename(filename.replace(/\\/g, "/"));
 
     const rows = (await prisma.$queryRawUnsafe(
       `SELECT \`data\`, \`mimeType\` FROM \`ProductImageBackup\` WHERE \`filename\` = ? LIMIT 1`,
@@ -86,7 +86,7 @@ export async function getImageFromDatabase(
  * Restores a missing file on disk from the database backup if available.
  */
 export async function restoreFileToDiskFromDatabase(filename: string): Promise<boolean> {
-  const cleanFilename = path.basename(filename);
+  const cleanFilename = path.basename(filename.replace(/\\/g, "/"));
   const uploadDir = path.join(process.cwd(), "public", "uploads", "products");
   const diskPath = path.join(uploadDir, cleanFilename);
 
