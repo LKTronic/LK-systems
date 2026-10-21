@@ -821,7 +821,8 @@ describe("Path Traversal & Safe Upload Validation (CWE-22 / OWASP A01)", () => {
     } catch {
       // fallback to raw
     }
-    const clean = path.basename(decoded).replace(/[^a-zA-Z0-9._-]/g, "_");
+    const normalized = decoded.replace(/\\/g, "/");
+    const clean = path.posix.basename(normalized).replace(/[^a-zA-Z0-9._-]/g, "_");
     return clean;
   }
 
