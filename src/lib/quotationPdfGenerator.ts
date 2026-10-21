@@ -387,7 +387,7 @@ function renderHighlightedParagraph(
   maxWidth: number,
   lineH: number = 4.6
 ): number {
-  doc.setFont("helvetica", "normal");
+  doc.setFont("times", "normal");
   doc.setFontSize(10);
 
   const tokens: Array<{ word: string; highlight: boolean }> = [];
@@ -483,7 +483,7 @@ function applyLetterhead(
   doc.setFillColor(74, 144, 152); // exact template teal
   doc.rect(0, 23.3, 210, 6.8, "F");
 
-  doc.setFont("helvetica", "bold");
+  doc.setFont("times", "bold");
   doc.setFontSize(10);
   doc.setTextColor(215, 235, 238);
   doc.text("LK TRONICS,HIGH-LEVEL ROAD,HOMAGAMA,SRI LANKA.", 10, 27.8);
@@ -587,6 +587,7 @@ export async function generateQuotationPdf(
     unit: "mm",
     format: "a4",
   });
+  doc.setFont("times", "normal");
 
   const selectedRegNo = (data.registrationNo || "P-V 00336036").trim();
 
@@ -637,7 +638,7 @@ export async function generateQuotationPdf(
 
   let curMetaY = boxY + 5.8;
   for (const r of metaRows) {
-    doc.setFont("helvetica", "normal");
+    doc.setFont("times", "normal");
     doc.setFontSize(10);
     doc.setTextColor(0, 0, 0);
     doc.text(r.label, boxX + 3.5, curMetaY);
@@ -649,12 +650,12 @@ export async function generateQuotationPdf(
   // X = 25.4 mm, Y = 82.2 mm
   const toX = 25.4;
   const toY = 82.2;
-  doc.setFont("helvetica", "bold");
+  doc.setFont("times", "bold");
   doc.setFontSize(11);
   doc.setTextColor(0, 0, 0);
   doc.text("QUOTATION TO -", toX, toY);
 
-  doc.setFont("helvetica", "normal");
+  doc.setFont("times", "normal");
   doc.setFontSize(10);
   doc.setTextColor(0, 0, 0);
   const toLines = doc.splitTextToSize(
@@ -693,6 +694,7 @@ export async function generateQuotationPdf(
         content: "",
         colSpan: 1,
         styles: {
+          font: "times",
           lineWidth: 0.35,
           fillColor: [255, 255, 255],
           minCellHeight: 9.5,
@@ -703,6 +705,7 @@ export async function generateQuotationPdf(
         content: "Total Amount",
         colSpan: 4,
         styles: {
+          font: "times",
           halign: "center",
           fontStyle: "bold",
           fontSize: 10,
@@ -716,6 +719,7 @@ export async function generateQuotationPdf(
         content: formatRs(data.totalAmount),
         colSpan: 1,
         styles: {
+          font: "times",
           halign: "center",
           fontStyle: "bold",
           fontSize: 10,
@@ -749,6 +753,7 @@ export async function generateQuotationPdf(
     tableLineColor: [0, 0, 0],
     tableLineWidth: 0.35,
     styles: {
+      font: "times",
       lineColor: [0, 0, 0],
       lineWidth: 0.35,
       textColor: [0, 0, 0],
@@ -759,6 +764,7 @@ export async function generateQuotationPdf(
       fillColor: [255, 255, 255],
     },
     headStyles: {
+      font: "times",
       fontStyle: "bold",
       fontSize: 10,
       textColor: [0, 0, 0],
@@ -768,6 +774,7 @@ export async function generateQuotationPdf(
       valign: "middle",
     },
     footStyles: {
+      font: "times",
       minCellHeight: 9.5,
       cellPadding: 2,
       valign: "middle",
@@ -839,7 +846,7 @@ export async function generateQuotationPdf(
         const maxTextW = cell.width - padX * 2;
 
         // Split description lines
-        doc.setFont("helvetica", "normal");
+        doc.setFont("times", "normal");
         doc.setFontSize(10);
         const descLines = doc.splitTextToSize(item.description.trim(), maxTextW);
 
@@ -850,7 +857,7 @@ export async function generateQuotationPdf(
           item.warranty
         );
 
-        doc.setFont("helvetica", "italic");
+        doc.setFont("times", "italic");
         doc.setFontSize(8);
         const wrappedHlLines: string[] = [];
         for (const hl of hlLines) {
@@ -870,7 +877,7 @@ export async function generateQuotationPdf(
           3.0;
 
         // Draw description lines (normal, 10pt)
-        doc.setFont("helvetica", "normal");
+        doc.setFont("times", "normal");
         doc.setFontSize(10);
         doc.setTextColor(0, 0, 0);
         for (const line of descLines) {
@@ -883,7 +890,7 @@ export async function generateQuotationPdf(
         curY += spacerH;
 
         // Draw yellow highlighted stock & warranty lines (italic, 8pt, #FFFF00 highlight)
-        doc.setFont("helvetica", "italic");
+        doc.setFont("times", "italic");
         doc.setFontSize(8);
         for (const hLine of wrappedHlLines) {
           const strW = doc.getTextWidth(hLine);
@@ -911,7 +918,7 @@ export async function generateQuotationPdf(
 
   // Starts at Y = 70 mm to cleanly clear the circular logo banner (which ends at 59mm)
   let curY = 70;
-  doc.setFont("helvetica", "bold");
+  doc.setFont("times", "bold");
   doc.setFontSize(12);
   doc.setTextColor(0, 0, 0);
   doc.text("General Terms and Conditions for the Client", 21, curY);
@@ -919,7 +926,7 @@ export async function generateQuotationPdf(
 
   const generalBullets = DEFAULT_GENERAL_TERMS_BULLETS;
 
-  doc.setFont("helvetica", "normal");
+  doc.setFont("times", "normal");
   doc.setFontSize(10);
   for (const b of generalBullets) {
     drawCheckmark(doc, 22, curY);
@@ -978,7 +985,7 @@ export async function generateQuotationPdf(
   ];
 
   for (const sec of sections) {
-    doc.setFont("helvetica", "bold");
+    doc.setFont("times", "bold");
     doc.setFontSize(11);
     doc.setTextColor(0, 0, 0);
     doc.text(sec.title, 21, curY);
@@ -988,7 +995,7 @@ export async function generateQuotationPdf(
       curY = renderHighlightedParagraph(doc, sec.segments, 21, curY, 168, 4.6);
       curY += 4.5;
     } else if (sec.body) {
-      doc.setFont("helvetica", "normal");
+      doc.setFont("times", "normal");
       doc.setFontSize(10);
       const split = doc.splitTextToSize(sec.body, 168);
       doc.text(split, 21, curY);
@@ -1002,7 +1009,7 @@ export async function generateQuotationPdf(
 
   // Starts at Y = 70 mm to cleanly clear the circular logo banner
   curY = 70;
-  doc.setFont("helvetica", "bold");
+  doc.setFont("times", "bold");
   doc.setFontSize(11);
   doc.setTextColor(0, 0, 0);
   doc.text("Payment Terms", 21, curY);
@@ -1055,7 +1062,7 @@ export async function generateQuotationPdf(
   curY += 8;
 
   // Bank Details Box
-  doc.setFont("helvetica", "bold");
+  doc.setFont("times", "bold");
   doc.setFontSize(11);
   doc.text("Bank Details", 21, curY);
   curY += 5;
@@ -1080,11 +1087,11 @@ export async function generateQuotationPdf(
 
   let curBankY = bankBoxY + 5.5;
   for (const b of bankRows) {
-    doc.setFont("helvetica", "bold");
+    doc.setFont("times", "bold");
     doc.setFontSize(10);
     doc.setTextColor(0, 0, 0);
     doc.text(b.label, bankBoxX + 4, curBankY);
-    doc.setFont("helvetica", "normal");
+    doc.setFont("times", "normal");
     doc.text(b.val, bankBoxX + 45, curBankY);
     curBankY += 6.2;
   }
@@ -1092,17 +1099,17 @@ export async function generateQuotationPdf(
   // Signature Block
   const sigY = bankBoxY + 50;
   const sigX = 145;
-  doc.setFont("helvetica", "normal");
+  doc.setFont("times", "normal");
   doc.setFontSize(10);
   doc.setTextColor(100, 100, 100);
   doc.text("............................................", sigX, sigY);
-  doc.setFont("helvetica", "bold");
+  doc.setFont("times", "bold");
   doc.setFontSize(10);
   doc.setTextColor(0, 0, 0);
   doc.text("Authorized by", sigX + 10, sigY + 5.5);
 
   // Closing appreciation note
-  doc.setFont("helvetica", "bolditalic");
+  doc.setFont("times", "bolditalic");
   doc.setFontSize(10.5);
   doc.setTextColor(30, 41, 59);
   doc.text(
