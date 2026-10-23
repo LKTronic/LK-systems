@@ -56,7 +56,7 @@ export async function PUT(
       return NextResponse.json({ error: errorMsg }, { status: 400 });
     }
 
-    const { name, username, password, role, status } = parseResult.data;
+    const { name, username, password, role, status, departmentId } = parseResult.data;
     const isEditingSuperAdmin = existingUser.role === "SUPERADMIN";
 
     // Rule 1: Only SUPERADMIN can edit the SuperAdmin account
@@ -125,6 +125,9 @@ export async function PUT(
       if (status) {
         updateData.status = status;
       }
+      if (departmentId !== undefined) {
+        updateData.departmentId = departmentId ? Number(departmentId) : null;
+      }
     }
 
     if (Object.keys(updateData).length === 0) {
@@ -134,6 +137,8 @@ export async function PUT(
         username: existingUser.username,
         role: existingUser.role,
         status: existingUser.status,
+        departmentId: existingUser.departmentId,
+        department: existingUser.department,
         updatedAt: existingUser.updatedAt,
       });
     }
@@ -148,6 +153,13 @@ export async function PUT(
           username: true,
           role: true,
           status: true,
+          departmentId: true,
+          department: {
+            select: {
+              id: true,
+              name: true,
+            },
+          },
           updatedAt: true,
         },
       });
@@ -182,6 +194,10 @@ export async function PUT(
         fields.push("status = ?");
         values.push(updateData.status);
       }
+      if ("departmentId" in updateData) {
+        fields.push("departmentId = ?");
+        values.push(updateData.departmentId);
+      }
       fields.push("updatedAt = NOW(3)");
       values.push(id);
 
@@ -191,15 +207,17 @@ export async function PUT(
           ...values
         );
       }
-      const updatedRows = await prisma.$queryRawUnsafe<any[]>(
-        `SELECT id, name, username, role, status, updatedAt FROM User WHERE id = ? LIMIT 1`,
+
+      const resList = await prisma.$queryRawUnsafe<any[]>(
+        `SELECT u.id, u.name, u.username, u.role, u.status, u.departmentId, d.name AS departmentName, u.updatedAt 
+         FROM User u 
+         LEFT JOIN Department d ON u.departmentId = d.id 
+         WHERE u.id = ? LIMIT 1`,
         id
       );
-      const resUser = updatedRows[0] || existingUser;
-      if (!resUser.role || resUser.role === "") {
-        resUser.role = updateData.role || existingUser.role || "SHOP";
-      }
-      return NextResponse.json(resUser);
+      const resItem = resList[0] || { id, ...updateData };
+      resItem.department = resItem.departmentName ? { id: resItem.departmentId, name: resItem.departmentName } : null;
+      return NextResponse.json(resItem);
     }
   } catch (error: any) {
     console.error("Error updating user:", error);
