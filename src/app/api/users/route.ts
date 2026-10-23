@@ -48,6 +48,13 @@ export async function GET() {
           username: true,
           role: true,
           status: true,
+          departmentId: true,
+          department: {
+            select: {
+              id: true,
+              name: true,
+            },
+          },
           createdAt: true,
           updatedAt: true,
         },
@@ -55,9 +62,11 @@ export async function GET() {
       });
     } catch (prismaErr) {
       const rawUsers = await prisma.$queryRawUnsafe<any[]>(
-        `SELECT id, name, username, role, status, createdAt, updatedAt FROM User ${
-          currentUserRole !== "SUPERADMIN" ? "WHERE role != 'SUPERADMIN'" : ""
-        } ORDER BY createdAt DESC`
+        `SELECT u.id, u.name, u.username, u.role, u.status, u.departmentId, d.name AS departmentName, u.createdAt, u.updatedAt 
+         FROM User u 
+         LEFT JOIN Department d ON u.departmentId = d.id 
+         ${currentUserRole !== "SUPERADMIN" ? "WHERE u.role != 'SUPERADMIN'" : ""} 
+         ORDER BY u.createdAt DESC`
       );
       usersList = rawUsers;
     }
@@ -73,6 +82,7 @@ export async function GET() {
       return {
         ...u,
         role,
+        department: u.department || (u.departmentName ? { id: u.departmentId, name: u.departmentName } : null),
       };
     });
 
@@ -107,7 +117,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: errorMsg }, { status: 400 });
     }
 
-    const { name, username, password, role, status } = parseResult.data;
+    const { name, username, password, role, status, departmentId } = parseResult.data;
 
     // Rule: There is only ONE SuperAdmin account in the system - new ones cannot be created
     if (role === "SUPERADMIN") {
@@ -148,6 +158,7 @@ export async function POST(request: NextRequest) {
           passwordHash,
           role: role as any,
           status,
+          departmentId: departmentId ? Number(departmentId) : null,
         },
         select: {
           id: true,
@@ -155,6 +166,13 @@ export async function POST(request: NextRequest) {
           username: true,
           role: true,
           status: true,
+          departmentId: true,
+          department: {
+            select: {
+              id: true,
+              name: true,
+            },
+          },
           createdAt: true,
         },
       });
@@ -168,21 +186,26 @@ export async function POST(request: NextRequest) {
       } catch {}
 
       await prisma.$executeRawUnsafe(
-        `INSERT INTO User (name, username, passwordHash, role, status, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, NOW(3), NOW(3))`,
+        `INSERT INTO User (name, username, passwordHash, role, status, departmentId, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, ?, NOW(3), NOW(3))`,
         name,
         username,
         passwordHash,
         role,
-        status
+        status,
+        departmentId ? Number(departmentId) : null
       );
       const created = await prisma.$queryRawUnsafe<any[]>(
-        `SELECT id, name, username, role, status, createdAt FROM User WHERE username = ? LIMIT 1`,
+        `SELECT u.id, u.name, u.username, u.role, u.status, u.departmentId, d.name AS departmentName, u.createdAt 
+         FROM User u 
+         LEFT JOIN Department d ON u.departmentId = d.id 
+         WHERE u.username = ? LIMIT 1`,
         username
       );
-      const resItem = created[0] || { name, username, role, status };
+      const resItem = created[0] || { name, username, role, status, departmentId };
       if (!resItem.role || resItem.role === "") {
         resItem.role = role;
       }
+      resItem.department = resItem.departmentName ? { id: resItem.departmentId, name: resItem.departmentName } : null;
       return NextResponse.json(resItem, { status: 201 });
     }
   } catch (error: any) {

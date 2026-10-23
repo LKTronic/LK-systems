@@ -18,8 +18,23 @@ model User {
   createdAt    DateTime         @default(now())
   updatedAt    DateTime         @updatedAt
 
-  productsCreated Product[]        @relation("CreatedBy")
-  history         ProductHistory[]
+  departmentId Int?
+  department   Department?      @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+
+  productsCreated   Product[]        @relation("CreatedBy")
+  quotationsCreated Quotation[]      @relation("QuotationAuthor")
+  history           ProductHistory[]
+
+  @@index([departmentId])
+}
+
+model Department {
+  id        Int      @id @default(autoincrement())
+  name      String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  users     User[]
 }
 
 model Category {
@@ -89,6 +104,7 @@ model Product {
   author             User            @relation("CreatedBy", fields: [createdBy], references: [id])
   history            ProductHistory[]
   priceHistory       ProductPriceHistory[]
+  quotationItems     QuotationItem[]
 
   @@index([status])
   @@index([sku])
@@ -163,6 +179,61 @@ enum ProductStatus {
   PRICE_NOT_AVAILABLE
   NOT_REQUESTED
   QUOTED
+}
+
+model Quotation {
+  id             Int             @id @default(autoincrement())
+  quotationNo    String          @unique
+  registrationNo String?         @default("P-V 00336036")
+  preparedDate   DateTime        @db.Date
+  expireDate     DateTime        @db.Date
+  paymentMethod  String          // "FULL_PAYMENT", "CREDIT", "ADVANCE_PAYMENT"
+  advancePercent Decimal?        @db.Decimal(5, 2)
+  quotationTo    String          @db.Text
+  preparedBy     String
+  subtotal       Decimal         @db.Decimal(12, 2)
+  totalAmount    Decimal         @db.Decimal(12, 2)
+  notes          String?         @db.Text
+  status         String          @default("DRAFT") // "DRAFT", "ISSUED", "ACCEPTED", "EXPIRED"
+  createdBy      Int
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+
+  author         User            @relation("QuotationAuthor", fields: [createdBy], references: [id])
+  items          QuotationItem[]
+
+  @@index([quotationNo])
+  @@index([preparedDate])
+  @@index([createdBy])
+}
+
+model QuotationItem {
+  id             Int       @id @default(autoincrement())
+  quotationId    Int
+  itemIndex      Int
+  productId      Int?
+  description    String    @db.Text
+  imagePath      String?   @db.Text
+  stockStatus    String?   @default("IN_STOCK") // "IN_STOCK" or "OVERSEAS"
+  leadTime       String?   // e.g. "12-21 working days"
+  warranty       String?   // e.g. "No Warranty", "06 Months", "1 Year", or custom
+  quantity       Int       @default(1)
+  unitPrice      Decimal   @db.Decimal(12, 2)
+  totalPrice     Decimal   @db.Decimal(12, 2)
+
+  quotation      Quotation @relation(fields: [quotationId], references: [id], onDelete: Cascade)
+  product        Product?  @relation(fields: [productId], references: [id], onDelete: SetNull)
+
+  @@index([quotationId])
+}
+
+model ProductImageBackup {
+  id        Int      @id @default(autoincrement())
+  filename  String   @unique
+  mimeType  String   @default("image/png")
+  data      String   @db.LongText
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 
