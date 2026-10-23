@@ -2,7 +2,7 @@ name: CI - Comprehensive Quality Checks & Auto-Promote
 
 on:
   push:
-    branches: [ master, main ]
+    branches: [ master, main, 'feature/**', 'hotfix/**', 'fix/**' ]
   pull_request:
     branches: [ master, main ]
 
@@ -18,6 +18,8 @@ jobs:
     env:
       DATABASE_URL: "mysql://dummy:dummy@localhost:3306/pms"
       AUTH_SECRET: "ci-dummy-auth-secret-minimum-32-chars-long"
+      NEXTAUTH_SECRET: "ci-dummy-auth-secret-minimum-32-chars-long"
+      NEXTAUTH_URL: "http://localhost:3000"
       WC_STORE_URL: "https://lk-tronics.com"
       WC_CONSUMER_KEY: "ck_ci_mock_test_key"
       WC_CONSUMER_SECRET: "cs_ci_mock_test_secret"
@@ -44,10 +46,16 @@ jobs:
       - name: 6. Run Strict TypeScript Type Check
         run: npx tsc --noEmit
 
-      - name: 7. Run Automated Regression & Security Tests
+      - name: 7. Run Unit Tests (Calculations, Validity, Schemas, Formatters)
+        run: npm run test:unit
+
+      - name: 8. Run Security & Optimization Tests (OWASP, Rate Limiting, Fuzzy Search, Auth)
+        run: npm run test:security
+
+      - name: 9. Run Full Automated Test Suite
         run: npm test
 
-      - name: 8. Validate Next.js Production Build
+      - name: 10. Validate Next.js Production Build
         run: npm run build
 
   promote-to-main:

@@ -13,6 +13,7 @@ import {
   LogOut,
   Truck,
   ShieldAlert,
+  FileText,
 } from "lucide-react";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { getEffectiveRole, clearOfflineAuthSession } from "@/lib/offlineAuth";
@@ -32,6 +33,7 @@ export function Sidebar() {
     { name: "Product", href: "/products", icon: Package },
     ...(!isShop
       ? [
+          { name: "Quotations", href: "/quotations", icon: FileText },
           { name: "Download Pending Requests", href: "/products/pending-download", icon: Download },
           { name: "Supply", href: "/supply", icon: Truck },
         ]

@@ -11,15 +11,38 @@ export async function GET() {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const users = await prisma.user.findMany({
-      where: { status: "ACTIVE" },
-      select: {
-        id: true,
-        name: true,
-        username: true,
-      },
-      orderBy: { name: "asc" },
-    });
+    let users: any[] = [];
+    try {
+      users = await prisma.user.findMany({
+        where: { status: "ACTIVE" },
+        select: {
+          id: true,
+          name: true,
+          username: true,
+          department: {
+            select: {
+              id: true,
+              name: true,
+            },
+          },
+        },
+        orderBy: { name: "asc" },
+      });
+    } catch {
+      const rawUsers = await prisma.$queryRawUnsafe<any[]>(
+        `SELECT u.id, u.name, u.username, d.name AS departmentName 
+         FROM User u 
+         LEFT JOIN Department d ON u.departmentId = d.id 
+         WHERE u.status = 'ACTIVE' 
+         ORDER BY u.name ASC`
+      );
+      users = (rawUsers || []).map((u: any) => ({
+        id: u.id,
+        name: u.name,
+        username: u.username,
+        department: u.departmentName ? { name: u.departmentName } : null,
+      }));
+    }
 
     return NextResponse.json(
       { users },

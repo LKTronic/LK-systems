@@ -9,6 +9,7 @@ export const createUserSchema = z.object({
   password: z.string().min(6, "Password must be at least 6 characters"),
   role: z.enum(["SUPERADMIN", "ADMIN", "STAFF", "SHOP"]).default("STAFF"),
   status: z.enum(["ACTIVE", "INACTIVE"]).default("ACTIVE"),
+  departmentId: z.number().nullable().optional(),
 });
 
 export const updateUserSchema = z.object({
@@ -21,6 +22,7 @@ export const updateUserSchema = z.object({
   password: z.string().min(6, "Password must be at least 6 characters").optional().or(z.literal("")),
   role: z.enum(["SUPERADMIN", "ADMIN", "STAFF", "SHOP"]).optional(),
   status: z.enum(["ACTIVE", "INACTIVE"]).optional(),
+  departmentId: z.number().nullable().optional(),
 });
 
 export type CreateUserInput = z.infer<typeof createUserSchema>;

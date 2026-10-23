@@ -19,7 +19,15 @@ import {
   Trash2,
   Eye,
   EyeOff,
+  Building2,
+  Plus,
 } from "lucide-react";
+
+interface DepartmentItem {
+  id: number;
+  name: string;
+  _count?: { users: number };
+}
 
 interface UserItem {
   id: number;
@@ -27,6 +35,8 @@ interface UserItem {
   username: string;
   role: "SUPERADMIN" | "ADMIN" | "STAFF" | "SHOP";
   status: "ACTIVE" | "INACTIVE";
+  departmentId?: number | null;
+  department?: { id: number; name: string } | null;
   createdAt: string;
 }
 
@@ -49,9 +59,31 @@ export default function UsersPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [formRole, setFormRole] = useState<"SUPERADMIN" | "ADMIN" | "STAFF" | "SHOP">("STAFF");
   const [formStatus, setFormStatus] = useState<"ACTIVE" | "INACTIVE">("ACTIVE");
+  const [formDepartmentId, setFormDepartmentId] = useState<string>("");
+
+  // Departments State
+  const [departments, setDepartments] = useState<DepartmentItem[]>([]);
+  const [isAddingDeptInline, setIsAddingDeptInline] = useState(false);
+  const [newDeptName, setNewDeptName] = useState("");
+  const [isSavingDept, setIsSavingDept] = useState(false);
+  const [deptActionError, setDeptActionError] = useState<string | null>(null);
+  const [isDeptManagerModalOpen, setIsDeptManagerModalOpen] = useState(false);
+  const [deletingDeptId, setDeletingDeptId] = useState<number | null>(null);
 
   const [modalError, setModalError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+
+  const fetchDepartments = async () => {
+    try {
+      const res = await fetch("/api/departments");
+      if (res.ok) {
+        const data = await res.json();
+        setDepartments(data.departments || []);
+      }
+    } catch (err) {
+      console.error("Failed to load departments:", err);
+    }
+  };
 
   const fetchUsers = async () => {
     setIsLoading(true);
@@ -80,7 +112,71 @@ export default function UsersPage() {
 
   useEffect(() => {
     fetchUsers();
+    fetchDepartments();
   }, []);
+
+  const handleCreateDepartment = async () => {
+    if (!newDeptName.trim()) return;
+    setIsSavingDept(true);
+    setDeptActionError(null);
+    try {
+      const res = await fetch("/api/departments", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: newDeptName.trim() }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to create department");
+      }
+      if (data.department) {
+        setDepartments((prev) =>
+          [...prev, data.department].sort((a, b) => a.name.localeCompare(b.name))
+        );
+        setFormDepartmentId(String(data.department.id));
+        setNewDeptName("");
+        setIsAddingDeptInline(false);
+      }
+    } catch (err: any) {
+      setDeptActionError(err.message || "Failed to create department");
+    } finally {
+      setIsSavingDept(false);
+    }
+  };
+
+  const handleDeleteDepartment = async (dept: DepartmentItem) => {
+    const userCount = dept._count?.users || 0;
+    const warning =
+      userCount > 0
+        ? `\n\nNotice: ${userCount} user(s) currently assigned to this department will become unassigned.`
+        : "";
+
+    if (!confirm(`Are you sure you want to delete department "${dept.name}"?${warning}`)) {
+      return;
+    }
+
+    setDeletingDeptId(dept.id);
+    setDeptActionError(null);
+    try {
+      const res = await fetch(`/api/departments/${dept.id}`, {
+        method: "DELETE",
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to delete department");
+      }
+
+      setDepartments((prev) => prev.filter((d) => d.id !== dept.id));
+      if (formDepartmentId === String(dept.id)) {
+        setFormDepartmentId("");
+      }
+      fetchUsers();
+    } catch (err: any) {
+      setDeptActionError(err.message || "Failed to delete department");
+    } finally {
+      setDeletingDeptId(null);
+    }
+  };
 
   const handleOpenAddModal = () => {
     setEditingUser(null);
@@ -90,6 +186,10 @@ export default function UsersPage() {
     setShowPassword(false);
     setFormRole("STAFF");
     setFormStatus("ACTIVE");
+    setFormDepartmentId("");
+    setIsAddingDeptInline(false);
+    setNewDeptName("");
+    setDeptActionError(null);
     setModalError(null);
     setIsModalOpen(true);
   };
@@ -109,6 +209,16 @@ export default function UsersPage() {
         : "STAFF";
     setFormRole(resolvedRole);
     setFormStatus(user.status);
+    setFormDepartmentId(
+      user.departmentId
+        ? String(user.departmentId)
+        : user.department?.id
+        ? String(user.department.id)
+        : ""
+    );
+    setIsAddingDeptInline(false);
+    setNewDeptName("");
+    setDeptActionError(null);
     setModalError(null);
     setIsModalOpen(true);
   };
@@ -144,6 +254,7 @@ export default function UsersPage() {
           }
           payload.role = formRole;
           payload.status = formStatus;
+          payload.departmentId = formDepartmentId ? parseInt(formDepartmentId, 10) : null;
         }
 
         const res = await fetch(`/api/users/${editingUser.id}`, {
@@ -167,6 +278,7 @@ export default function UsersPage() {
             password: formPassword,
             role: formRole,
             status: formStatus,
+            departmentId: formDepartmentId ? parseInt(formDepartmentId, 10) : null,
           }),
         });
         const data = await res.json();
@@ -269,13 +381,23 @@ export default function UsersPage() {
             </span>
           </div>
 
-          <button
-            onClick={handleOpenAddModal}
-            className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs font-semibold shadow-lg shadow-indigo-600/20 transition-all cursor-pointer"
-          >
-            <UserPlus className="w-4 h-4" />
-            Add New User
-          </button>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => setIsDeptManagerModalOpen(true)}
+              className="flex items-center gap-2 px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 rounded-lg text-xs font-semibold transition-all cursor-pointer"
+            >
+              <Building2 className="w-4 h-4 text-teal-400" />
+              <span>Departments ({departments.length})</span>
+            </button>
+
+            <button
+              onClick={handleOpenAddModal}
+              className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs font-semibold shadow-lg shadow-indigo-600/20 transition-all cursor-pointer"
+            >
+              <UserPlus className="w-4 h-4" />
+              Add New User
+            </button>
+          </div>
         </div>
 
         {/* Users Table */}
@@ -287,6 +409,7 @@ export default function UsersPage() {
                   <th className="py-3.5 px-4">User</th>
                   <th className="py-3.5 px-4">Username</th>
                   <th className="py-3.5 px-4">Role</th>
+                  <th className="py-3.5 px-4">Department</th>
                   <th className="py-3.5 px-4 text-center">Status</th>
                   <th className="py-3.5 px-4">Created Date</th>
                   <th className="py-3.5 px-4 text-right">Actions</th>
@@ -295,7 +418,7 @@ export default function UsersPage() {
               <tbody className="divide-y divide-slate-800 text-sm">
                 {isLoading ? (
                   <tr>
-                    <td colSpan={6} className="py-12 text-center">
+                    <td colSpan={7} className="py-12 text-center">
                       <Loader2 className="w-6 h-6 animate-spin text-indigo-400 mx-auto mb-2" />
                       <span className="text-xs text-slate-400">Loading user accounts...</span>
                     </td>
@@ -344,6 +467,16 @@ export default function UsersPage() {
                           </span>
                         );
                       })()}
+                    </td>
+                    <td className="py-3 px-4">
+                      {user.department ? (
+                        <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-md text-xs font-medium bg-slate-800 text-teal-300 border border-teal-500/20">
+                          <Building2 className="w-3 h-3 text-teal-400" />
+                          {user.department.name}
+                        </span>
+                      ) : (
+                        <span className="text-slate-500 text-xs italic">—</span>
+                      )}
                     </td>
                     <td className="py-3 px-4 text-center">
                       <span
@@ -580,6 +713,97 @@ export default function UsersPage() {
                 </div>
               </div>
 
+              {/* Department Field */}
+              <div>
+                <label className="block text-slate-300 font-semibold mb-1.5 flex items-center justify-between">
+                  <span>Department</span>
+                  {isEditingSuperAdmin && (
+                    <span className="text-[10px] text-slate-400 font-normal flex items-center gap-1">
+                      <Lock className="w-3 h-3 text-slate-500" /> Optional
+                    </span>
+                  )}
+                </label>
+
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2">
+                    <select
+                      value={formDepartmentId}
+                      onChange={(e) => setFormDepartmentId(e.target.value)}
+                      className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-lg text-white focus:outline-none focus:ring-1 focus:ring-indigo-500 text-xs"
+                    >
+                      <option value="">-- No Department Assigned --</option>
+                      {departments.map((dept) => (
+                        <option key={dept.id} value={dept.id}>
+                          {dept.name}
+                        </option>
+                      ))}
+                    </select>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsAddingDeptInline(!isAddingDeptInline);
+                        setDeptActionError(null);
+                      }}
+                      title="Add a new department"
+                      className="px-2.5 py-2 bg-slate-800 hover:bg-slate-700 text-indigo-300 border border-slate-700 rounded-lg text-xs font-semibold shrink-0 flex items-center gap-1 transition-colors cursor-pointer"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      <span>New</span>
+                    </button>
+                  </div>
+
+                  {/* Inline New Department Adder */}
+                  {isAddingDeptInline && (
+                    <div className="p-2.5 bg-slate-950 border border-indigo-900/60 rounded-lg space-y-2 animate-in fade-in zoom-in-95">
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="text"
+                          value={newDeptName}
+                          onChange={(e) => setNewDeptName(e.target.value)}
+                          placeholder="Enter department name..."
+                          className="flex-1 px-2.5 py-1.5 bg-slate-900 border border-slate-700 rounded text-xs text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500"
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") {
+                              e.preventDefault();
+                              handleCreateDepartment();
+                            }
+                          }}
+                          autoFocus
+                        />
+                        <button
+                          type="button"
+                          onClick={handleCreateDepartment}
+                          disabled={isSavingDept || !newDeptName.trim()}
+                          className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded text-xs font-semibold disabled:opacity-50 flex items-center gap-1 shrink-0 cursor-pointer"
+                        >
+                          {isSavingDept ? (
+                            <Loader2 className="w-3 h-3 animate-spin" />
+                          ) : (
+                            <Check className="w-3 h-3" />
+                          )}
+                          Save
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setIsAddingDeptInline(false);
+                            setDeptActionError(null);
+                          }}
+                          className="px-2 py-1.5 text-slate-400 hover:text-white text-xs cursor-pointer"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+
+                      {deptActionError && (
+                        <p className="text-[11px] text-rose-400">{deptActionError}</p>
+                      )}
+                    </div>
+                  )}
+                </div>
+              </div>
+
               {/* Role and Account Status Grid */}
               <div className="grid grid-cols-2 gap-4">
                 <div>
@@ -643,6 +867,124 @@ export default function UsersPage() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Department Manager Modal */}
+      {isDeptManagerModalOpen && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="w-full max-w-lg bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-2xl space-y-5 animate-in zoom-in-95">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-800">
+              <h3 className="text-base font-bold text-white flex items-center gap-2">
+                <Building2 className="w-5 h-5 text-teal-400" />
+                <span>Department Management</span>
+              </h3>
+              <button
+                onClick={() => {
+                  setIsDeptManagerModalOpen(false);
+                  setDeptActionError(null);
+                }}
+                className="p-1.5 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 transition-colors cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Quick Add Form in Manager Modal */}
+            <div className="p-3 bg-slate-950 border border-slate-800 rounded-xl space-y-2">
+              <label className="block text-xs font-semibold text-slate-300">
+                Create New Department
+              </label>
+              <div className="flex items-center gap-2">
+                <input
+                  type="text"
+                  value={newDeptName}
+                  onChange={(e) => setNewDeptName(e.target.value)}
+                  placeholder="e.g. Research & Development"
+                  className="flex-1 px-3 py-2 bg-slate-900 border border-slate-700 rounded-lg text-xs text-white placeholder-slate-500 focus:outline-none focus:border-teal-500"
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      handleCreateDepartment();
+                    }
+                  }}
+                />
+                <button
+                  type="button"
+                  onClick={handleCreateDepartment}
+                  disabled={isSavingDept || !newDeptName.trim()}
+                  className="px-4 py-2 bg-teal-600 hover:bg-teal-500 text-white rounded-lg text-xs font-semibold disabled:opacity-50 flex items-center gap-1.5 shrink-0 transition-colors cursor-pointer"
+                >
+                  {isSavingDept ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  ) : (
+                    <Plus className="w-3.5 h-3.5" />
+                  )}
+                  Add Department
+                </button>
+              </div>
+              {deptActionError && (
+                <p className="text-[11px] text-rose-400">{deptActionError}</p>
+              )}
+            </div>
+
+            {/* Department List */}
+            <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
+              <div className="text-xs font-semibold text-slate-400 uppercase tracking-wider px-1">
+                Existing Departments ({departments.length})
+              </div>
+              {departments.length === 0 ? (
+                <div className="p-4 text-center text-xs text-slate-500 border border-dashed border-slate-800 rounded-lg">
+                  No departments found. Add one above.
+                </div>
+              ) : (
+                <div className="divide-y divide-slate-800/80 border border-slate-800 rounded-xl overflow-hidden bg-slate-950/40">
+                  {departments.map((dept) => (
+                    <div
+                      key={dept.id}
+                      className="p-3 flex items-center justify-between text-xs hover:bg-slate-800/30 transition-colors"
+                    >
+                      <div className="flex items-center gap-2.5 min-w-0 pr-2">
+                        <Building2 className="w-4 h-4 text-teal-400 shrink-0" />
+                        <span className="font-medium text-slate-200 truncate">{dept.name}</span>
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <span className="text-[11px] text-slate-400 bg-slate-900 border border-slate-800 px-2 py-0.5 rounded-full">
+                          {dept._count?.users ?? 0} {dept._count?.users === 1 ? "user" : "users"}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteDepartment(dept)}
+                          disabled={deletingDeptId === dept.id}
+                          title={`Delete department "${dept.name}"`}
+                          className="p-1 text-slate-400 hover:text-red-400 hover:bg-red-500/10 rounded transition-colors disabled:opacity-50 cursor-pointer"
+                        >
+                          {deletingDeptId === dept.id ? (
+                            <Loader2 className="w-3.5 h-3.5 animate-spin text-red-400" />
+                          ) : (
+                            <Trash2 className="w-3.5 h-3.5" />
+                          )}
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className="pt-3 border-t border-slate-800 flex justify-end">
+              <button
+                type="button"
+                onClick={() => {
+                  setIsDeptManagerModalOpen(false);
+                  setDeptActionError(null);
+                }}
+                className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-xs font-semibold transition-colors cursor-pointer"
+              >
+                Close
+              </button>
+            </div>
           </div>
         </div>
       )}
