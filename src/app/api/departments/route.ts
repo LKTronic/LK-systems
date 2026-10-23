@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { ensureDepartmentSchema } from "@/lib/departmentSchema";
 
 function isAdministrativeRole(role?: string) {
   return role === "ADMIN" || role === "SUPERADMIN";
@@ -15,32 +16,59 @@ export async function GET() {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
+    await ensureDepartmentSchema();
+
     let departments: any[] = [];
     if (typeof (prisma as any)?.department?.findMany === "function") {
-      departments = await (prisma as any).department.findMany({
-        include: {
-          _count: {
-            select: { users: true },
+      try {
+        departments = await (prisma as any).department.findMany({
+          include: {
+            _count: {
+              select: { users: true },
+            },
           },
-        },
-        orderBy: { name: "asc" },
-      });
-    } else {
-      const rawRows = await prisma.$queryRawUnsafe<
-        Array<{ id: number; name: string; createdAt: Date; updatedAt: Date; userCount: number | bigint }>
-      >(
-        `SELECT d.id, d.name, d.createdAt, d.updatedAt,
-           (SELECT COUNT(*) FROM User u WHERE u.departmentId = d.id) as userCount
-         FROM Department d
-         ORDER BY d.name ASC`
-      );
-      departments = rawRows.map((r) => ({
-        id: r.id,
-        name: r.name,
-        createdAt: r.createdAt,
-        updatedAt: r.updatedAt,
-        _count: { users: Number(r.userCount) || 0 },
-      }));
+          orderBy: { name: "asc" },
+        });
+      } catch {
+        departments = [];
+      }
+    }
+
+    if (departments.length === 0) {
+      try {
+        const rawRows = await prisma.$queryRawUnsafe<
+          Array<{ id: number; name: string; createdAt: Date; updatedAt: Date; userCount?: number | bigint }>
+        >(
+          `SELECT d.id, d.name, d.createdAt, d.updatedAt,
+             (SELECT COUNT(*) FROM User u WHERE u.departmentId = d.id) as userCount
+           FROM Department d
+           ORDER BY d.name ASC`
+        );
+        departments = rawRows.map((r) => ({
+          id: r.id,
+          name: r.name,
+          createdAt: r.createdAt,
+          updatedAt: r.updatedAt,
+          _count: { users: Number(r.userCount) || 0 },
+        }));
+      } catch {
+        try {
+          const rawRows = await prisma.$queryRawUnsafe<
+            Array<{ id: number; name: string; createdAt: Date; updatedAt: Date }>
+          >(
+            `SELECT d.id, d.name, d.createdAt, d.updatedAt FROM Department d ORDER BY d.name ASC`
+          );
+          departments = rawRows.map((r) => ({
+            id: r.id,
+            name: r.name,
+            createdAt: r.createdAt,
+            updatedAt: r.updatedAt,
+            _count: { users: 0 },
+          }));
+        } catch {
+          departments = [];
+        }
+      }
     }
 
     return NextResponse.json(
@@ -72,6 +100,8 @@ export async function POST(request: NextRequest) {
         { status: 403 }
       );
     }
+
+    await ensureDepartmentSchema();
 
     const body = await request.json();
     const rawName = typeof body.name === "string" ? body.name.trim() : "";

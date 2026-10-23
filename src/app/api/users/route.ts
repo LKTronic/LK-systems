@@ -4,6 +4,7 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import bcrypt from "bcryptjs";
 import { createUserSchema } from "@/lib/validations/user";
+import { ensureDepartmentSchema } from "@/lib/departmentSchema";
 
 // Helper check for admin privileges
 function isAdministrativeRole(role?: string) {
@@ -23,11 +24,10 @@ export async function GET() {
       );
     }
 
-    // Self-healing migration: Ensure MySQL User table schema supports 'SHOP' enum and fix any empty roles
+    // Self-healing migration: Ensure Department table, departmentId column, and SHOP enum
+    await ensureDepartmentSchema();
+
     try {
-      await prisma.$executeRawUnsafe(
-        "ALTER TABLE User MODIFY COLUMN role ENUM('SUPERADMIN', 'ADMIN', 'STAFF', 'SHOP') NOT NULL DEFAULT 'STAFF'"
-      );
       await prisma.$executeRawUnsafe(
         "UPDATE User SET role = 'SHOP' WHERE (role = '' OR role IS NULL) AND (LOWER(username) LIKE '%shop%' OR LOWER(name) LIKE '%shop%')"
       );
@@ -61,14 +61,25 @@ export async function GET() {
         orderBy: { createdAt: "desc" },
       });
     } catch (prismaErr) {
-      const rawUsers = await prisma.$queryRawUnsafe<any[]>(
-        `SELECT u.id, u.name, u.username, u.role, u.status, u.departmentId, d.name AS departmentName, u.createdAt, u.updatedAt 
-         FROM User u 
-         LEFT JOIN Department d ON u.departmentId = d.id 
-         ${currentUserRole !== "SUPERADMIN" ? "WHERE u.role != 'SUPERADMIN'" : ""} 
-         ORDER BY u.createdAt DESC`
-      );
-      usersList = rawUsers;
+      try {
+        const rawUsers = await prisma.$queryRawUnsafe<any[]>(
+          `SELECT u.id, u.name, u.username, u.role, u.status, u.departmentId, d.name AS departmentName, u.createdAt, u.updatedAt 
+           FROM User u 
+           LEFT JOIN Department d ON u.departmentId = d.id 
+           ${currentUserRole !== "SUPERADMIN" ? "WHERE u.role != 'SUPERADMIN'" : ""} 
+           ORDER BY u.createdAt DESC`
+        );
+        usersList = rawUsers;
+      } catch (rawErr) {
+        // Fallback if departmentId column does not exist on User table
+        const rawUsers = await prisma.$queryRawUnsafe<any[]>(
+          `SELECT u.id, u.name, u.username, u.role, u.status, u.createdAt, u.updatedAt 
+           FROM User u 
+           ${currentUserRole !== "SUPERADMIN" ? "WHERE u.role != 'SUPERADMIN'" : ""} 
+           ORDER BY u.createdAt DESC`
+        );
+        usersList = rawUsers;
+      }
     }
 
     const sanitizedUsers = (usersList || []).map((u: any) => {
@@ -127,6 +138,9 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Ensure schema has Department table and departmentId column
+    await ensureDepartmentSchema();
+
     // Check unique username
     let existing: any = null;
     try {
@@ -179,28 +193,53 @@ export async function POST(request: NextRequest) {
 
       return NextResponse.json(newUser, { status: 201 });
     } catch (createErr) {
+      // Fallback: Try raw SQL insert with departmentId. If Code 1054 (unknown column), insert without departmentId.
       try {
         await prisma.$executeRawUnsafe(
-          "ALTER TABLE User MODIFY COLUMN role ENUM('SUPERADMIN', 'ADMIN', 'STAFF', 'SHOP') NOT NULL DEFAULT 'STAFF'"
+          `INSERT INTO User (name, username, passwordHash, role, status, departmentId, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, ?, NOW(3), NOW(3))`,
+          name,
+          username,
+          passwordHash,
+          role,
+          status,
+          departmentId ? Number(departmentId) : null
         );
-      } catch {}
+      } catch (rawInsertErr: any) {
+        if (
+          String(rawInsertErr?.message || "").includes("departmentId") ||
+          String(rawInsertErr?.message || "").includes("1054")
+        ) {
+          await prisma.$executeRawUnsafe(
+            `INSERT INTO User (name, username, passwordHash, role, status, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, NOW(3), NOW(3))`,
+            name,
+            username,
+            passwordHash,
+            role,
+            status
+          );
+        } else {
+          throw rawInsertErr;
+        }
+      }
 
-      await prisma.$executeRawUnsafe(
-        `INSERT INTO User (name, username, passwordHash, role, status, departmentId, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, ?, NOW(3), NOW(3))`,
-        name,
-        username,
-        passwordHash,
-        role,
-        status,
-        departmentId ? Number(departmentId) : null
-      );
-      const created = await prisma.$queryRawUnsafe<any[]>(
-        `SELECT u.id, u.name, u.username, u.role, u.status, u.departmentId, d.name AS departmentName, u.createdAt 
-         FROM User u 
-         LEFT JOIN Department d ON u.departmentId = d.id 
-         WHERE u.username = ? LIMIT 1`,
-        username
-      );
+      let created: any[] = [];
+      try {
+        created = await prisma.$queryRawUnsafe<any[]>(
+          `SELECT u.id, u.name, u.username, u.role, u.status, u.departmentId, d.name AS departmentName, u.createdAt 
+           FROM User u 
+           LEFT JOIN Department d ON u.departmentId = d.id 
+           WHERE u.username = ? LIMIT 1`,
+          username
+        );
+      } catch {
+        created = await prisma.$queryRawUnsafe<any[]>(
+          `SELECT u.id, u.name, u.username, u.role, u.status, u.createdAt 
+           FROM User u 
+           WHERE u.username = ? LIMIT 1`,
+          username
+        );
+      }
+
       const resItem = created[0] || { name, username, role, status, departmentId };
       if (!resItem.role || resItem.role === "") {
         resItem.role = role;

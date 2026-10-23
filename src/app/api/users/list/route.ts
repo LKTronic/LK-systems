@@ -29,19 +29,34 @@ export async function GET() {
         orderBy: { name: "asc" },
       });
     } catch {
-      const rawUsers = await prisma.$queryRawUnsafe<any[]>(
-        `SELECT u.id, u.name, u.username, d.name AS departmentName 
-         FROM User u 
-         LEFT JOIN Department d ON u.departmentId = d.id 
-         WHERE u.status = 'ACTIVE' 
-         ORDER BY u.name ASC`
-      );
-      users = (rawUsers || []).map((u: any) => ({
-        id: u.id,
-        name: u.name,
-        username: u.username,
-        department: u.departmentName ? { name: u.departmentName } : null,
-      }));
+      try {
+        const rawUsers = await prisma.$queryRawUnsafe<any[]>(
+          `SELECT u.id, u.name, u.username, d.name AS departmentName 
+           FROM User u 
+           LEFT JOIN Department d ON u.departmentId = d.id 
+           WHERE u.status = 'ACTIVE' 
+           ORDER BY u.name ASC`
+        );
+        users = (rawUsers || []).map((u: any) => ({
+          id: u.id,
+          name: u.name,
+          username: u.username,
+          department: u.departmentName ? { name: u.departmentName } : null,
+        }));
+      } catch {
+        const rawUsers = await prisma.$queryRawUnsafe<any[]>(
+          `SELECT u.id, u.name, u.username 
+           FROM User u 
+           WHERE u.status = 'ACTIVE' 
+           ORDER BY u.name ASC`
+        );
+        users = (rawUsers || []).map((u: any) => ({
+          id: u.id,
+          name: u.name,
+          username: u.username,
+          department: null,
+        }));
+      }
     }
 
     return NextResponse.json(

@@ -26,12 +26,23 @@ if (process.env.NODE_ENV !== "production") {
 if (!(prisma as any).department) {
   (prisma as any).department = {
     findMany: async () => {
-      const rows = await (prisma as any).$queryRawUnsafe(
-        `SELECT d.id, d.name, d.createdAt, d.updatedAt,
-           (SELECT COUNT(*) FROM User u WHERE u.departmentId = d.id) as userCount
-         FROM Department d
-         ORDER BY d.name ASC`
-      );
+      let rows: any[] = [];
+      try {
+        rows = await (prisma as any).$queryRawUnsafe(
+          `SELECT d.id, d.name, d.createdAt, d.updatedAt,
+             (SELECT COUNT(*) FROM User u WHERE u.departmentId = d.id) as userCount
+           FROM Department d
+           ORDER BY d.name ASC`
+        );
+      } catch {
+        try {
+          rows = await (prisma as any).$queryRawUnsafe(
+            "SELECT d.id, d.name, d.createdAt, d.updatedAt FROM Department d ORDER BY d.name ASC"
+          );
+        } catch {
+          rows = [];
+        }
+      }
       return rows.map((r: any) => ({
         id: r.id,
         name: r.name,
@@ -82,10 +93,14 @@ if (!(prisma as any).department) {
     delete: async (args: any) => {
       const id = args?.where?.id;
       if (!id) return null;
-      await (prisma as any).$executeRawUnsafe(
-        "UPDATE User SET departmentId = NULL WHERE departmentId = ?",
-        id
-      );
+      try {
+        await (prisma as any).$executeRawUnsafe(
+          "UPDATE User SET departmentId = NULL WHERE departmentId = ?",
+          id
+        );
+      } catch {
+        // Ignore if departmentId column does not exist
+      }
       await (prisma as any).$executeRawUnsafe(
         "DELETE FROM Department WHERE id = ?",
         id

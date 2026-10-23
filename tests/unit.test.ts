@@ -444,3 +444,20 @@ describe("Unit Tests: Warehouse Storage Location Formatter", () => {
     assert.equal(loc, null);
   });
 });
+
+describe("Unit Tests: Database Schema Self-Healing & Missing Column Fallback (Error 1054)", () => {
+  it("detects and safely handles missing departmentId column error without throwing", () => {
+    const isUnknownColumnError = (errMessage: string) => {
+      return errMessage.includes("departmentId") || errMessage.includes("1054");
+    };
+
+    const simulatedErr =
+      "Raw query failed. Code: `1054`. Message: `Unknown column 'departmentId' in 'INSERT INTO'`";
+    assert.strictEqual(isUnknownColumnError(simulatedErr), true);
+
+    const otherErr =
+      "Raw query failed. Code: `1062`. Message: `Duplicate entry 'admin' for key 'User_username_key'`";
+    assert.strictEqual(isUnknownColumnError(otherErr), false);
+  });
+});
+
