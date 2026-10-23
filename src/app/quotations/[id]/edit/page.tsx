@@ -685,10 +685,13 @@ const formatPreparedBy = (u: UserListItem) => {
                   type="text"
                   value={quotationNo}
                   onChange={(e) => setQuotationNo(e.target.value)}
-                  placeholder="e.g. QT-2026-0001"
+                  placeholder="e.g. 20261023 or 20261023-23v"
                   className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-teal-500 font-mono"
                 />
               </div>
+              <p className="text-[11px] text-slate-500 mt-1">
+                Editable quotation number (e.g. 20261023 or 20261023-23v).
+              </p>
             </div>
 
             {/* Prepared By (Single Dropdown) */}
