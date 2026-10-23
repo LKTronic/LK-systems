@@ -37,25 +37,30 @@ jobs:
       - name: 3. Verify Dependencies (npm ci)
         run: npm ci
 
-      - name: 4. Validate Prisma Schema
+      - name: 4. Scan Dependencies for Vulnerabilities (Block on High/Critical)
+        run: |
+          npm audit --omit=dev --audit-level=high
+          npm audit --audit-level=critical
+
+      - name: 5. Validate Prisma Schema
         run: npx prisma validate
 
-      - name: 5. Generate Prisma Client
+      - name: 6. Generate Prisma Client
         run: npx prisma generate
 
-      - name: 6. Run Strict TypeScript Type Check
+      - name: 7. Run Strict TypeScript Type Check
         run: npx tsc --noEmit
 
-      - name: 7. Run Unit Tests (Calculations, Validity, Schemas, Formatters)
+      - name: 8. Run Unit Tests (Calculations, Validity, Schemas, Formatters)
         run: npm run test:unit
 
-      - name: 8. Run Security & Optimization Tests (OWASP, Rate Limiting, Fuzzy Search, Auth)
+      - name: 9. Run Security & Optimization Tests (OWASP, Rate Limiting, Fuzzy Search, Auth)
         run: npm run test:security
 
-      - name: 9. Run Full Automated Test Suite
+      - name: 10. Run Full Automated Test Suite
         run: npm test
 
-      - name: 10. Validate Next.js Production Build
+      - name: 11. Validate Next.js Production Build
         run: npm run build
 
   promote-to-main:
