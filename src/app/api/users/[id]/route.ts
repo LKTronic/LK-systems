@@ -4,6 +4,7 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import bcrypt from "bcryptjs";
 import { updateUserSchema } from "@/lib/validations/user";
+import { ensureDepartmentSchema } from "@/lib/departmentSchema";
 
 function isAdministrativeRole(role?: string) {
   return role === "ADMIN" || role === "SUPERADMIN";
@@ -24,6 +25,8 @@ export async function PUT(
         { status: 403 }
       );
     }
+
+    await ensureDepartmentSchema();
 
     const { id: rawId } = await params;
     const id = parseInt(rawId, 10);
@@ -202,19 +205,48 @@ export async function PUT(
       values.push(id);
 
       if (fields.length > 1) {
-        await prisma.$executeRawUnsafe(
-          `UPDATE User SET ${fields.join(", ")} WHERE id = ?`,
-          ...values
+        try {
+          await prisma.$executeRawUnsafe(
+            `UPDATE User SET ${fields.join(", ")} WHERE id = ?`,
+            ...values
+          );
+        } catch (rawUpdateErr: any) {
+          if (
+            String(rawUpdateErr?.message || "").includes("departmentId") ||
+            String(rawUpdateErr?.message || "").includes("1054")
+          ) {
+            const fallbackFields = fields.filter((f) => !f.startsWith("departmentId"));
+            const fallbackValues = values.filter((_, idx) => !fields[idx].startsWith("departmentId"));
+            if (fallbackFields.length > 1) {
+              await prisma.$executeRawUnsafe(
+                `UPDATE User SET ${fallbackFields.join(", ")} WHERE id = ?`,
+                ...fallbackValues
+              );
+            }
+          } else {
+            throw rawUpdateErr;
+          }
+        }
+      }
+
+      let resList: any[] = [];
+      try {
+        resList = await prisma.$queryRawUnsafe<any[]>(
+          `SELECT u.id, u.name, u.username, u.role, u.status, u.departmentId, d.name AS departmentName, u.updatedAt 
+           FROM User u 
+           LEFT JOIN Department d ON u.departmentId = d.id 
+           WHERE u.id = ? LIMIT 1`,
+          id
+        );
+      } catch {
+        resList = await prisma.$queryRawUnsafe<any[]>(
+          `SELECT u.id, u.name, u.username, u.role, u.status, u.updatedAt 
+           FROM User u 
+           WHERE u.id = ? LIMIT 1`,
+          id
         );
       }
 
-      const resList = await prisma.$queryRawUnsafe<any[]>(
-        `SELECT u.id, u.name, u.username, u.role, u.status, u.departmentId, d.name AS departmentName, u.updatedAt 
-         FROM User u 
-         LEFT JOIN Department d ON u.departmentId = d.id 
-         WHERE u.id = ? LIMIT 1`,
-        id
-      );
       const resItem = resList[0] || { id, ...updateData };
       resItem.department = resItem.departmentName ? { id: resItem.departmentId, name: resItem.departmentName } : null;
       return NextResponse.json(resItem);

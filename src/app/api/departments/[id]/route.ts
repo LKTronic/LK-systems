@@ -54,10 +54,14 @@ export async function DELETE(
         data: { departmentId: null },
       });
     } catch {
-      await prisma.$executeRawUnsafe(
-        "UPDATE User SET departmentId = NULL WHERE departmentId = ?",
-        id
-      );
+      try {
+        await prisma.$executeRawUnsafe(
+          "UPDATE User SET departmentId = NULL WHERE departmentId = ?",
+          id
+        );
+      } catch {
+        // Ignore if departmentId column does not exist
+      }
     }
 
     // Delete the department
