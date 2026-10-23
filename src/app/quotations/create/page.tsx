@@ -131,8 +131,11 @@ export default function CreateQuotationPage() {
         }
       })
       .catch(() => {
-        const year = new Date().getFullYear();
-        setQuotationNo(`QT-${year}-0001`);
+        const now = new Date();
+        const yyyy = now.getFullYear();
+        const mm = String(now.getMonth() + 1).padStart(2, "0");
+        const dd = String(now.getDate()).padStart(2, "0");
+        setQuotationNo(`${yyyy}${mm}${dd}`);
       });
   }, []);
 
@@ -634,12 +637,12 @@ const formatPreparedBy = (u: UserListItem) => {
                   type="text"
                   value={quotationNo}
                   onChange={(e) => setQuotationNo(e.target.value)}
-                  placeholder="e.g. QT-2026-0001"
+                  placeholder="e.g. 20261023 or 20261023-23v"
                   className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-teal-500 font-mono"
                 />
               </div>
               <p className="text-[11px] text-slate-500 mt-1">
-                Auto-generated sequential number, editable by user.
+                Auto-generated date format (YYYYMMDD). You can edit and add custom suffix (e.g. -23v).
               </p>
             </div>
 

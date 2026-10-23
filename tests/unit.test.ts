@@ -270,51 +270,57 @@ describe("Unit Tests: Quotation Stock Badges & Bank Details", () => {
 });
 
 describe("Unit Tests: Quotation Number Sequence Generator", () => {
-  const currentYear = new Date().getFullYear();
-  const prefix = `QT-${currentYear}-`;
+  const now = new Date();
+  const yyyy = now.getFullYear();
+  const mm = String(now.getMonth() + 1).padStart(2, "0");
+  const dd = String(now.getDate()).padStart(2, "0");
+  const todayPrefix = `${yyyy}${mm}${dd}`;
 
-  it("generates initial quotation number QT-YYYY-0001 when no prior records exist", async () => {
+  it("generates initial date-based quotation number YYYYMMDD when no prior records exist", async () => {
     const mockTx = {
       quotation: {
+        findUnique: async () => null,
+      },
+    };
+
+    const nextNo = await getNextQuotationNo(mockTx as any);
+    assert.equal(nextNo, todayPrefix);
+  });
+
+  it("suggests sequential suffix -01 when exact YYYYMMDD already exists", async () => {
+    const mockTx = {
+      quotation: {
+        findUnique: async () => ({ quotationNo: todayPrefix }),
         findFirst: async () => null,
       },
     };
 
     const nextNo = await getNextQuotationNo(mockTx as any);
-    assert.equal(nextNo, `${prefix}0001`);
+    assert.equal(nextNo, `${todayPrefix}-01`);
   });
 
-  it("increments sequential quotation number correctly", async () => {
+  it("increments sequential suffix correctly on the same day", async () => {
     const mockTx = {
       quotation: {
-        findFirst: async () => ({ quotationNo: `${prefix}0042` }),
+        findUnique: async () => ({ quotationNo: todayPrefix }),
+        findFirst: async () => ({ quotationNo: `${todayPrefix}-05` }),
       },
     };
 
     const nextNo = await getNextQuotationNo(mockTx as any);
-    assert.equal(nextNo, `${prefix}0043`);
+    assert.equal(nextNo, `${todayPrefix}-06`);
   });
 
-  it("handles rollover across 4 digits cleanly (e.g., 0999 to 1000)", async () => {
+  it("handles non-numeric suffix safely by defaulting", async () => {
     const mockTx = {
       quotation: {
-        findFirst: async () => ({ quotationNo: `${prefix}0999` }),
+        findUnique: async () => ({ quotationNo: todayPrefix }),
+        findFirst: async () => ({ quotationNo: `${todayPrefix}-ABC` }),
       },
     };
 
     const nextNo = await getNextQuotationNo(mockTx as any);
-    assert.equal(nextNo, `${prefix}1000`);
-  });
-
-  it("handles non-numeric suffix safely without throwing", async () => {
-    const mockTx = {
-      quotation: {
-        findFirst: async () => ({ quotationNo: `${prefix}INVALID` }),
-      },
-    };
-
-    const nextNo = await getNextQuotationNo(mockTx as any);
-    assert.equal(nextNo, `${prefix}0001`);
+    assert.equal(nextNo, `${todayPrefix}-01`);
   });
 });
 
