@@ -19,14 +19,14 @@
     "seed": "tsx prisma/seed.ts"
   },
   "dependencies": {
-    "@next/swc-wasm-nodejs": "16.3.8",
+    "@next/swc-wasm-nodejs": "16.4.2",
     "@prisma/client": "^5.22.0",
     "bcryptjs": "^3.0.3",
     "exceljs": "^4.4.0",
     "jspdf": "^4.2.1",
     "jspdf-autotable": "^5.0.9",
     "lucide-react": "^1.42.0",
-    "next": "16.3.8",
+    "next": "16.4.2",
     "next-auth": "^4.24.15",
     "react": "19.2.8",
     "react-dom": "19.2.8",
@@ -40,7 +40,7 @@
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "eslint": "^9.13.0",
-    "eslint-config-next": "16.3.8",
+    "eslint-config-next": "16.4.2",
     "prisma": "^5.22.0",
     "tailwindcss": "^4",
     "tsx": "^4.23.13",
@@ -51,6 +51,7 @@
     "brace-expansion": "^1.1.21 || ^2.1.7",
     "source-map-js": "^1.2.2",
     "braces": "3.0.3",
-    "micromatch": "^4.0.8"
+    "micromatch": "^4.0.8",
+    "sharp": "^0.35.5"
   }
 }
