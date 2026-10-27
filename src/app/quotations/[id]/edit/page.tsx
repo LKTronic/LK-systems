@@ -10,6 +10,7 @@ import {
   generateQuotationPdf,
   QuotationPdfItem,
   formatValidityPeriodText,
+  cleanProductDescription,
 } from "@/lib/quotationPdfGenerator";
 import {
   FileText,
@@ -409,7 +410,7 @@ const formatPreparedBy = (u: UserListItem) => {
 
     const price = Number(product.priceLKR) || 0;
     updateItemRow(targetItemIndex, "productId", product.id);
-    updateItemRow(targetItemIndex, "description", product.productName);
+    updateItemRow(targetItemIndex, "description", cleanProductDescription(product.productName));
     updateItemRow(targetItemIndex, "unitPrice", price);
     updateItemRow(targetItemIndex, "imagePath", product.imagePath || null);
 
@@ -909,12 +910,12 @@ const formatPreparedBy = (u: UserListItem) => {
                 <tr className="bg-slate-950/70 border-b border-slate-800 text-[11px] uppercase tracking-wider text-slate-400 font-semibold">
                   <th className="py-3 px-3 w-12 text-center">No</th>
                   <th className="py-3 px-3 w-20 text-center">Image</th>
-                  <th className="py-3 px-4 min-w-[240px]">Product / Service</th>
-                  <th className="py-3 px-3 min-w-[215px]">Stock / Lead Time</th>
-                  <th className="py-3 px-3 min-w-[170px]">Warranty</th>
-                  <th className="py-3 px-3 w-24 text-center">Quantity</th>
-                  <th className="py-3 px-4 w-36 text-right">Unit Price (LKR)</th>
-                  <th className="py-3 px-4 w-40 text-right">Total Price (LKR)</th>
+                  <th className="py-3 px-4 min-w-[220px]">Product / Service</th>
+                  <th className="py-3 px-2 w-36 min-w-[145px]">Stock / Lead Time</th>
+                  <th className="py-3 px-2 w-32 min-w-[125px]">Warranty</th>
+                  <th className="py-3 px-2 w-20 min-w-[70px] text-center">Quantity</th>
+                  <th className="py-3 px-3 w-48 min-w-[175px] text-right">Unit Price (LKR)</th>
+                  <th className="py-3 px-3 w-44 min-w-[155px] text-right">Total Price (LKR)</th>
                   <th className="py-3 px-3 w-14 text-center">Action</th>
                 </tr>
               </thead>
@@ -1000,7 +1001,7 @@ const formatPreparedBy = (u: UserListItem) => {
                       </td>
 
                       {/* Stock / Availability & Lead Time */}
-                      <td className="py-3 px-3">
+                      <td className="py-3 px-2 w-36 min-w-[145px]">
                         <div className="space-y-1.5">
                           <select
                             value={item.stockStatus}
@@ -1011,15 +1012,15 @@ const formatPreparedBy = (u: UserListItem) => {
                                 updateItemRow(index, "leadTime", "12-21");
                               }
                             }}
-                            className="w-full bg-slate-950 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-teal-500"
+                            className="w-full bg-slate-950 border border-slate-700 rounded-lg px-2 py-1.5 text-xs text-white focus:outline-none focus:border-teal-500"
                           >
                             <option value="IN_STOCK">In Stock</option>
-                            <option value="OVERSEAS">Shipping from Overseas</option>
+                            <option value="OVERSEAS">Overseas (Import)</option>
                           </select>
 
                           {item.stockStatus === "OVERSEAS" && (
-                            <div className="flex items-center gap-1.5 animate-in fade-in">
-                              <span className="text-[10px] text-amber-400 font-medium shrink-0">Lead time:</span>
+                            <div className="flex items-center gap-1 animate-in fade-in">
+                              <span className="text-[10px] text-amber-400 font-medium shrink-0">Lead:</span>
                               <input
                                 type="text"
                                 value={item.leadTime || "12-21"}
@@ -1027,16 +1028,16 @@ const formatPreparedBy = (u: UserListItem) => {
                                   updateItemRow(index, "leadTime", e.target.value)
                                 }
                                 placeholder="12-21"
-                                className="w-16 bg-slate-900 border border-amber-600/50 rounded px-1.5 py-1 text-xs text-amber-200 text-center focus:outline-none focus:border-amber-400 font-mono"
+                                className="w-12 bg-slate-900 border border-amber-600/50 rounded px-1 py-0.5 text-xs text-amber-200 text-center focus:outline-none focus:border-amber-400 font-mono"
                               />
-                              <span className="text-[10px] text-amber-300/80 shrink-0">working days</span>
+                              <span className="text-[10px] text-amber-300/80 shrink-0">days</span>
                             </div>
                           )}
                         </div>
                       </td>
 
                       {/* Warranty */}
-                      <td className="py-3 px-3">
+                      <td className="py-3 px-2 w-32 min-w-[125px]">
                         <div className="space-y-1.5">
                           <select
                             value={item.warrantyType}
@@ -1048,7 +1049,7 @@ const formatPreparedBy = (u: UserListItem) => {
                               else if (type === "1Y") updateItemRow(index, "warranty", "1 Year");
                               else if (type === "CUSTOM" && !item.warranty) updateItemRow(index, "warranty", "");
                             }}
-                            className="w-full bg-slate-950 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-teal-500"
+                            className="w-full bg-slate-950 border border-slate-700 rounded-lg px-2 py-1.5 text-xs text-white focus:outline-none focus:border-teal-500"
                           >
                             <option value="NO">No Warranty</option>
                             <option value="6M">06 Months</option>
@@ -1073,7 +1074,7 @@ const formatPreparedBy = (u: UserListItem) => {
                       </td>
 
                       {/* Quantity */}
-                      <td className="py-3 px-3">
+                      <td className="py-3 px-2 w-20 min-w-[70px]">
                         <input
                           type="number"
                           min="1"
@@ -1081,12 +1082,12 @@ const formatPreparedBy = (u: UserListItem) => {
                           onChange={(e) =>
                             updateItemRow(index, "quantity", e.target.value)
                           }
-                          className="w-full bg-slate-950 border border-slate-700 rounded-lg px-2.5 py-1.5 text-sm text-white text-center focus:outline-none focus:border-teal-500 font-mono"
+                          className="w-full bg-slate-950 border border-slate-700 rounded-lg px-2 py-1.5 text-sm text-white text-center focus:outline-none focus:border-teal-500 font-mono"
                         />
                       </td>
 
                       {/* Unit Price */}
-                      <td className="py-3 px-4 text-right">
+                      <td className="py-3 px-3 w-48 min-w-[175px] text-right">
                         <input
                           type="number"
                           min="0"
@@ -1100,7 +1101,7 @@ const formatPreparedBy = (u: UserListItem) => {
                       </td>
 
                       {/* Total Price (Auto-calculated) */}
-                      <td className="py-3 px-4 text-right font-mono font-medium text-white">
+                      <td className="py-3 px-3 w-44 min-w-[155px] text-right font-mono font-medium text-white">
                         {formatLKR(lineTotal)}
                       </td>
 
