@@ -549,8 +549,83 @@ export function getProductHighlightLines(
 }
 
 /**
+ * Normalizes and cleans product/service description text:
+ * 1. NFKC Unicode normalization (converts full-width Latin/numbers like Ｓａｍｋｏｏｎ into Samkoon)
+ * 2. Un-spaces letters that were spaced out individually (e.g. "S a m k o o n   S K - 0 7 0 Q H" -> "Samkoon SK-070QH")
+ * 3. Normalizes non-breaking and full-width spaces
+ * 4. Collapses redundant multiple spaces while preserving clean line breaks
+ */
+export function cleanProductDescription(text: string): string {
+  if (!text) return "";
+
+  // 1. Unicode NFKC normalization
+  let str = text.normalize("NFKC");
+
+  // 2. Replace special spaces (non-breaking, ideographic, zero-width, tabs)
+  str = str
+    .replace(/[\u00A0\u1680\u2000-\u200A\u202F\u205F\u3000]/g, " ")
+    .replace(/[\u200B-\u200D\uFEFF]/g, "")
+    .replace(/\t/g, " ");
+
+  // 3. Process line-by-line
+  const lines = str.split(/\r?\n/);
+  const cleanedLines = lines.map((line) => {
+    let l = line.trim();
+    if (!l) return "";
+
+    // Step 1: Detect multi-space separated segments (e.g. 'S a m k o o n   S K - 0 7 0 Q H')
+    const segments = l.split(/ {2,}/);
+    const fixedSegments = segments.map((seg) => {
+      const trimmed = seg.trim();
+      const tokens = trimmed.split(" ");
+      // If at least 2 tokens and ALL tokens are single characters (e.g. 'S a m k o o n' or 'S K')
+      if (tokens.length >= 2 && tokens.every((t) => t.length === 1)) {
+        return tokens.join("");
+      }
+      return trimmed;
+    });
+    l = fixedSegments.join(" ");
+
+    // Step 2: Handle words where consecutive single characters of length >= 3 are present
+    const words = l.split(" ");
+    const newWords: string[] = [];
+    let singleCharBuf: string[] = [];
+
+    for (let i = 0; i < words.length; i++) {
+      const w = words[i];
+      if (w.length === 1) {
+        singleCharBuf.push(w);
+      } else {
+        if (singleCharBuf.length >= 3) {
+          newWords.push(singleCharBuf.join(""));
+        } else if (singleCharBuf.length > 0) {
+          newWords.push(...singleCharBuf);
+        }
+        singleCharBuf = [];
+        newWords.push(w);
+      }
+    }
+    if (singleCharBuf.length >= 3) {
+      newWords.push(singleCharBuf.join(""));
+    } else if (singleCharBuf.length > 0) {
+      newWords.push(...singleCharBuf);
+    }
+
+    l = newWords.join(" ");
+
+    // Step 3: Clean up any spaced hyphens in model codes like 'SK - 070QH' -> 'SK-070QH'
+    l = l.replace(/([A-Za-z0-9])\s*-\s*([A-Za-z0-9])/g, "$1-$2");
+
+    // Step 4: Collapse multiple spaces to single space
+    return l.replace(/ {2,}/g, " ").trim();
+  });
+
+  return cleanedLines.join("\n").trim();
+}
+
+/**
  * Format Product/Service cell content:
- * 1. Description
+ * 1. Description (cleaned and normalized)
  * 2. Empty spacer line
  * 3. Stock status & lead time
  * 4. Warranty: ONLY if valid warranty is specified. If no warranty, omitted!
@@ -561,8 +636,9 @@ export function formatProductServiceCell(
   leadTime?: string | null,
   warranty?: string | null
 ): string {
+  const cleaned = cleanProductDescription(description);
   const hl = getProductHighlightLines(stockStatus, leadTime, warranty);
-  return [description.trim(), "", ...hl].join("\n");
+  return [cleaned, "", ...hl].join("\n");
 }
 
 /**
@@ -845,10 +921,11 @@ export async function generateQuotationPdf(
         const padX = 4;
         const maxTextW = cell.width - padX * 2;
 
-        // Split description lines
+        // Split description lines (cleaned and normalized)
         doc.setFont("times", "normal");
         doc.setFontSize(10);
-        const descLines = doc.splitTextToSize(item.description.trim(), maxTextW);
+        const cleanedDesc = cleanProductDescription(item.description);
+        const descLines = doc.splitTextToSize(cleanedDesc, maxTextW);
 
         // Highlight lines (stock status & warranty) using smaller 8pt font
         const hlLines = getProductHighlightLines(

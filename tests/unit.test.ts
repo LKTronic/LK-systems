@@ -11,6 +11,7 @@ import {
   getValidityDays,
   numberToWords,
   DEFAULT_GENERAL_TERMS_BULLETS,
+  cleanProductDescription,
 } from "../src/lib/quotationPdfGenerator";
 import { getNextQuotationNo } from "../src/lib/quotationNo";
 import { extractStorageLocation } from "../src/lib/formatters";
@@ -460,4 +461,40 @@ describe("Unit Tests: Database Schema Self-Healing & Missing Column Fallback (Er
     assert.strictEqual(isUnknownColumnError(otherErr), false);
   });
 });
+
+describe("Unit Tests: Product Description Text Cleaning for PDF", () => {
+  it("removes artificial spacing from spaced-out product names while preserving normal lines", () => {
+    const input = "S a m k o o n   S K - 0 7 0 Q H\nHMI Touch Panel";
+    const expected = "Samkoon SK-070QH\nHMI Touch Panel";
+    assert.equal(cleanProductDescription(input), expected);
+  });
+
+  it("normalizes full-width Unicode characters to standard ASCII", () => {
+    const input = "Ｓａｍｋｏｏｎ　ＳＫ－０７０ＱＨ";
+    assert.equal(cleanProductDescription(input), "Samkoon SK-070QH");
+  });
+
+  it("collapses multiple consecutive spaces while leaving clean product titles intact", () => {
+    const input = "MeanWell   LRS-350-24   Power Supply";
+    assert.equal(cleanProductDescription(input), "MeanWell LRS-350-24 Power Supply");
+  });
+
+  it("preserves standard descriptions without modifying clean tokens", () => {
+    const input = "Samkoon SK-070C";
+    assert.equal(cleanProductDescription(input), "Samkoon SK-070C");
+  });
+
+  it("cleans description inside formatProductServiceCell", () => {
+    const cell = formatProductServiceCell(
+      "S a m k o o n   S K - 0 7 0 Q H\nHMI Touch Panel",
+      "IN_STOCK",
+      null,
+      "1 Year"
+    );
+    assert.ok(cell.includes("Samkoon SK-070QH\nHMI Touch Panel"));
+    assert.ok(cell.includes("(instocks)"));
+    assert.ok(cell.includes("(1 Year warranty)"));
+  });
+});
+
 
