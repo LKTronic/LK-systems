@@ -26,6 +26,7 @@ import {
   RefreshCw,
   ExternalLink,
   Users,
+  Clock,
 } from "lucide-react";
 
 interface Supplier {
@@ -67,6 +68,7 @@ export default function PendingDownloadPage() {
 
   // Filter States
   const [supplierFilter, setSupplierFilter] = useState<string>("ALL");
+  const [statusFilter, setStatusFilter] = useState<string>("PENDING");
   const [fromDate, setFromDate] = useState<string>("");
   const [toDate, setToDate] = useState<string>("");
   const [addedBy, setAddedBy] = useState<string>("ALL");
@@ -111,8 +113,9 @@ export default function PendingDownloadPage() {
   const fetchPendingProducts = async () => {
     setIsLoading(true);
     try {
+      const statusParam = statusFilter === "ALL" ? "PENDING,REQUESTED" : statusFilter;
       const params = new URLSearchParams({
-        status: "PENDING",
+        status: statusParam,
         limit: "1000",
       });
 
@@ -150,7 +153,7 @@ export default function PendingDownloadPage() {
 
   useEffect(() => {
     fetchPendingProducts();
-  }, [supplierFilter, fromDate, toDate, addedBy, debouncedSearch]);
+  }, [supplierFilter, statusFilter, fromDate, toDate, addedBy, debouncedSearch]);
 
   const handleSearchSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -159,6 +162,7 @@ export default function PendingDownloadPage() {
 
   const handleResetFilters = () => {
     setSupplierFilter("ALL");
+    setStatusFilter("PENDING");
     setFromDate("");
     setToDate("");
     setAddedBy("ALL");
@@ -423,7 +427,7 @@ export default function PendingDownloadPage() {
       a.remove();
       window.URL.revokeObjectURL(url);
 
-      setExportSuccessMessage("Suppliers saved & Excel file downloaded successfully!");
+      setExportSuccessMessage("Suppliers saved & Excel downloaded! Products moved to Requested.");
       setTimeout(() => {
         setIsConfirmModalOpen(false);
         setExportSuccessMessage(null);
@@ -464,7 +468,7 @@ export default function PendingDownloadPage() {
             </Link>
             <span className="text-slate-600">|</span>
             <span className="text-xs text-slate-400">
-              Showing <span className="font-bold text-amber-400">{products.length}</span> Pending Requests
+              Showing <span className="font-bold text-amber-400">{products.length}</span> {statusFilter === "REQUESTED" ? "Requested" : statusFilter === "ALL" ? "Pending & Requested" : "Pending"} Requests
             </span>
           </div>
 
@@ -503,7 +507,7 @@ export default function PendingDownloadPage() {
             </p>
           </div>
 
-          <form onSubmit={handleSearchSubmit} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-3 text-xs">
+          <form onSubmit={handleSearchSubmit} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-7 gap-3 text-xs">
             {/* Supplier Filter */}
             <div>
               <label className="block text-slate-400 font-semibold mb-1 flex items-center gap-1.5">
@@ -542,6 +546,22 @@ export default function PendingDownloadPage() {
                     {u.name}
                   </option>
                 ))}
+              </select>
+            </div>
+            {/* Status Filter */}
+            <div>
+              <label className="block text-slate-400 font-semibold mb-1 flex items-center gap-1.5">
+                <Clock className="w-3.5 h-3.5 text-indigo-400" />
+                Status
+              </label>
+              <select
+                value={statusFilter}
+                onChange={(e) => setStatusFilter(e.target.value)}
+                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-slate-200 focus:border-indigo-500 outline-none"
+              >
+                <option value="PENDING">Pending (Ready to Export)</option>
+                <option value="REQUESTED">Requested (Exported)</option>
+                <option value="ALL">All (Pending + Requested)</option>
               </select>
             </div>
 
@@ -755,6 +775,7 @@ export default function PendingDownloadPage() {
                   <th className="p-3">Request Date</th>
                   <th className="p-3">SKU / Ref</th>
                   <th className="p-3">Model no and name</th>
+                  <th className="p-3 text-center">Status</th>
                   <th className="p-3 text-center">Qty</th>
                   <th className="p-3">Category</th>
                   <th className="p-3">Supplier</th>
@@ -764,15 +785,15 @@ export default function PendingDownloadPage() {
               <tbody className="divide-y divide-slate-800/60">
                 {isLoading ? (
                   <tr>
-                    <td colSpan={8} className="p-12 text-center text-slate-400">
+                    <td colSpan={9} className="p-12 text-center text-slate-400">
                       <Loader2 className="w-6 h-6 animate-spin mx-auto mb-2 text-indigo-500" />
-                      Loading pending product requests...
+                      Loading product requests...
                     </td>
                   </tr>
                 ) : products.length === 0 ? (
                   <tr>
-                    <td colSpan={8} className="p-12 text-center text-slate-400">
-                      No pending requests found matching the selected filters.
+                    <td colSpan={9} className="p-12 text-center text-slate-400">
+                      No requests found matching the selected filters.
                     </td>
                   </tr>
                 ) : (
@@ -828,6 +849,19 @@ export default function PendingDownloadPage() {
                             >
                               Datasheet <ExternalLink className="w-2.5 h-2.5" />
                             </a>
+                          )}
+                        </td>
+                        <td className="p-3 text-center">
+                          {p.status === "REQUESTED" ? (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-blue-500/10 text-blue-400 border border-blue-500/20 whitespace-nowrap">
+                              <Clock className="w-3 h-3 shrink-0" />
+                              Requested
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-amber-500/10 text-amber-400 border border-amber-500/20 whitespace-nowrap">
+                              <Clock className="w-3 h-3 shrink-0" />
+                              Pending
+                            </span>
                           )}
                         </td>
                         <td className="p-3 text-center font-mono font-bold text-white">

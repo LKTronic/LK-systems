@@ -43,7 +43,7 @@ export const productSchema = z.object({
   priceUSD: z.coerce.number().optional().nullable(),
   priceLKR: z.coerce.number().optional().nullable(),
   status: z
-    .enum(["PENDING", "QUOTED", "PRICE_NOT_AVAILABLE", "NOT_REQUESTED", "ACTIVE", "EXPIRED"])
+    .enum(["PENDING", "REQUESTED", "QUOTED", "PRICE_NOT_AVAILABLE", "NOT_REQUESTED", "ACTIVE", "EXPIRED"])
     .default("PENDING")
     .optional(),
 });

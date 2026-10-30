@@ -79,6 +79,9 @@ export async function GET(request: NextRequest) {
           status: "ACTIVE",
           price: { gt: 0 },
         });
+      } else if (status.includes(",")) {
+        const statuses = status.split(",").map((s) => s.trim()).filter(Boolean);
+        andConditions.push({ status: { in: statuses } });
       } else {
         andConditions.push({ status });
       }

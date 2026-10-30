@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { AppLayout } from "@/components/AppLayout";
 import { formatLKR, formatDateDMY } from "@/lib/formatters";
-import { generateQuotationPdf, QuotationPdfItem } from "@/lib/quotationPdfGenerator";
+import { generateQuotationPdf, QuotationPdfItem, cleanProductDescription } from "@/lib/quotationPdfGenerator";
 import {
   FileText,
   Plus,
@@ -85,8 +85,11 @@ export default function QuotationsListPage() {
     try {
       const pdfItems: QuotationPdfItem[] = (q.items || []).map((it, idx) => ({
         itemIndex: it.itemIndex || idx + 1,
-        description: it.description,
+        description: cleanProductDescription(it.description),
         imagePath: it.imagePath || null,
+        stockStatus: (it as any).stockStatus || null,
+        leadTime: (it as any).leadTime || null,
+        warranty: (it as any).warranty || null,
         quantity: Number(it.quantity) || 1,
         unitPrice: Number(it.unitPrice) || 0,
         totalPrice: Number(it.totalPrice) || 0,

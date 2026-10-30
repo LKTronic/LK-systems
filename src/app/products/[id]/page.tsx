@@ -177,6 +177,13 @@ export default function ProductDetailPage({
             Pending Quotation
           </span>
         );
+      case "REQUESTED":
+        return (
+          <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-blue-500/10 text-blue-400 border border-blue-500/20">
+            <Clock className="w-3.5 h-3.5" />
+            Quotation Requested
+          </span>
+        );
       case "ACTIVE":
       case "QUOTED":
         return (
@@ -327,14 +334,14 @@ export default function ProductDetailPage({
                           product.additionalNote.includes("PMS Updated"))
                     );
 
-                    if (isOnlineWeb && !isPmsUpdated && product.status !== "PENDING") {
+                    if (isOnlineWeb && !isPmsUpdated && product.status !== "PENDING" && product.status !== "REQUESTED") {
                       return null;
                     }
 
                     return (
                       <p className="text-xs text-slate-400">
                         {isOnlineWeb ? (
-                          product.status === "PENDING" ? (
+                          (product.status === "PENDING" || product.status === "REQUESTED") ? (
                             <>
                               Requested {product.author?.name ? `by ${product.author.name} ` : ""}on{" "}
                               {formatDateDMY(product.productDate || product.updatedAt || product.createdAt)}

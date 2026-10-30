@@ -243,6 +243,12 @@ export default function AddProductPage() {
             Price N/A
           </span>
         );
+      case "REQUESTED":
+        return (
+          <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-blue-500/10 text-blue-400 border border-blue-500/20">
+            Requested
+          </span>
+        );
       case "PENDING":
       default:
         return (

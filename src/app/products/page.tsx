@@ -63,7 +63,7 @@ interface Product {
   referenceLink?: string | null;
   description?: string | null;
   stockStatus?: string | null;
-  status: "PENDING" | "ACTIVE" | "EXPIRED" | "PRICE_NOT_AVAILABLE" | "NOT_REQUESTED" | "QUOTED";
+  status: "PENDING" | "REQUESTED" | "ACTIVE" | "EXPIRED" | "PRICE_NOT_AVAILABLE" | "NOT_REQUESTED" | "QUOTED";
   createdAt: string;
   updatedAt?: string | null;
   supplierNote?: string | null;
@@ -905,6 +905,13 @@ export default function ProductsPage() {
             Pending
           </span>
         );
+      case "REQUESTED":
+        return (
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-blue-500/10 text-blue-400 border border-blue-500/20 whitespace-nowrap" title="Excel Quotation Downloaded / Sent to Supplier">
+            <Clock className="w-3 h-3 shrink-0" />
+            Requested
+          </span>
+        );
       case "ACTIVE":
       case "QUOTED":
         return (
@@ -1136,8 +1143,9 @@ export default function ProductsPage() {
               >
                 <option value="ALL">All Statuses</option>
                 <option value="ACTIVE">Active (Quoted)</option>
-                <option value="NOT_REQUESTED">Not Requested</option>
                 <option value="PENDING">Pending (Awaiting Quote)</option>
+                <option value="REQUESTED">Requested (Sent to Supplier)</option>
+                <option value="NOT_REQUESTED">Not Requested</option>
                 <option value="PRICE_NOT_AVAILABLE">Price Not Available</option>
                 <option value="EXPIRED">Expired (After {validityMonths}m)</option>
               </select>
@@ -1841,7 +1849,8 @@ export default function ProductsPage() {
                                   p.supplierId ||
                                   (p.supplier && p.supplier.name) ||
                                   p.additionalNote?.includes("PMS Updated") ||
-                                  p.status === "PENDING"
+                                  p.status === "PENDING" ||
+                                  p.status === "REQUESTED"
                                 );
 
                                 if (isOnlineWeb && !isPmsModified) {

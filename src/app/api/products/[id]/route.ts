@@ -277,6 +277,7 @@ export async function DELETE(
         existingProduct.supplierId ||
         existingProduct.priceUpdatedAt ||
         existingProduct.status === "PENDING" ||
+        existingProduct.status === "REQUESTED" ||
         existingProduct.supplierNote ||
         existingProduct.priceUSD ||
         existingProduct.additionalNote?.includes("PMS Updated")
@@ -412,9 +413,9 @@ export async function DELETE(
           { status: 403 }
         );
       }
-      if (existingProduct.status !== "PENDING") {
+      if (existingProduct.status !== "PENDING" && existingProduct.status !== "REQUESTED") {
         return NextResponse.json(
-          { error: "Forbidden: Staff members can only delete pending products. Please contact an administrator." },
+          { error: "Forbidden: Staff members can only delete pending or requested products. Please contact an administrator." },
           { status: 403 }
         );
       }

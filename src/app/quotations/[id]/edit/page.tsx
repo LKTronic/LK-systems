@@ -191,7 +191,7 @@ const formatPreparedBy = (u: UserListItem) => {
               return {
                 id: `item-${it.id || Date.now()}-${Math.random()}`,
                 productId: it.productId || null,
-                description: it.description || "",
+                description: cleanProductDescription(it.description || ""),
                 imagePath: it.imagePath || null,
                 stockStatus: it.stockStatus === "OVERSEAS" ? "OVERSEAS" : "IN_STOCK",
                 leadTime: cleanLead,

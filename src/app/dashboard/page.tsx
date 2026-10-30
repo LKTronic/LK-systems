@@ -79,6 +79,13 @@ export default function DashboardPage() {
             Pending
           </span>
         );
+      case "REQUESTED":
+        return (
+          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-blue-500/10 text-blue-400 border border-blue-500/20">
+            <Clock className="w-3 h-3" />
+            Requested
+          </span>
+        );
       case "ACTIVE":
         return (
           <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">

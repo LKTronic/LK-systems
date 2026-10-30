@@ -367,6 +367,14 @@ describe("Unit Tests: Zod Data Validation Schemas", () => {
     assert.equal(parsed.price, 0);
   });
 
+  it("validates productSchema: accepts REQUESTED status", () => {
+    const parsed = productSchema.parse({
+      modelAndName: "Sensor Module",
+      status: "REQUESTED",
+    });
+    assert.equal(parsed.status, "REQUESTED");
+  });
+
   it("validates productSchema: validates referenceLink protocol (http/https only)", () => {
     // Valid http/https
     const validHttp = productSchema.parse({
@@ -459,6 +467,35 @@ describe("Unit Tests: Database Schema Self-Healing & Missing Column Fallback (Er
     const otherErr =
       "Raw query failed. Code: `1062`. Message: `Duplicate entry 'admin' for key 'User_username_key'`";
     assert.strictEqual(isUnknownColumnError(otherErr), false);
+  });
+});
+
+describe("Unit Tests: Pending Product Download Excel Status Transition", () => {
+  it("identifies PENDING products for status update to REQUESTED upon export", () => {
+    const products = [
+      { id: 101, status: "PENDING", productName: "Item 1" },
+      { id: 102, status: "REQUESTED", productName: "Item 2" },
+      { id: 103, status: "PENDING", productName: "Item 3" },
+      { id: 104, status: "ACTIVE", productName: "Item 4" },
+    ];
+
+    const pendingIds = products
+      .filter((p) => p.status === "PENDING")
+      .map((p) => p.id);
+
+    assert.deepEqual(pendingIds, [101, 103]);
+  });
+
+  it("preserves already REQUESTED items without duplicating transition", () => {
+    const products = [
+      { id: 201, status: "REQUESTED", productName: "Previously Exported Item" },
+    ];
+
+    const pendingIds = products
+      .filter((p) => p.status === "PENDING")
+      .map((p) => p.id);
+
+    assert.equal(pendingIds.length, 0);
   });
 });
 

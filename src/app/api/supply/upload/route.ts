@@ -272,7 +272,7 @@ export async function POST(request: NextRequest) {
     const candidateRefArray = Array.from(candidateRefs);
     const candidateModelArray = Array.from(candidateModels);
 
-    const whereConditions: any[] = [{ status: "PENDING" }];
+    const whereConditions: any[] = [{ status: "PENDING" }, { status: "REQUESTED" }];
     if (candidateRefArray.length > 0) {
       whereConditions.push(
         { referenceNo: { in: candidateRefArray } },
@@ -355,12 +355,12 @@ export async function POST(request: NextRequest) {
         );
       }
 
-      // Pass 2: Exact Model Name or Product Name match (case-insensitive, prioritizing PENDING products)
+      // Pass 2: Exact Model Name or Product Name match (case-insensitive, prioritizing PENDING/REQUESTED products)
       if (!matched && cleanModel) {
         matched =
           allProducts.find(
             (p) =>
-              p.status === "PENDING" &&
+              (p.status === "PENDING" || p.status === "REQUESTED") &&
               ((p.modelAndName && p.modelAndName.trim().toLowerCase() === cleanModel) ||
                 (p.productName && p.productName.trim().toLowerCase() === cleanModel))
           ) ||
@@ -376,7 +376,7 @@ export async function POST(request: NextRequest) {
         matched =
           allProducts.find(
             (p) =>
-              p.status === "PENDING" &&
+              (p.status === "PENDING" || p.status === "REQUESTED") &&
               ((p.modelAndName && normalize(p.modelAndName) === normModel) ||
                 (p.productName && normalize(p.productName) === normModel))
           ) ||
