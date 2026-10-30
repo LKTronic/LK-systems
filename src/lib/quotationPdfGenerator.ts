@@ -596,7 +596,7 @@ export function cleanProductDescription(text: string): string {
       if (w.length === 1) {
         singleCharBuf.push(w);
       } else {
-        if (singleCharBuf.length >= 3) {
+        if (singleCharBuf.length >= 2) {
           newWords.push(singleCharBuf.join(""));
         } else if (singleCharBuf.length > 0) {
           newWords.push(...singleCharBuf);
@@ -605,7 +605,7 @@ export function cleanProductDescription(text: string): string {
         newWords.push(w);
       }
     }
-    if (singleCharBuf.length >= 3) {
+    if (singleCharBuf.length >= 2) {
       newWords.push(singleCharBuf.join(""));
     } else if (singleCharBuf.length > 0) {
       newWords.push(...singleCharBuf);
@@ -815,7 +815,13 @@ export async function generateQuotationPdf(
     showHead: "everyPage",
     head: [
       [
-        { content: "No.", styles: { halign: "center" } },
+        {
+          content: "No.",
+          styles: {
+            halign: "center",
+            cellPadding: { top: 3, bottom: 3, left: 1, right: 1 },
+          },
+        },
         { content: "Image", styles: { halign: "center" } },
         { content: "Product/Service", styles: { halign: "center" } },
         { content: "Quantity", styles: { halign: "center" } },
@@ -857,15 +863,20 @@ export async function generateQuotationPdf(
       fillColor: [255, 255, 255],
     },
     columnStyles: {
-      0: { cellWidth: 12, halign: "center", valign: "middle" },
+      0: {
+        cellWidth: 14,
+        cellPadding: { top: 4, bottom: 4, left: 1, right: 1 },
+        halign: "center",
+        valign: "middle",
+      },
       1: {
-        cellWidth: 34,
+        cellWidth: 30,
         halign: "center",
         valign: "middle",
         minCellHeight: 35,
       },
-      2: { cellWidth: 51, halign: "left", valign: "middle", minCellHeight: 35 },
-      3: { cellWidth: 15, halign: "center", valign: "middle" },
+      2: { cellWidth: 47, halign: "left", valign: "middle", minCellHeight: 35 },
+      3: { cellWidth: 21, halign: "center", valign: "middle" },
       4: { cellWidth: 28, halign: "center", valign: "middle" },
       5: { cellWidth: 28, halign: "center", valign: "middle" },
     },

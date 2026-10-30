@@ -54,6 +54,7 @@ export async function GET() {
 
     let totalProducts = 0;
     let pendingRequests = 0;
+    let requestedProducts = 0;
     let quotedProducts = 0;
     let priceNotAvailable = 0;
     let activeProducts = 0;
@@ -63,6 +64,7 @@ export async function GET() {
       const count = group._count.id;
       totalProducts += count;
       if (group.status === "PENDING") pendingRequests = count;
+      else if (group.status === "REQUESTED") requestedProducts = count;
       else if (group.status === "QUOTED") quotedProducts = count;
       else if (group.status === "PRICE_NOT_AVAILABLE") priceNotAvailable = count;
       else if (group.status === "ACTIVE") activeProducts = count;
@@ -72,6 +74,7 @@ export async function GET() {
     const data = {
       totalProducts,
       pendingRequests,
+      requestedProducts,
       quotedProducts,
       priceNotAvailable,
       activeProducts,

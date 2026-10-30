@@ -415,19 +415,63 @@ async function buildWorkbook(pendingProducts: any[]) {
   return await workbook.xlsx.writeBuffer();
 }
 
+async function markProductsAsRequested(products: any[], userId?: number | null) {
+  const pendingIds = products
+    .filter((p) => p.status === "PENDING")
+    .map((p) => p.id);
+
+  if (pendingIds.length === 0) return;
+
+  try {
+    await prisma.$transaction(async (tx) => {
+      await tx.product.updateMany({
+        where: { id: { in: pendingIds }, status: "PENDING" },
+        data: { status: "REQUESTED" },
+      });
+
+      if (userId && !isNaN(userId)) {
+        const historyData = pendingIds.map((id) => ({
+          productId: id,
+          userId,
+          action: "STATUS_CHANGED",
+          oldData: { status: "PENDING" },
+          newData: { status: "REQUESTED", note: "Auto-transitioned upon Excel quotation download" },
+        }));
+        await tx.productHistory.createMany({
+          data: historyData,
+        });
+      }
+    });
+  } catch (err) {
+    console.error("Failed to auto-update products to REQUESTED:", err);
+  }
+}
+
 function buildWhereClause(params: {
   productIds?: number[];
   supplierId?: string | null;
   createdBy?: string | null;
   fromDate?: string | null;
   toDate?: string | null;
+  status?: string | null;
 }) {
-  const where: any = {
-    status: "PENDING",
-  };
+  const where: any = {};
 
   if (params.productIds && params.productIds.length > 0) {
     where.id = { in: params.productIds };
+    if (params.status && params.status !== "ALL") {
+      where.status = params.status;
+    } else {
+      where.status = { in: ["PENDING", "REQUESTED"] };
+    }
+  } else {
+    if (params.status === "REQUESTED") {
+      where.status = "REQUESTED";
+    } else if (params.status === "ALL") {
+      where.status = { in: ["PENDING", "REQUESTED"] };
+    } else {
+      where.status = "PENDING";
+    }
   }
 
   if (params.supplierId === "NONE" || params.supplierId === "UNASSIGNED") {
@@ -483,7 +527,8 @@ export async function GET(request: NextRequest) {
         .filter((x) => !isNaN(x));
     }
 
-    const where = buildWhereClause({ productIds, supplierId, createdBy, fromDate, toDate });
+    const statusParam = searchParams.get("status");
+    const where = buildWhereClause({ productIds, supplierId, createdBy, fromDate, toDate, status: statusParam });
 
     const pendingProducts = await prisma.product.findMany({
       where,
@@ -509,6 +554,10 @@ export async function GET(request: NextRequest) {
     });
 
     const buffer = await buildWorkbook(pendingProducts);
+
+    // Auto-transition exported PENDING products to REQUESTED
+    const sessionUserId = session.user && (session.user as any).id ? parseInt((session.user as any).id, 10) : null;
+    await markProductsAsRequested(pendingProducts, sessionUserId);
     const filename = `PMS_Pending_Requests_USD_${new Date().toISOString().slice(0, 10)}.xlsx`;
 
     return new NextResponse(buffer, {
@@ -547,6 +596,7 @@ export async function POST(request: NextRequest) {
       createdBy: body.createdBy || body.addedBy,
       fromDate: body.fromDate,
       toDate: body.toDate,
+      status: body.status,
     });
 
     const pendingProducts = await prisma.product.findMany({
@@ -573,6 +623,10 @@ export async function POST(request: NextRequest) {
     });
 
     const buffer = await buildWorkbook(pendingProducts);
+
+    // Auto-transition exported PENDING products to REQUESTED
+    const sessionUserId = session.user && (session.user as any).id ? parseInt((session.user as any).id, 10) : null;
+    await markProductsAsRequested(pendingProducts, sessionUserId);
     const filename = `PMS_Selected_Pending_USD_${new Date().toISOString().slice(0, 10)}.xlsx`;
 
     return new NextResponse(buffer, {

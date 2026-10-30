@@ -304,6 +304,7 @@ export default function EditProductPage({
                     className="w-full bg-slate-950 border border-slate-700 rounded-xl px-4 py-2.5 text-sm text-white focus:border-indigo-500 outline-none"
                   >
                     <option value="PENDING">Pending</option>
+                    <option value="REQUESTED">Requested</option>
                     <option value="NOT_REQUESTED">Not Requested</option>
                     <option value="QUOTED">Quoted</option>
                     <option value="PRICE_NOT_AVAILABLE">Price Not Available</option>
