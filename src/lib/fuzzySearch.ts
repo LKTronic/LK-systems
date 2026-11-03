@@ -436,8 +436,14 @@ export function getFuzzySuggestion(
   let hasCorrection = false;
 
   const correctedTokens = rawTokens.map((token) => {
-    // Preserve SKUs like PMS-0012 or modifiers like "2.4" or "7inch"
-    if (/^[A-Za-z]+-\d+$/i.test(token) || isModifierToken(token)) {
+    // Preserve SKUs, part numbers, and alphanumeric model codes (e.g. LKSEN00111, SK-070QT, DIY01, PB6X5-SR, LKREQ00001, 001059)
+    if (
+      /^[A-Za-z0-9_\-./()]+$/.test(token) &&
+      (/[0-9]/.test(token) || /^(?:sku|record|ref|no|code)$/i.test(token))
+    ) {
+      return token;
+    }
+    if (isModifierToken(token)) {
       return token;
     }
 
@@ -590,6 +596,9 @@ export function scoreProductRelevance(
   const cleanQuery = normalizeTextQuotes(query.trim().toLowerCase());
   if (!cleanQuery) return 1;
 
+  const strippedQuery = cleanQuery.replace(/^(?:sku|record|ref|no|code)[:\s-]+/, "").trim();
+  const effectiveQuery = strippedQuery || cleanQuery;
+
   const sku = normalizeTextQuotes((product.sku || "").trim().toLowerCase());
   const recordNo = normalizeTextQuotes((product.recordNo || "").trim().toLowerCase());
   const refNo = normalizeTextQuotes((product.referenceNo || "").trim().toLowerCase());
@@ -604,19 +613,63 @@ export function scoreProductRelevance(
   let score = 0;
 
   // 1. Exact SKU / Reference Match (Highest Priority: +200)
-  if (sku === cleanQuery || recordNo === cleanQuery || refNo === cleanQuery) {
+  if (
+    sku === cleanQuery ||
+    sku === effectiveQuery ||
+    recordNo === cleanQuery ||
+    recordNo === effectiveQuery ||
+    refNo === cleanQuery ||
+    refNo === effectiveQuery
+  ) {
     score += 200;
-  } else if (sku.startsWith(cleanQuery) || recordNo.startsWith(cleanQuery)) {
+  } else if (
+    (sku && (sku.startsWith(cleanQuery) || sku.startsWith(effectiveQuery))) ||
+    (recordNo && (recordNo.startsWith(cleanQuery) || recordNo.startsWith(effectiveQuery))) ||
+    (refNo && (refNo.startsWith(cleanQuery) || refNo.startsWith(effectiveQuery)))
+  ) {
     score += 120;
-  } else if (sku.includes(cleanQuery) || recordNo.includes(cleanQuery)) {
+  } else if (
+    (sku && (sku.includes(cleanQuery) || sku.includes(effectiveQuery))) ||
+    (recordNo && (recordNo.includes(cleanQuery) || recordNo.includes(effectiveQuery))) ||
+    (refNo && (refNo.includes(cleanQuery) || refNo.includes(effectiveQuery)))
+  ) {
     score += 90;
   }
 
-  // Compact alphanumerics check (e.g. "e2bm12" matches "e2b-m12ks04")
-  const compactQuery = cleanQuery.replace(/[^a-z0-9]/g, "");
+  // Compact alphanumerics check (e.g. "sk070qi" matches "sk-070qi" or "e2bm12" matches "e2b-m12ks04")
+  const compactQuery = effectiveQuery.replace(/[^a-z0-9]/g, "");
   const compactSku = sku.replace(/[^a-z0-9]/g, "");
-  if (compactQuery.length >= 3 && compactSku.includes(compactQuery)) {
-    score += 80;
+  const compactRecordNo = recordNo.replace(/[^a-z0-9]/g, "");
+  const compactRefNo = refNo.replace(/[^a-z0-9]/g, "");
+
+  if (compactQuery.length >= 3) {
+    if (compactSku.length >= 3) {
+      if (compactSku === compactQuery) {
+        score += 200;
+      } else if (compactSku.startsWith(compactQuery)) {
+        score += 120;
+      } else if (compactSku.includes(compactQuery)) {
+        score += 80;
+      }
+    }
+    if (compactRecordNo.length >= 3) {
+      if (compactRecordNo === compactQuery) {
+        score += 200;
+      } else if (compactRecordNo.startsWith(compactQuery)) {
+        score += 120;
+      } else if (compactRecordNo.includes(compactQuery)) {
+        score += 80;
+      }
+    }
+    if (compactRefNo.length >= 3) {
+      if (compactRefNo === compactQuery) {
+        score += 200;
+      } else if (compactRefNo.startsWith(compactQuery)) {
+        score += 120;
+      } else if (compactRefNo.includes(compactQuery)) {
+        score += 80;
+      }
+    }
   }
 
   // 2. Exact Full Name Match (+150)
@@ -682,7 +735,7 @@ export function scoreProductRelevance(
 
   // 4. Multi-token breakdown & Deep Typo Matching (Stop-words like "to", "for" filtered out)
   const vocab = vocabulary || BASELINE_ELECTRONICS_VOCABULARY;
-  const fuzzy = getFuzzySuggestion(cleanQuery, vocab);
+  const fuzzy = getFuzzySuggestion(effectiveQuery, vocab);
   const rawTokens = fuzzy.tokens;
   const rawCorrected = fuzzy.correctedTokens;
 
@@ -754,23 +807,25 @@ export function scoreProductRelevance(
 
     // STRICT NON-MATCH FILTER 1:
     // When multiple core nouns are searched (e.g. "samkoon hmi"), all core nouns must match.
-    // Prevents showing unrelated Samkoon VFDs, motors, or PLC cables when searching for HMIs.
-    if (totalCoreNounCount >= 2 && matchedCoreNounCount < totalCoreNounCount) {
-      return 0;
-    }
-    if (totalCoreNounCount === 1 && matchedCoreNounCount === 0) {
-      return 0;
+    // Note: If the item already had a definitive exact/prefix SKU/record match (score >= 120), do not discard.
+    if (score < 120) {
+      if (totalCoreNounCount >= 2 && matchedCoreNounCount < totalCoreNounCount) {
+        return 0;
+      }
+      if (totalCoreNounCount === 1 && matchedCoreNounCount === 0) {
+        return 0;
+      }
     }
 
     // STRICT NON-MATCH FILTER 2:
     // If the user specified a dimension/modifier (e.g. "7inch" in "samkoon hmi 7inch"),
     // the product MUST match that dimension. Do not show 4.3" or 10.2" panels!
-    if (totalModifierCount > 0 && matchedModifierCount === 0) {
+    if (score < 120 && totalModifierCount > 0 && matchedModifierCount === 0) {
       return 0;
     }
 
     // If query has core nouns but matched 0 core nouns, discard
-    if (totalCoreNounCount > 0 && matchedCoreNounCount === 0) {
+    if (score < 120 && totalCoreNounCount > 0 && matchedCoreNounCount === 0) {
       return 0;
     }
 
