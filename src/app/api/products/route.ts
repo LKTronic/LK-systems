@@ -134,14 +134,18 @@ export async function GET(request: NextRequest) {
     let fuzzyCorrection: { correctedQuery: string; hasCorrection: boolean; tokens: string[]; correctedTokens: string[] } | null = null;
 
     // Search matches on modelAndName, productName, referenceNo, sku, recordNo, categoryNames, or description
+    let effectiveSearch = search;
     if (search) {
+      const cleanedSearch = search.replace(/^(?:sku|record|ref|no|code)[:\s-]+/i, "").trim();
+      effectiveSearch = cleanedSearch || search;
+
       vocab = await getDynamicVocabulary(prisma);
-      fuzzyCorrection = getFuzzySuggestion(search, vocab);
+      fuzzyCorrection = getFuzzySuggestion(effectiveSearch, vocab);
       if (fuzzyCorrection.hasCorrection) {
         didYouMean = fuzzyCorrection.correctedQuery;
       }
 
-      const converter = parseConverterIntent(search);
+      const converter = parseConverterIntent(effectiveSearch);
       if (converter.isConverterQuery) {
         // Converter Query (e.g. "220V to 5V", "24V to 12V", "12V to 5V step down"):
         // Condition 1: Input conversion variants (220v, 230v, ac-dc, smps, etc.)
@@ -164,13 +168,14 @@ export async function GET(request: NextRequest) {
         // Multi-word search: filter stop-words like "to", "for"
         const rawTerms = fuzzyCorrection.hasCorrection
           ? fuzzyCorrection.correctedTokens
-          : search.split(/[\s,+/_\-:]+/).filter(Boolean);
+          : effectiveSearch.split(/[\s,+/\-_:]+/).filter(Boolean);
         const searchTerms = rawTerms.filter((t) => !isStopWord(t));
 
+        const tokenConditions: any[] = [];
         for (const term of searchTerms) {
           const variants = getDimensionVariants(term);
           if (variants.length > 1) {
-            andConditions.push({
+            tokenConditions.push({
               OR: variants.flatMap((v) => [
                 { modelAndName: { contains: v } },
                 { productName: { contains: v } },
@@ -181,7 +186,7 @@ export async function GET(request: NextRequest) {
               ]),
             });
           } else {
-            andConditions.push({
+            tokenConditions.push({
               OR: [
                 { modelAndName: { contains: term } },
                 { productName: { contains: term } },
@@ -194,9 +199,50 @@ export async function GET(request: NextRequest) {
             });
           }
         }
+
+        // Direct SKU and recordNo matching conditions to ensure instant hit on exact or compact code lookup
+        const directSkuOrRecordConditions: any[] = [];
+        if (effectiveSearch.length >= 2) {
+          directSkuOrRecordConditions.push({ sku: { equals: effectiveSearch } });
+          directSkuOrRecordConditions.push({ sku: { contains: effectiveSearch } });
+          directSkuOrRecordConditions.push({ recordNo: { equals: effectiveSearch } });
+          directSkuOrRecordConditions.push({ recordNo: { contains: effectiveSearch } });
+
+          const compactSearch = effectiveSearch.replace(/[^a-zA-Z0-9]/g, "");
+          if (compactSearch && compactSearch !== effectiveSearch && compactSearch.length >= 3) {
+            directSkuOrRecordConditions.push({ sku: { contains: compactSearch } });
+            directSkuOrRecordConditions.push({ recordNo: { contains: compactSearch } });
+          }
+
+          const alphanumericChunks = effectiveSearch.match(/[A-Za-z]+|\d+/g);
+          if (
+            alphanumericChunks &&
+            alphanumericChunks.length > 1 &&
+            alphanumericChunks.every((c) => c.length >= 2 || /\d/.test(c))
+          ) {
+            directSkuOrRecordConditions.push({
+              AND: alphanumericChunks.map((chunk) => ({ sku: { contains: chunk } })),
+            });
+            directSkuOrRecordConditions.push({
+              AND: alphanumericChunks.map((chunk) => ({ recordNo: { contains: chunk } })),
+            });
+          }
+        }
+
+        if (directSkuOrRecordConditions.length > 0 && tokenConditions.length > 0) {
+          andConditions.push({
+            OR: [
+              ...directSkuOrRecordConditions,
+              { AND: tokenConditions },
+            ],
+          });
+        } else if (directSkuOrRecordConditions.length > 0) {
+          andConditions.push({ OR: directSkuOrRecordConditions });
+        } else if (tokenConditions.length > 0) {
+          andConditions.push(...tokenConditions);
+        }
       }
     }
-
     // Date range filter
     if (fromDate || toDate) {
       const dateCond: any = {};
@@ -291,6 +337,7 @@ export async function GET(request: NextRequest) {
           .map((p) => {
             const score = Math.max(
               scoreProductRelevance(search, p as any, activeVocab),
+              scoreProductRelevance(effectiveSearch, p as any, activeVocab),
               fuzzyCorrection?.hasCorrection
                 ? scoreProductRelevance(fuzzyCorrection.correctedQuery, p as any, activeVocab)
                 : 0

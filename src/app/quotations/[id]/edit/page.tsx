@@ -52,6 +52,7 @@ interface ItemRow {
 interface ProductSearchResult {
   id: number;
   recordNo: string;
+  sku?: string | null;
   productName: string;
   priceLKR: number | string | null;
   imagePath?: string | null;
@@ -1415,8 +1416,13 @@ const formatPreparedBy = (u: UserListItem) => {
                         <div className="font-medium text-white text-sm line-clamp-1">
                           {product.productName}
                         </div>
-                        <div className="text-[11px] text-slate-400 font-mono">
-                          {product.recordNo}
+                        <div className="flex items-center gap-1.5 text-[11px] text-slate-400 font-mono mt-0.5">
+                          {product.sku && (
+                            <span className="text-teal-300 font-semibold bg-teal-950/80 px-1.5 py-0.5 rounded border border-teal-800/60">
+                              SKU: {product.sku}
+                            </span>
+                          )}
+                          <span>{product.recordNo}</span>
                         </div>
                       </div>
                     </div>

@@ -17,6 +17,7 @@ import { getNextQuotationNo } from "../src/lib/quotationNo";
 import { extractStorageLocation } from "../src/lib/formatters";
 import { productSchema } from "../src/lib/validations/product";
 import { createUserSchema, updateUserSchema } from "../src/lib/validations/user";
+import { scoreProductRelevance, getFuzzySuggestion } from "../src/lib/fuzzySearch";
 
 describe("Unit Tests: Quotation Financial Calculations", () => {
   it("calculates line items with high precision and handles fractional prices", () => {
@@ -535,3 +536,59 @@ describe("Unit Tests: Product Description Text Cleaning for PDF", () => {
 });
 
 
+
+describe("Unit Tests: Quotation Inventory SKU Search & Picking", () => {
+  const dummyProduct = {
+    id: 123,
+    sku: "SK-070QI",
+    recordNo: "LKREQ00042",
+    referenceNo: "REF-9988",
+    modelAndName: "Samkoon SK-070QI 7-inch HMI Touch Panel",
+    productName: "Samkoon SK-070QI 7-inch HMI Touch Panel",
+    description: "Industrial Human Machine Interface with Ethernet",
+    categoryNames: "HMI, Touch Panels",
+    quantity: 5,
+    priceLKR: 45000,
+  };
+
+  it("scores exact SKU match with top priority (+200)", () => {
+    const score = scoreProductRelevance("SK-070QI", dummyProduct as any);
+    assert.ok(score >= 200, `Expected score >= 200, got ${score}`);
+  });
+
+  it("scores compact SKU match without hyphens with top priority (+200)", () => {
+    const score = scoreProductRelevance("sk070qi", dummyProduct as any);
+    assert.ok(score >= 200, `Expected score >= 200, got ${score}`);
+  });
+
+  it("handles SKU prefix (sku: or SKU ) and matches exact SKU", () => {
+    const scoreWithPrefix = scoreProductRelevance("SKU: SK-070QI", dummyProduct as any);
+    assert.ok(scoreWithPrefix >= 200, `Expected score >= 200, got ${scoreWithPrefix}`);
+
+    const scoreWithCompactPrefix = scoreProductRelevance("sku:sk070qi", dummyProduct as any);
+    assert.ok(scoreWithCompactPrefix >= 200, `Expected score >= 200, got ${scoreWithCompactPrefix}`);
+  });
+
+  it("matches record number with top priority", () => {
+    const score = scoreProductRelevance("LKREQ00042", dummyProduct as any);
+    assert.ok(score >= 200, `Expected score >= 200, got ${score}`);
+
+    const scoreCompact = scoreProductRelevance("lkreq00042", dummyProduct as any);
+    assert.ok(scoreCompact >= 200, `Expected score >= 200, got ${scoreCompact}`);
+  });
+
+  it("preserves SKUs and model codes during fuzzy suggestions without corrupting them", () => {
+    const vocab = new Set(["samkoon", "touch", "panel", "sensor", "laser", "relay"]);
+    const suggestion1 = getFuzzySuggestion("SK-070QI", vocab);
+    assert.equal(suggestion1.correctedQuery, "SK-070QI");
+
+    const suggestion2 = getFuzzySuggestion("LKSEN00111", vocab);
+    assert.equal(suggestion2.correctedQuery, "LKSEN00111");
+
+    const suggestion3 = getFuzzySuggestion("DIY01", vocab);
+    assert.equal(suggestion3.correctedQuery, "DIY01");
+
+    const suggestion4 = getFuzzySuggestion("001059", vocab);
+    assert.equal(suggestion4.correctedQuery, "001059");
+  });
+});
