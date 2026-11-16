@@ -4,6 +4,10 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import ExcelJS from "exceljs";
 import { getClientIp, checkRateLimit, rateLimitResponse } from "@/lib/rateLimit";
+import path from "path";
+import crypto from "crypto";
+import { writeFile, mkdir } from "fs/promises";
+import { backupImageToDatabase } from "@/lib/imageStorage";
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
 const MAX_ROWS = 5000;
@@ -179,8 +183,21 @@ export async function POST(request: NextRequest) {
             colMap.leadTime = colNumber;
           } else if (norm.includes("brandnew") || norm.includes("original")) {
             colMap.brandNew = colNumber;
-          } else if (norm.includes("supplierimage")) {
+          } else if (
+            norm.includes("supplierimage") ||
+            norm.includes("supplierphoto") ||
+            norm.includes("supplierimg") ||
+            norm.includes("quotedimage")
+          ) {
             colMap.supplierImage = colNumber;
+          } else if (
+            norm.includes("productimage") ||
+            norm.includes("image") ||
+            norm.includes("photo") ||
+            norm.includes("picture") ||
+            norm.includes("img")
+          ) {
+            colMap.image = colNumber;
           } else if (norm.includes("quantity") || norm === "qty") {
             colMap.quantity = colNumber;
           } else if (norm.includes("weight")) {
@@ -201,6 +218,70 @@ export async function POST(request: NextRequest) {
         },
         { status: 400 }
       );
+    }
+
+    if (!colMap.supplierImage && colMap.image) {
+      colMap.supplierImage = colMap.image;
+    }
+
+    // Extract any embedded pictures from the Excel worksheet
+    const embeddedSupplierImagesByRow = new Map<number, string>();
+    const embeddedGeneralImagesByRow = new Map<number, string>();
+    try {
+      const embeddedImages = typeof worksheet.getImages === "function" ? worksheet.getImages() : [];
+      if (embeddedImages && embeddedImages.length > 0) {
+        const uploadDir = path.join(process.cwd(), "public", "uploads", "products");
+        await mkdir(uploadDir, { recursive: true });
+
+        for (const imgRef of embeddedImages) {
+          if (!imgRef || !imgRef.range || !imgRef.range.tl) continue;
+          const tl = imgRef.range.tl as any;
+          const rowZero = tl.nativeRow != null ? tl.nativeRow : tl.row;
+          if (rowZero == null) continue;
+          const rowNumber = Math.floor(rowZero) + 1;
+
+          const colZero = tl.nativeCol != null ? tl.nativeCol : tl.col;
+          const colNumber = colZero != null ? Math.floor(colZero) + 1 : 0;
+
+          const imgData = workbook.getImage(imgRef.imageId as any);
+          if (imgData && imgData.buffer) {
+            const ext = imgData.extension ? `.${imgData.extension}` : ".jpg";
+            const uniqueName = `supplier-${Date.now()}-${crypto.randomBytes(6).toString("hex")}${ext}`;
+            const targetFilePath = path.join(uploadDir, uniqueName);
+            const imgBuffer = Buffer.from(imgData.buffer);
+            await writeFile(targetFilePath, imgBuffer);
+
+            // Persist to MySQL database so site updates/git pulls never lose Excel images
+            try {
+              await backupImageToDatabase(
+                uniqueName,
+                imgBuffer,
+                ext === ".png" ? "image/png" : ext === ".webp" ? "image/webp" : "image/jpeg"
+              );
+            } catch (backupErr) {
+              console.warn("Database image backup non-fatal warning:", backupErr);
+            }
+
+            const imgUrl = `/uploads/products/${uniqueName}`;
+            const isNearSupplierCol =
+              colMap.supplierImage && Math.abs(colNumber - colMap.supplierImage) <= 2;
+            const isNearGeneralCol =
+              colMap.image && Math.abs(colNumber - colMap.image) <= 2;
+
+            if (isNearSupplierCol) {
+              embeddedSupplierImagesByRow.set(rowNumber, imgUrl);
+            } else if (isNearGeneralCol) {
+              embeddedGeneralImagesByRow.set(rowNumber, imgUrl);
+            } else {
+              if (!embeddedSupplierImagesByRow.has(rowNumber)) {
+                embeddedSupplierImagesByRow.set(rowNumber, imgUrl);
+              }
+            }
+          }
+        }
+      }
+    } catch (imgErr) {
+      console.warn("Could not extract embedded images from supplier worksheet:", imgErr);
     }
 
     // Step 2: Scan worksheet rows first to collect search candidate identifiers
@@ -232,6 +313,25 @@ export async function POST(request: NextRequest) {
         return cell.text ? sanitizeFormula(cell.text.trim()) : "";
       };
 
+      const getCellTextOrHyperlink = (colIdx?: number): string => {
+        if (!colIdx) return "";
+        const cell = row.getCell(colIdx);
+        if (!cell) return "";
+        if (cell.value && typeof cell.value === "object") {
+          const valObj = cell.value as any;
+          if (typeof valObj.hyperlink === "string" && valObj.hyperlink.trim()) {
+            return valObj.hyperlink.trim();
+          }
+          if (typeof valObj.text === "string" && valObj.text.trim()) {
+            return sanitizeFormula(valObj.text.trim());
+          }
+        }
+        if (cell.text) {
+          return sanitizeFormula(cell.text.trim());
+        }
+        return "";
+      };
+
       const refText = getCellText(colMap.ref);
       const modelText = getCellText(colMap.model);
       const rawQtyText = getCellText(colMap.quantity);
@@ -241,8 +341,19 @@ export async function POST(request: NextRequest) {
       const validity = getCellText(colMap.validity);
       const leadTime = getCellText(colMap.leadTime);
       const brandNew = getCellText(colMap.brandNew);
-      const supplierImage = getCellText(colMap.supplierImage);
       const supplierNote = getCellText(colMap.note);
+
+      // Extract supplier image from embedded drawing or cell text/hyperlink
+      const textSupplierImage = getCellTextOrHyperlink(colMap.supplierImage);
+      const textGeneralImage = getCellTextOrHyperlink(colMap.image);
+      let supplierImage = "";
+      if (embeddedSupplierImagesByRow.has(r)) {
+        supplierImage = embeddedSupplierImagesByRow.get(r)!;
+      } else if (textSupplierImage) {
+        supplierImage = textSupplierImage;
+      } else if (!colMap.supplierImage || colMap.supplierImage === colMap.image) {
+        supplierImage = embeddedGeneralImagesByRow.get(r) || textGeneralImage || "";
+      }
 
       // Skip completely empty trailing rows
       if (!refText && !modelText && !rawPriceText) {
@@ -513,8 +624,8 @@ export async function POST(request: NextRequest) {
           priceValidity: row.priceValidity || null,
           leadTime: row.leadTime || null,
           isBrandNewOriginal: row.isBrandNewOriginal || null,
-          supplierImage: row.supplierImage || null,
           supplierNote: row.supplierNote || null,
+          ...(row.supplierImage ? { supplierImage: row.supplierImage } : {}),
         };
 
         // If product is an Online Web product, tag it with an identifier note indicating it is a PMS updated price

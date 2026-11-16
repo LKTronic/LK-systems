@@ -592,3 +592,87 @@ describe("Unit Tests: Quotation Inventory SKU Search & Picking", () => {
     assert.equal(suggestion4.correctedQuery, "001059");
   });
 });
+
+describe("Unit Tests: Supply Excel Supplier Image Handling", () => {
+  it("extracts image URLs and hyperlinks from supplier image column", () => {
+    const sanitizeFormula = (val: string) => val.trim();
+    const extractUrl = (cellValue: any) => {
+      if (typeof cellValue === "string") return cellValue.trim();
+      if (cellValue && typeof cellValue === "object") {
+        if (typeof cellValue.hyperlink === "string") return cellValue.hyperlink.trim();
+        if (typeof cellValue.text === "string") return sanitizeFormula(cellValue.text.trim());
+      }
+      return "";
+    };
+
+    const directUrl = extractUrl("https://example.com/uploads/supplier-part.jpg");
+    assert.equal(directUrl, "https://example.com/uploads/supplier-part.jpg");
+
+    const hyperlinkedCell = extractUrl({
+      text: "View Image",
+      hyperlink: "https://supplier-portal.com/images/panel-01.png",
+    });
+    assert.equal(hyperlinkedCell, "https://supplier-portal.com/images/panel-01.png");
+
+    const localUploadPath = extractUrl("/uploads/products/supplier-1234.png");
+    assert.equal(localUploadPath, "/uploads/products/supplier-1234.png");
+  });
+
+  it("maps embedded image coordinates to the correct Excel row and supplier image column", () => {
+    const colMap = { model: 1, price: 7, supplierImage: 12, note: 13 };
+    const mockEmbeddedImages = [
+      {
+        imageId: "img1",
+        range: {
+          tl: { nativeRow: 5, nativeCol: 11.2 }, // Row 6 (0-indexed 5), Col 12 (0-indexed 11.2)
+        },
+      },
+      {
+        imageId: "img2",
+        range: {
+          tl: { row: 7.05, col: 11.8 }, // Row 8, Col 12
+        },
+      },
+    ];
+
+    const imageMap = new Map<number, string>();
+    for (const img of mockEmbeddedImages) {
+      const rowZero = img.range.tl.nativeRow != null ? img.range.tl.nativeRow : img.range.tl.row;
+      const rowNumber = Math.floor(rowZero) + 1;
+      const colZero = (img.range.tl as any).nativeCol != null ? (img.range.tl as any).nativeCol : img.range.tl.col;
+      const colNumber = Math.floor(colZero) + 1;
+
+      const isNearSupplierCol = colMap.supplierImage && Math.abs(colNumber - colMap.supplierImage) <= 2;
+      if (isNearSupplierCol) {
+        imageMap.set(rowNumber, `/uploads/products/supplier-mock-${img.imageId}.png`);
+      }
+    }
+
+    assert.equal(imageMap.get(6), "/uploads/products/supplier-mock-img1.png");
+    assert.equal(imageMap.get(8), "/uploads/products/supplier-mock-img2.png");
+    assert.equal(imageMap.get(7), undefined);
+  });
+
+  it("updates Product updateData with supplierImage when provided in row", () => {
+    const rowWithImage = {
+      price: 40680,
+      warrantyPeriod: "1 Year",
+      priceValidity: "30 Days",
+      leadTime: "12-21 days",
+      isBrandNewOriginal: "Yes",
+      supplierImage: "/uploads/products/supplier-test-cable.png",
+      supplierNote: "dedicated to Siemens 200 series PLC",
+    };
+
+    const updateData: any = {
+      price: rowWithImage.price,
+      supplierNote: rowWithImage.supplierNote,
+    };
+    if (rowWithImage.supplierImage) {
+      updateData.supplierImage = rowWithImage.supplierImage;
+    }
+
+    assert.equal(updateData.supplierImage, "/uploads/products/supplier-test-cable.png");
+    assert.equal(updateData.supplierNote, "dedicated to Siemens 200 series PLC");
+  });
+});

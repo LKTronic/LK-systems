@@ -22,6 +22,7 @@ import {
   Download,
   Eye,
   Info,
+  Image as ImageIcon,
 } from "lucide-react";
 
 interface Supplier {
@@ -530,8 +531,22 @@ export default function SupplyPage() {
                       <td className="px-4 py-2.5 font-mono font-bold text-indigo-400">
                         {r.referenceNo || "—"}
                       </td>
-                      <td className="px-4 py-2.5 font-semibold text-white max-w-[200px] truncate">
-                        {r.modelAndName || "—"}
+                      <td className="px-4 py-2.5 font-semibold text-white max-w-[220px]">
+                        <div className="flex items-center gap-2">
+                          <span className="truncate">{r.modelAndName || "—"}</span>
+                          {r.supplierImage && (
+                            <a
+                              href={r.supplierImage}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="shrink-0 inline-flex items-center gap-1 text-[10px] text-teal-400 bg-teal-950/80 border border-teal-800/60 px-1.5 py-0.5 rounded hover:bg-teal-900 transition-colors"
+                              title="View extracted supplier image"
+                            >
+                              <ImageIcon className="w-3 h-3" />
+                              Image
+                            </a>
+                          )}
+                        </div>
                       </td>
                       <td className="px-4 py-2.5 text-right font-semibold">
                         {r.isPriceZero ? (
