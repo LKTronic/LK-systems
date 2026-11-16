@@ -649,6 +649,44 @@ export default function ProductDetailPage({
                   </p>
                 </div>
               )}
+
+              {product.supplierImage && (
+                <div className="pt-3 border-t border-slate-800 text-xs space-y-2">
+                  <span className="text-slate-400 block font-medium flex items-center gap-1.5">
+                    <ImageIcon className="w-3.5 h-3.5 text-teal-400" />
+                    Supplier Attachment / Quoted Image
+                  </span>
+                  <div className="relative group max-w-sm rounded-xl overflow-hidden border border-slate-700/80 bg-slate-950/70 p-2 shadow-md">
+                    <a
+                      href={product.supplierImage}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="block overflow-hidden rounded-lg cursor-zoom-in"
+                      title="Click to view full image in a new tab"
+                    >
+                      <img
+                        src={product.supplierImage}
+                        alt="Supplier quotation item attachment"
+                        className="w-full max-h-64 object-contain rounded-lg transition-transform duration-200 group-hover:scale-[1.02]"
+                      />
+                    </a>
+                    <div className="mt-2 flex items-center justify-between text-[11px] text-slate-400 px-1">
+                      <span className="truncate max-w-[200px] font-mono text-[10px] text-slate-500">
+                        {product.supplierImage.split("/").pop()}
+                      </span>
+                      <a
+                        href={product.supplierImage}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-teal-400 hover:text-teal-300 font-semibold flex items-center gap-1 transition-colors text-xs"
+                      >
+                        <ExternalLink className="w-3 h-3" />
+                        View Full Image
+                      </a>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Price History Section */}
