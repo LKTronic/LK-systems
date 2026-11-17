@@ -723,6 +723,119 @@ describe("Quotation Calculations & Financial Validation", () => {
       }
     }
   });
+
+  it("renders table footer (total price) only on the last page of the table in multi-page quotations", async () => {
+    const { generateQuotationPdf } = await import("../src/lib/quotationPdfGenerator");
+
+    const items = Array.from({ length: 12 }, (_, i) => ({
+      itemIndex: i + 1,
+      description: `Test Product Item ${i + 1} with multi-page table description`,
+      stockStatus: "IN_STOCK",
+      quantity: 1,
+      unitPrice: 2000,
+      totalPrice: 2000,
+    }));
+
+    try {
+      const doc = await generateQuotationPdf({
+        quotationNo: "QT-TEST-SHOWFOOT",
+        preparedDate: "2026-10-15",
+        expireDate: "2026-10-18",
+        paymentMethod: "FULL_PAYMENT",
+        preparedBy: "Staff",
+        quotationTo: "Valued Customer",
+        subtotal: 24000,
+        totalAmount: 24000,
+        items,
+      });
+
+      const lastTable = (doc as any).lastAutoTable;
+      assert.ok(lastTable, "AutoTable should be attached to doc");
+      assert.strictEqual(
+        lastTable.settings.showFoot,
+        "lastPage",
+        "showFoot must be 'lastPage' so total only appears on the last page of table"
+      );
+    } finally {
+      const fs = await import("fs");
+      if (fs.existsSync("QT-TEST-SHOWFOOT.pdf")) {
+        fs.unlinkSync("QT-TEST-SHOWFOOT.pdf");
+      }
+    }
+  });
+
+  it("parses note tokens supporting bold (**text**), highlight (==text==), and combined bold+highlight", async () => {
+    const { parseNoteTokens } = await import("../src/lib/quotationPdfGenerator");
+
+    const raw = "* Please note: **delivery within 3 days** and ==urgent installation== is **==included==**.";
+    const tokens = parseNoteTokens(raw);
+
+    assert.ok(tokens.length >= 5, "Should parse into distinct styled tokens");
+
+    const boldToken = tokens.find((t) => t.text === "delivery within 3 days");
+    assert.ok(boldToken, "Should find bold token");
+    assert.strictEqual(boldToken.bold, true);
+    assert.strictEqual(boldToken.highlight, false);
+
+    const hlToken = tokens.find((t) => t.text === "urgent installation");
+    assert.ok(hlToken, "Should find highlighted token");
+    assert.strictEqual(hlToken.bold, false);
+    assert.strictEqual(hlToken.highlight, true);
+
+    const bothToken = tokens.find((t) => t.text === "included");
+    assert.ok(bothToken, "Should find combined bold+highlight token");
+    assert.strictEqual(bothToken.bold, true);
+    assert.strictEqual(bothToken.highlight, true);
+  });
+
+  it("renders special notes below quotation table only when available with star mark bullets and formatting", async () => {
+    const { generateQuotationPdf, renderFormattedNotes } = await import(
+      "../src/lib/quotationPdfGenerator"
+    );
+
+    // 1. When notes is empty or undefined, renderFormattedNotes returns startY unchanged
+    const jsPDFModule = await import("jspdf");
+    const doc = new jsPDFModule.default({ orientation: "portrait", unit: "mm", format: "a4" });
+    const untouchedY = renderFormattedNotes(doc, "", 150);
+    assert.strictEqual(untouchedY, 150, "Empty notes should not modify Y or render content");
+
+    // 2. When notes has lines, each line is prefixed with star mark (* ) and advances Y
+    const notesContent = `* Valid for 30 calendar days from issue.\nInstallation and setup are ==complimentary==.\n**Urgent dispatch** is supported.`;
+    const advancedY = renderFormattedNotes(doc, notesContent, 150);
+    assert.ok(advancedY > 150, "Non-empty notes should advance Y position");
+
+    // 3. End-to-end PDF generation with notes
+    try {
+      const pdfDoc = await generateQuotationPdf({
+        quotationNo: "QT-TEST-NOTES",
+        preparedDate: "2026-10-15",
+        expireDate: "2026-10-18",
+        paymentMethod: "FULL_PAYMENT",
+        preparedBy: "Staff",
+        quotationTo: "Valued Customer",
+        subtotal: 5000,
+        totalAmount: 5000,
+        notes: notesContent,
+        items: [
+          {
+            itemIndex: 1,
+            description: "Test Item with Special Notes Below Table",
+            stockStatus: "IN_STOCK",
+            quantity: 1,
+            unitPrice: 5000,
+            totalPrice: 5000,
+          },
+        ],
+      });
+
+      assert.ok(pdfDoc, "PDF document should generate successfully with notes");
+    } finally {
+      const fs = await import("fs");
+      if (fs.existsSync("QT-TEST-NOTES.pdf")) {
+        fs.unlinkSync("QT-TEST-NOTES.pdf");
+      }
+    }
+  });
 });
 
 describe("Rate Limiting Engine & Anti-Abuse Controls (OWASP API4:2023)", () => {

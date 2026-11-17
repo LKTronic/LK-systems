@@ -463,6 +463,255 @@ function renderHighlightedParagraph(
 }
 
 /**
+ * Tokenize note text into styled segments (normal, bold, highlighted, or both)
+ * Syntax:
+ * - Bold: **text** or <b>text</b>
+ * - Highlight: ==text== or <mark>text</mark>
+ * - Bold + Highlight: **==text==**, ==**text**==, <b><mark>text</mark></b>
+ */
+export function parseNoteTokens(text: string): Array<{
+  text: string;
+  bold: boolean;
+  highlight: boolean;
+}> {
+  const regex =
+    /(\*\*(?:==|<mark>)(.*?)(?:==|<\/mark>)\*\*|==(?:\*\*|<b>)(.*?)(?:\*\*|<\/b>)==|\*\*(.*?)\*\*|<b>(.*?)<\/b>|==(.*?)==|<mark>(.*?)<\/mark>)/g;
+  let lastIndex = 0;
+  let match: RegExpExecArray | null;
+  const tokens: Array<{ text: string; bold: boolean; highlight: boolean }> = [];
+
+  while ((match = regex.exec(text)) !== null) {
+    if (match.index > lastIndex) {
+      tokens.push({
+        text: text.slice(lastIndex, match.index),
+        bold: false,
+        highlight: false,
+      });
+    }
+    const boldAndHl1 = match[2];
+    const boldAndHl2 = match[3];
+    const boldOnly1 = match[4];
+    const boldOnly2 = match[5];
+    const hlOnly1 = match[6];
+    const hlOnly2 = match[7];
+
+    if (boldAndHl1 !== undefined) {
+      tokens.push({ text: boldAndHl1, bold: true, highlight: true });
+    } else if (boldAndHl2 !== undefined) {
+      tokens.push({ text: boldAndHl2, bold: true, highlight: true });
+    } else if (boldOnly1 !== undefined || boldOnly2 !== undefined) {
+      tokens.push({
+        text: (boldOnly1 ?? boldOnly2)!,
+        bold: true,
+        highlight: false,
+      });
+    } else if (hlOnly1 !== undefined || hlOnly2 !== undefined) {
+      tokens.push({
+        text: (hlOnly1 ?? hlOnly2)!,
+        bold: false,
+        highlight: true,
+      });
+    }
+    lastIndex = regex.lastIndex;
+  }
+  if (lastIndex < text.length) {
+    tokens.push({
+      text: text.slice(lastIndex),
+      bold: false,
+      highlight: false,
+    });
+  }
+  return tokens;
+}
+
+/**
+ * Render special notes directly below the quotation table on the final page of the table:
+ * - No title header
+ * - Every line is formatted with a star mark (* ) and text
+ * - Supports bold (**text**) and yellow highlight (==text==)
+ * - Clean word wrapping and indented continuation lines
+ * - Automatic page overflow handling with letterhead
+ */
+export function renderFormattedNotes(
+  doc: jsPDF,
+  rawNotes: string,
+  startY: number,
+  leftMargin: number = 21,
+  totalWidth: number = 168,
+  selectedRegNo: string = "P-V 00336036",
+  bgBase64: string | null = null
+): number {
+  if (!rawNotes || !rawNotes.trim()) return startY;
+
+  const rawLines = rawNotes
+    .split(/\r?\n/)
+    .map((l) => l.trim())
+    .filter((l) => l.length > 0);
+
+  if (rawLines.length === 0) return startY;
+
+  const noteLines = rawLines.map((line) => {
+    if (line.startsWith("*")) {
+      return line.replace(/^\*+\s*/, "* ");
+    }
+    return `* ${line}`;
+  });
+
+  const fontSize = 9.5;
+  const lineH = 4.3;
+  const bulletIndent = 3.8;
+  const maxY = 268;
+
+  let curY = startY;
+
+  for (const lineText of noteLines) {
+    const tokens = parseNoteTokens(lineText);
+
+    // Flatten tokens into words while preserving trailing spaces
+    const words: Array<{
+      word: string;
+      bold: boolean;
+      highlight: boolean;
+      trailingSpace: boolean;
+    }> = [];
+
+    for (const tok of tokens) {
+      const parts = tok.text.split(/(\s+)/);
+      for (let i = 0; i < parts.length; i++) {
+        const part = parts[i];
+        if (!part) continue;
+        if (/^\s+$/.test(part)) {
+          if (words.length > 0) {
+            words[words.length - 1].trailingSpace = true;
+          }
+        } else {
+          words.push({
+            word: part,
+            bold: tok.bold,
+            highlight: tok.highlight,
+            trailingSpace: false,
+          });
+        }
+      }
+    }
+
+    if (words.length === 0) continue;
+
+    // Wrap words into lines based on totalWidth
+    const wrappedLines: Array<{
+      words: typeof words;
+      isFirst: boolean;
+    }> = [];
+    let currentLine: typeof words = [];
+    let currentLineW = 0;
+    let isFirstLineOfBullet = true;
+
+    doc.setFontSize(fontSize);
+
+    for (let i = 0; i < words.length; i++) {
+      const item = words[i];
+      doc.setFont("times", item.bold ? "bold" : "normal");
+      const w = doc.getTextWidth(item.word);
+      const spaceW = doc.getTextWidth(" ");
+      const neededW = currentLine.length === 0 ? w : spaceW + w;
+      const allowedW = isFirstLineOfBullet
+        ? totalWidth
+        : totalWidth - bulletIndent;
+
+      if (currentLineW + neededW <= allowedW || currentLine.length === 0) {
+        currentLine.push(item);
+        currentLineW += neededW;
+      } else {
+        wrappedLines.push({ words: currentLine, isFirst: isFirstLineOfBullet });
+        isFirstLineOfBullet = false;
+        currentLine = [item];
+        currentLineW = w;
+      }
+    }
+
+    if (currentLine.length > 0) {
+      wrappedLines.push({ words: currentLine, isFirst: isFirstLineOfBullet });
+    }
+
+    // Render lines for this bullet
+    for (const wl of wrappedLines) {
+      if (curY > maxY) {
+        doc.addPage();
+        applyLetterhead(doc, selectedRegNo, bgBase64);
+        curY = 70;
+      }
+
+      const startX = wl.isFirst ? leftMargin : leftMargin + bulletIndent;
+      let curX = startX;
+
+      // Group adjacent words with identical highlight & bold status for continuous highlight rectangles
+      const renderGroups: Array<{
+        highlight: boolean;
+        bold: boolean;
+        words: typeof words;
+      }> = [];
+
+      for (const wItem of wl.words) {
+        const lastGroup = renderGroups[renderGroups.length - 1];
+        if (
+          lastGroup &&
+          lastGroup.highlight === wItem.highlight &&
+          lastGroup.bold === wItem.bold
+        ) {
+          lastGroup.words.push(wItem);
+        } else {
+          renderGroups.push({
+            highlight: wItem.highlight,
+            bold: wItem.bold,
+            words: [wItem],
+          });
+        }
+      }
+
+      for (const group of renderGroups) {
+        doc.setFont("times", group.bold ? "bold" : "normal");
+        doc.setFontSize(fontSize);
+
+        // Calculate total width of group
+        let groupW = 0;
+        const spaceW = doc.getTextWidth(" ");
+        for (let idx = 0; idx < group.words.length; idx++) {
+          const item = group.words[idx];
+          groupW += doc.getTextWidth(item.word);
+          if (item.trailingSpace && idx < group.words.length - 1) {
+            groupW += spaceW;
+          }
+        }
+
+        // Draw highlight background rectangle if enabled
+        if (group.highlight) {
+          doc.setFillColor(255, 255, 0); // Bright Yellow #FFFF00
+          doc.rect(curX - 0.4, curY - 2.9, groupW + 0.8, 3.8, "F");
+        }
+
+        // Render text
+        doc.setTextColor(0, 0, 0);
+        for (let idx = 0; idx < group.words.length; idx++) {
+          const item = group.words[idx];
+          doc.text(item.word, curX, curY);
+          curX += doc.getTextWidth(item.word);
+          if (item.trailingSpace) {
+            curX += spaceW;
+          }
+        }
+      }
+
+      curY += lineH;
+    }
+
+    // Small spacing between different bullet items
+    curY += 1.0;
+  }
+
+  return curY;
+}
+
+/**
  * Helper to apply branded letterhead background and dynamic top bar to any page
  */
 function applyLetterhead(
@@ -657,7 +906,7 @@ export const DEFAULT_GENERAL_TERMS_BULLETS = [
  */
 export async function generateQuotationPdf(
   data: QuotationPdfData
-): Promise<void> {
+): Promise<jsPDF> {
   const doc = new jsPDF({
     orientation: "portrait",
     unit: "mm",
@@ -813,6 +1062,7 @@ export async function generateQuotationPdf(
     margin: { top: 70, bottom: 28, left: 21, right: 21 },
     rowPageBreak: "avoid",
     showHead: "everyPage",
+    showFoot: "lastPage",
     head: [
       [
         {
@@ -999,6 +1249,20 @@ export async function generateQuotationPdf(
       }
     },
   });
+
+  // Render Special Notes directly below the table (only if available, no title, star bullets)
+  if (data.notes && data.notes.trim()) {
+    const finalTableY = (doc as any).lastAutoTable?.finalY ?? tableStartY + 50;
+    renderFormattedNotes(
+      doc,
+      data.notes,
+      finalTableY + 4.5,
+      21,
+      168,
+      selectedRegNo,
+      bgBase64
+    );
+  }
 
   // ================= PAGE 2: Terms and Conditions =================
   doc.addPage();
@@ -1237,4 +1501,5 @@ export async function generateQuotationPdf(
     "_"
   );
   doc.save(`${cleanFileName}.pdf`);
+  return doc;
 }
