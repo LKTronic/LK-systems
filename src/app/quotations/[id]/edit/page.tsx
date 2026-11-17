@@ -11,6 +11,7 @@ import {
   QuotationPdfItem,
   formatValidityPeriodText,
   cleanProductDescription,
+  parseNoteTokens,
 } from "@/lib/quotationPdfGenerator";
 import {
   FileText,
@@ -34,6 +35,9 @@ import {
   Clipboard,
   ImagePlus,
   X,
+  Bold,
+  Highlighter,
+  List,
 } from "lucide-react";
 
 interface ItemRow {
@@ -124,6 +128,126 @@ const formatPreparedBy = (u: UserListItem) => {
   const [imageUploadError, setImageUploadError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
+  // Special Notes State & Ref
+  const [notes, setNotes] = useState("");
+  const notesTextareaRef = useRef<HTMLTextAreaElement | null>(null);
+
+  const applyNotesFormat = (prefix: string, suffix: string) => {
+    const textarea = notesTextareaRef.current;
+    if (!textarea) return;
+
+    const start = textarea.selectionStart;
+    const end = textarea.selectionEnd;
+    const text = notes;
+
+    if (start !== end) {
+      const selected = text.substring(start, end);
+      const newText =
+        text.substring(0, start) + prefix + selected + suffix + text.substring(end);
+      setNotes(newText);
+      setTimeout(() => {
+        textarea.focus();
+        textarea.setSelectionRange(start + prefix.length, end + prefix.length);
+      }, 0);
+    } else {
+      const placeholder = prefix === "**" ? "bold text" : "highlighted text";
+      const newText =
+        text.substring(0, start) + prefix + placeholder + suffix + text.substring(end);
+      setNotes(newText);
+      setTimeout(() => {
+        textarea.focus();
+        textarea.setSelectionRange(
+          start + prefix.length,
+          start + prefix.length + placeholder.length
+        );
+      }, 0);
+    }
+  };
+
+  const insertBullet = () => {
+    const textarea = notesTextareaRef.current;
+    if (!textarea) {
+      setNotes((prev) => (prev ? `${prev}\n* ` : "* "));
+      return;
+    }
+    const start = textarea.selectionStart;
+    const end = textarea.selectionEnd;
+    const text = notes;
+    const beforeCursor = text.substring(0, start);
+    const afterCursor = text.substring(end);
+    const needsNewline = beforeCursor.length > 0 && !beforeCursor.endsWith("\n");
+    const insertStr = (needsNewline ? "\n" : "") + "* ";
+    const newText = beforeCursor + insertStr + afterCursor;
+    setNotes(newText);
+    setTimeout(() => {
+      textarea.focus();
+      const pos = start + insertStr.length;
+      textarea.setSelectionRange(pos, pos);
+    }, 0);
+  };
+
+  const handleNotesKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    const textarea = e.currentTarget;
+    const { selectionStart, selectionEnd, value } = textarea;
+
+    // Ctrl+B for Bold
+    if ((e.ctrlKey || e.metaKey) && (e.key === "b" || e.key === "B")) {
+      e.preventDefault();
+      applyNotesFormat("**", "**");
+      return;
+    }
+
+    // Ctrl+H for Highlight
+    if ((e.ctrlKey || e.metaKey) && (e.key === "h" || e.key === "H")) {
+      e.preventDefault();
+      applyNotesFormat("==", "==");
+      return;
+    }
+
+    // Enter for Auto-list with star bullet mark (*)
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+
+      const beforeCursor = value.substring(0, selectionStart);
+      const afterCursor = value.substring(selectionEnd);
+      const lineStart = beforeCursor.lastIndexOf("\n") + 1;
+      const currentLine = beforeCursor.substring(lineStart);
+
+      const bulletMatch = currentLine.match(/^(\*+\s*)/);
+
+      if (bulletMatch) {
+        if (currentLine.trim() === "*" || currentLine.trim() === "") {
+          const newValue = value.substring(0, lineStart) + afterCursor;
+          setNotes(newValue);
+          setTimeout(() => {
+            textarea.selectionStart = lineStart;
+            textarea.selectionEnd = lineStart;
+          }, 0);
+          return;
+        }
+
+        const insertText = "\n* ";
+        const newValue = beforeCursor + insertText + afterCursor;
+        setNotes(newValue);
+        const newPos = selectionStart + insertText.length;
+        setTimeout(() => {
+          textarea.selectionStart = newPos;
+          textarea.selectionEnd = newPos;
+        }, 0);
+        return;
+      }
+
+      const insertText = "\n* ";
+      const newValue = beforeCursor + insertText + afterCursor;
+      setNotes(newValue);
+      const newPos = selectionStart + insertText.length;
+      setTimeout(() => {
+        textarea.selectionStart = newPos;
+        textarea.selectionEnd = newPos;
+      }, 0);
+    }
+  };
+
   // Fetch users for Prepared By dropdown
   useEffect(() => {
     fetch("/api/users/list")
@@ -174,6 +298,7 @@ const formatPreparedBy = (u: UserListItem) => {
         }
         setPreparedBy(q.preparedBy || "");
         setQuotationTo(q.quotationTo || "");
+        setNotes(q.notes || "");
 
         // Map items
         if (Array.isArray(q.items) && q.items.length > 0) {
@@ -481,7 +606,7 @@ const formatPreparedBy = (u: UserListItem) => {
         advancePercent: paymentMethod === "ADVANCE_PAYMENT" ? numericAdvancePercent : null,
         preparedBy: preparedBy.trim(),
         quotationTo: quotationTo.trim(),
-        notes: null,
+        notes: notes.trim() || null,
         items: items
           .filter((it) => it.description.trim() !== "")
           .map((it, idx) => ({
@@ -555,7 +680,7 @@ const formatPreparedBy = (u: UserListItem) => {
         quotationTo: quotationTo.trim(),
         subtotal,
         totalAmount: grandTotal,
-        notes: null,
+        notes: notes.trim() || null,
         items: pdfItems,
       });
 
@@ -1139,9 +1264,140 @@ const formatPreparedBy = (u: UserListItem) => {
           </div>
         </div>
 
-        {/* Bottom Section: Live Financial Summary (Right Aligned) */}
-        <div className="flex justify-end">
-          <div className="w-full max-w-md bg-slate-900/80 border border-slate-800 rounded-xl p-5 shadow-sm space-y-3">
+        {/* Bottom Section: Notes (Left) and Financial Summary (Right) */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
+          {/* Special Notes Card */}
+          <div className="bg-slate-900/80 border border-slate-800 rounded-xl p-5 shadow-sm space-y-3">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-800 pb-2.5">
+              <div>
+                <h4 className="text-xs font-semibold text-teal-400 uppercase tracking-wider">
+                  Special Notes
+                </h4>
+                <p className="text-[11px] text-slate-400 mt-0.5">
+                  Appears below the quotation table in PDF (omitted if left empty)
+                </p>
+              </div>
+
+              {/* Formatting Toolbar */}
+              <div className="flex items-center gap-1.5 self-start sm:self-auto">
+                <button
+                  type="button"
+                  onClick={() => applyNotesFormat("**", "**")}
+                  title="Bold (**text**) [Ctrl+B]"
+                  className="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white rounded text-xs font-bold border border-slate-700 flex items-center gap-1 transition-colors"
+                >
+                  <Bold className="w-3.5 h-3.5" />
+                  <span>Bold</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => applyNotesFormat("==", "==")}
+                  title="Highlight (==text==) [Ctrl+H]"
+                  className="px-2.5 py-1 bg-amber-950/60 hover:bg-amber-900/60 text-amber-300 hover:text-amber-200 rounded text-xs font-semibold border border-amber-700/50 flex items-center gap-1 transition-colors"
+                >
+                  <Highlighter className="w-3.5 h-3.5" />
+                  <span>Highlight</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={insertBullet}
+                  title="Add Bullet Item (*)"
+                  className="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white rounded text-xs border border-slate-700 flex items-center gap-1 transition-colors"
+                >
+                  <List className="w-3.5 h-3.5" />
+                  <span>* Bullet</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Notes Textarea with auto-list on Enter */}
+            <div className="relative">
+              <textarea
+                ref={notesTextareaRef}
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+                onKeyDown={handleNotesKeyDown}
+                rows={5}
+                placeholder="* Enter special notes here... Press Enter to automatically start next bullet (*)"
+                className="w-full bg-slate-950 border border-slate-800 focus:border-teal-500 rounded-lg p-3 text-sm text-slate-200 placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-teal-500 font-sans resize-y leading-relaxed"
+              />
+            </div>
+
+            {/* Quick tips & Live Preview */}
+            <div className="space-y-2">
+              <div className="flex flex-wrap items-center gap-2 text-[11px] text-slate-400">
+                <span className="text-slate-500 font-medium">Tips:</span>
+                <span>
+                  Press <kbd className="px-1.5 py-0.5 bg-slate-800 border border-slate-700 rounded text-[10px] text-slate-300">Enter</kbd> for next bullet (<strong className="text-teal-400">*</strong>)
+                </span>
+                <span>•</span>
+                <span>
+                  Wrap in <strong className="text-white font-mono">**bold**</strong>
+                </span>
+                <span>•</span>
+                <span>
+                  Wrap in <mark className="bg-yellow-300 text-slate-950 px-1 py-0.2 rounded font-mono font-medium">==highlight==</mark>
+                </span>
+              </div>
+
+              {notes.trim().length > 0 && (
+                <div className="bg-slate-950/80 border border-slate-800 rounded-lg p-3 space-y-1.5 text-xs">
+                  <div className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-1">
+                    Live Note Preview (PDF Output):
+                  </div>
+                  {notes
+                    .split(/\r?\n/)
+                    .map((l) => l.trim())
+                    .filter((l) => l.length > 0)
+                    .map((line, idx) => {
+                      const displayLine = line.startsWith("*")
+                        ? line.replace(/^\*+\s*/, "* ")
+                        : `* ${line}`;
+                      const tokens = parseNoteTokens(displayLine);
+                      return (
+                        <div key={idx} className="flex items-start text-slate-300 leading-snug">
+                          <div>
+                            {tokens.map((tok, tIdx) => {
+                              if (tok.bold && tok.highlight) {
+                                return (
+                                  <mark
+                                    key={tIdx}
+                                    className="bg-yellow-300 text-slate-950 px-1 py-0.5 rounded font-bold"
+                                  >
+                                    {tok.text}
+                                  </mark>
+                                );
+                              }
+                              if (tok.highlight) {
+                                return (
+                                  <mark
+                                    key={tIdx}
+                                    className="bg-yellow-300 text-slate-950 px-1 py-0.5 rounded font-medium"
+                                  >
+                                    {tok.text}
+                                  </mark>
+                                );
+                              }
+                              if (tok.bold) {
+                                return (
+                                  <strong key={tIdx} className="font-bold text-white">
+                                    {tok.text}
+                                  </strong>
+                                );
+                              }
+                              return <span key={tIdx}>{tok.text}</span>;
+                            })}
+                          </div>
+                        </div>
+                      );
+                    })}
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Full Amount Summary Card */}
+          <div className="w-full bg-slate-900/80 border border-slate-800 rounded-xl p-5 shadow-sm space-y-3">
             <h4 className="text-xs font-semibold text-teal-400 uppercase tracking-wider border-b border-slate-800 pb-2">
               Quotation Summary & Totals
             </h4>
