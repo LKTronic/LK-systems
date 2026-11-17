@@ -23,6 +23,7 @@ model User {
 
   productsCreated   Product[]        @relation("CreatedBy")
   quotationsCreated Quotation[]      @relation("QuotationAuthor")
+  rdQuotationsCreated RdQuotation[]    @relation("RdQuotationAuthor")
   history           ProductHistory[]
 
   @@index([departmentId])
@@ -237,4 +238,52 @@ model ProductImageBackup {
   updatedAt DateTime @updatedAt
 }
 
+model RdQuotation {
+  id                 Int               @id @default(autoincrement())
+  type               String            // "PROJECT_PROPOSAL", "THREE_D_PRINT", "PCB"
+  quotationNo        String            @unique
+  registrationNo     String?           @default("P-V 00336036")
+  projectTitle       String?
+  preparedDate       DateTime          @db.Date
+  expireDate         DateTime          @db.Date
+  validityDays       Int?              @default(14)
+  paymentMethod      String            @default("100% payment")
+  preparedBy         String
+  quotationTo        String            @db.Text
+  leadTime           String?
+  warranty           String?
+  hardwareTotal      Decimal?          @db.Decimal(12, 2)
+  servicesTotal      Decimal?          @db.Decimal(12, 2)
+  totalAmount        Decimal           @db.Decimal(12, 2)
+  overview           String?           @db.LongText
+  technicalSpecs     String?           @db.LongText
+  termsAndConditions String?           @db.LongText
+  status             String            @default("DRAFT")
+  createdBy          Int
+  createdAt          DateTime          @default(now())
+  updatedAt          DateTime          @updatedAt
 
+  author             User              @relation("RdQuotationAuthor", fields: [createdBy], references: [id])
+  items              RdQuotationItem[]
+
+  @@index([type])
+  @@index([quotationNo])
+  @@index([preparedDate])
+  @@index([createdBy])
+}
+
+model RdQuotationItem {
+  id               Int         @id @default(autoincrement())
+  rdQuotationId    Int
+  itemIndex        Int
+  itemType         String?     @default("HARDWARE")
+  productOrService String      @db.Text
+  quantity         Int         @default(1)
+  unitPrice        Decimal     @db.Decimal(12, 2)
+  totalPrice       Decimal     @db.Decimal(12, 2)
+  notes            String?     @db.Text
+
+  rdQuotation      RdQuotation @relation(fields: [rdQuotationId], references: [id], onDelete: Cascade)
+
+  @@index([rdQuotationId])
+}

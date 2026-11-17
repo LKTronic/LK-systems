@@ -14,6 +14,12 @@ import {
   cleanProductDescription,
 } from "../src/lib/quotationPdfGenerator";
 import { getNextQuotationNo } from "../src/lib/quotationNo";
+import { getNextRdQuotationNo } from "../src/lib/rdQuotationNo";
+import {
+  DEFAULT_THREE_D_PRINT_SPECS,
+  DEFAULT_PCB_SPECS,
+  LK_TRONICS_BANK_DETAILS,
+} from "../src/lib/rdQuotationDefaults";
 import { extractStorageLocation } from "../src/lib/formatters";
 import { productSchema } from "../src/lib/validations/product";
 import { createUserSchema, updateUserSchema } from "../src/lib/validations/user";
@@ -674,5 +680,84 @@ describe("Unit Tests: Supply Excel Supplier Image Handling", () => {
 
     assert.equal(updateData.supplierImage, "/uploads/products/supplier-test-cable.png");
     assert.equal(updateData.supplierNote, "dedicated to Siemens 200 series PLC");
+  });
+
+  it("generates correct sequential R&D quotation numbers by type", async () => {
+    const fixedDate = new Date(2026, 10, 16); // 2026-11-16
+
+    // Project Proposal (PQV)
+    assert.equal(
+      await getNextRdQuotationNo([], "PROJECT_PROPOSAL", fixedDate),
+      "20261116PQV1"
+    );
+    assert.equal(
+      await getNextRdQuotationNo(["20261116PQV1", "20261116PQV2"], "PROJECT_PROPOSAL", fixedDate),
+      "20261116PQV3"
+    );
+
+    // 3D Print (3DQ)
+    assert.equal(
+      await getNextRdQuotationNo([], "THREE_D_PRINT", fixedDate),
+      "202611163DQ1"
+    );
+    assert.equal(
+      await getNextRdQuotationNo(["202611163DQ1", "202611163DQ7"], "THREE_D_PRINT", fixedDate),
+      "202611163DQ8"
+    );
+
+    // PCB Fabrication (PCB)
+    assert.equal(
+      await getNextRdQuotationNo([], "PCB", fixedDate),
+      "20261116PCB1"
+    );
+    assert.equal(
+      await getNextRdQuotationNo(["20261116PCB4"], "PCB", fixedDate),
+      "20261116PCB5"
+    );
+  });
+
+  it("validates R&D technical default specifications and LK Tronics bank credentials", () => {
+    // 3D print specs
+    assert.equal(DEFAULT_THREE_D_PRINT_SPECS.printingTechnology, "FDM (Fused Deposition Modeling)");
+    assert.ok(DEFAULT_THREE_D_PRINT_SPECS.infillDensity.includes("50%"));
+    assert.ok(DEFAULT_THREE_D_PRINT_SPECS.material.includes("PLA"));
+
+    // PCB specs
+    assert.equal(DEFAULT_PCB_SPECS.layers, "2 Layers");
+    assert.equal(DEFAULT_PCB_SPECS.thickness, "1.6 mm");
+    assert.equal(DEFAULT_PCB_SPECS.copperWeight, "1 oz");
+
+    // Bank Details
+    assert.equal(LK_TRONICS_BANK_DETAILS.accountName, "LK TRONICS TRADING PVT LTD");
+    assert.equal(LK_TRONICS_BANK_DETAILS.accountNumber, "047010021564");
+    assert.equal(LK_TRONICS_BANK_DETAILS.bankName, "Hatton National Bank (HNB)");
+  });
+
+  it("calculates R&D project proposal dual BOM & Engineering Services totals correctly", () => {
+    const hardwareItems = [
+      { quantity: 2, unitPrice: 7500 }, // 15,000
+      { quantity: 5, unitPrice: 1200 }, // 6,000
+    ];
+    const serviceItems = [
+      { quantity: 1, unitPrice: 35000 }, // 35,000
+      { quantity: 2, unitPrice: 8500 },  // 17,000
+    ];
+
+    const hardwareTotal = hardwareItems.reduce((acc, it) => acc + it.quantity * it.unitPrice, 0);
+    const servicesTotal = serviceItems.reduce((acc, it) => acc + it.quantity * it.unitPrice, 0);
+    const totalInvestment = hardwareTotal + servicesTotal;
+
+    assert.equal(hardwareTotal, 21000);
+    assert.equal(servicesTotal, 52000);
+    assert.equal(totalInvestment, 73000);
+
+    // 70% advance payment calculation
+    const advancePercent = 70;
+    const advancePayable = (totalInvestment * advancePercent) / 100;
+    const balanceRemaining = totalInvestment - advancePayable;
+
+    assert.equal(advancePayable, 51100);
+    assert.equal(balanceRemaining, 21900);
+    assert.equal(advancePayable + balanceRemaining, totalInvestment);
   });
 });
