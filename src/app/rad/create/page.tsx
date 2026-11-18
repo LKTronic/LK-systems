@@ -123,7 +123,7 @@ function CreateRadQuotationContent() {
   const [quotationNo, setQuotationNo] = useState<string>(() => getInitialQuotationNo(initialType));
   const [preparedDate, setPreparedDate] = useState("");
   const [expireDate, setExpireDate] = useState("");
-  const [validityDays, setValidityDays] = useState<number | string>(4);
+  const [validityDays, setValidityDays] = useState<number | string>(5);
   const [paymentMethod, setPaymentMethod] = useState("ADVANCE_PAYMENT");
   const [advancePercent, setAdvancePercent] = useState<number | string>(60);
   const [preparedBy, setPreparedBy] = useState("");
@@ -624,7 +624,7 @@ function CreateRadQuotationContent() {
     setPreparedDate(todayStr);
 
     const exp = new Date(today);
-    exp.setDate(exp.getDate() + Number(validityDays || 3));
+    exp.setDate(exp.getDate() + Number(validityDays || 5));
     setExpireDate(exp.toISOString().split("T")[0]);
 
     if (session?.user?.name) {
@@ -688,7 +688,7 @@ function CreateRadQuotationContent() {
       setWarranty("1 Year");
       setPaymentMethod("ADVANCE_PAYMENT");
       setAdvancePercent(60);
-      setValidityDays(4);
+      setValidityDays(5);
       setProjectTitle("");
       setOverview("");
       setCustomHardwareTotal("");
@@ -716,7 +716,7 @@ function CreateRadQuotationContent() {
       setLeadTime(printSpecs.leadTime || "2 - 4 Working Days");
       setWarranty("");
       setPaymentMethod("FULL_PAYMENT");
-      setValidityDays(14);
+      setValidityDays(5);
       setItems(emptyRow);
     } else if (quotationType === "PCB") {
       setTerms(DEFAULT_PCB_TERMS.join("\n\n"));
@@ -1042,7 +1042,7 @@ function CreateRadQuotationContent() {
       projectTitle: quotationType === "PROJECT_PROPOSAL" ? projectTitle : null,
       preparedDate,
       expireDate,
-      validityDays: Number(validityDays) || 4,
+      validityDays: Number(validityDays) || 5,
       paymentMethod,
       advancePercent:
         paymentMethod === "ADVANCE_PAYMENT" ? Number(advancePercent) || 60 : null,

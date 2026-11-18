@@ -103,7 +103,7 @@ export async function POST(request: NextRequest) {
       projectTitle,
       preparedDate,
       expireDate,
-      validityDays = 14,
+      validityDays = 5,
       paymentMethod = "100% payment",
       preparedBy,
       quotationTo,
@@ -177,7 +177,7 @@ export async function POST(request: NextRequest) {
     const fallbackPreparedDate = preparedDate ? new Date(preparedDate) : new Date();
     const fallbackExpireDate = expireDate
       ? new Date(expireDate)
-      : new Date(fallbackPreparedDate.getTime() + (Number(validityDays) || 14) * 86400000);
+      : new Date(fallbackPreparedDate.getTime() + (Number(validityDays) || 5) * 86400000);
     const finalQuotationTo = quotationTo?.trim() || (isDraft ? "Draft Customer" : "Customer");
     const finalPreparedBy = preparedBy?.trim() || (session.user as any)?.name || "LK Tronics";
     const finalProjectTitle = projectTitle?.trim() || (type === "PROJECT_PROPOSAL" && isDraft ? "Draft Project" : null);
@@ -215,7 +215,7 @@ export async function POST(request: NextRequest) {
         projectTitle: finalProjectTitle,
         preparedDate: fallbackPreparedDate,
         expireDate: fallbackExpireDate,
-        validityDays: Number(validityDays) || 14,
+        validityDays: Number(validityDays) || 5,
         paymentMethod,
         preparedBy: finalPreparedBy,
         quotationTo: finalQuotationTo,

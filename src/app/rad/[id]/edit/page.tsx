@@ -104,7 +104,7 @@ export default function EditRadQuotationPage({
   const [quotationNo, setQuotationNo] = useState("");
   const [preparedDate, setPreparedDate] = useState("");
   const [expireDate, setExpireDate] = useState("");
-  const [validityDays, setValidityDays] = useState<number | string>(4);
+  const [validityDays, setValidityDays] = useState<number | string>(5);
   const [paymentMethod, setPaymentMethod] = useState("ADVANCE_PAYMENT");
   const [advancePercent, setAdvancePercent] = useState<number | string>(60);
   const [preparedBy, setPreparedBy] = useState("");
@@ -1040,7 +1040,7 @@ export default function EditRadQuotationPage({
       projectTitle: quotationType === "PROJECT_PROPOSAL" ? projectTitle : null,
       preparedDate,
       expireDate,
-      validityDays: Number(validityDays) || 4,
+      validityDays: Number(validityDays) || 5,
       paymentMethod,
       advancePercent:
         paymentMethod === "ADVANCE_PAYMENT" ? Number(advancePercent) || 60 : null,

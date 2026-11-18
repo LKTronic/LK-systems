@@ -232,9 +232,9 @@ async function generateHardwareOrPcbPdf(
 
   // --- METADATA BOX (Top Right) ---
   // Positioned below the center circular logo and watermark (Y=32-62mm)
-  // Right-aligned with table right border (184.6mm), compact width 59mm to reduce middle space
-  const metaBoxW = 59.0;
-  const metaBoxX = 184.6 - metaBoxW; // 125.6mm
+  // Right-aligned with table right border (184.6mm), width 66mm with clean colon alignment
+  const metaBoxW = 66.0;
+  const metaBoxX = 184.6 - metaBoxW; // 118.6mm
   const metaBoxY = 65.5;
   const metaBoxH = 24.5;
 
@@ -254,19 +254,24 @@ async function generateHardwareOrPcbPdf(
   }
 
   const metaRows = [
-    { label: "Quotation No:", val: data.quotationNo },
-    { label: "Quotation Prepared Date:", val: data.preparedDate },
-    { label: "Quotation Expire Date:", val: data.expireDate },
-    { label: "Payment Method:", val: paymentMethodDisplay },
+    { label: "Quotation No", val: data.quotationNo },
+    { label: "Quotation Prepared Date", val: data.preparedDate },
+    { label: "Quotation Expire Date", val: data.expireDate },
+    { label: "Payment Method", val: paymentMethodDisplay },
   ];
+
+  const labelX = metaBoxX + 2.5;
+  const colonX = metaBoxX + 37.0;
+  const valX = colonX + 2.0;
 
   let currentMetaY = metaBoxY + 5.0;
   metaRows.forEach((r) => {
     doc.setFont("times", "normal");
     doc.setFontSize(9.5);
     doc.setTextColor(0, 0, 0);
-    doc.text(r.label, metaBoxX + 2.5, currentMetaY);
-    doc.text(String(r.val), metaBoxX + metaBoxW - 2.5, currentMetaY, { align: "right" });
+    doc.text(r.label, labelX, currentMetaY);
+    doc.text(":", colonX, currentMetaY);
+    doc.text(String(r.val), valX, currentMetaY);
     currentMetaY += 4.8;
   });
 
@@ -453,7 +458,7 @@ async function generateHardwareOrPcbPdf(
       }
     }
     if (!resolved3dValidity || isNaN(resolved3dValidity) || resolved3dValidity <= 0) {
-      resolved3dValidity = 14;
+      resolved3dValidity = 5;
     }
     const validityDaysText = formatValidityDaysText(resolved3dValidity);
     const validityText = `This quotation is valid for a period of ${validityDaysText} from the date of issue. Upon expiry of this period, the prices, availability, and terms specified herein shall be subject to change and may be adjusted based on market conditions, supplier revisions, or other applicable factors.`;
