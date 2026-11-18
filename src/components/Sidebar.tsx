@@ -14,6 +14,8 @@ import {
   Truck,
   ShieldAlert,
   FileText,
+  FlaskConical,
+  ClipboardCheck,
 } from "lucide-react";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { getEffectiveRole, clearOfflineAuthSession } from "@/lib/offlineAuth";
@@ -34,6 +36,7 @@ export function Sidebar() {
     ...(!isShop
       ? [
           { name: "Quotations", href: "/quotations", icon: FileText },
+          { name: "R&D", href: "/rad", icon: FlaskConical },
           { name: "Download Pending Requests", href: "/products/pending-download", icon: Download },
           { name: "Supply", href: "/supply", icon: Truck },
         ]
@@ -78,31 +81,92 @@ export function Sidebar() {
                   ? pathname === "/products" ||
                     (pathname.startsWith("/products/") &&
                       !pathname.startsWith("/products/pending-download"))
+                  : item.href === "/rad"
+                  ? pathname.startsWith("/rad") || pathname.startsWith("/checklist")
                   : pathname === item.href ||
                     (item.href !== "/dashboard" && pathname.startsWith(item.href));
               const Icon = item.icon;
               return (
-                <Link
-                  key={item.name}
-                  href={item.href}
-                  onClick={() => {
-                    if (item.href === "/products") {
-                      try {
-                        sessionStorage.removeItem("pms_products_filter_state_v2");
-                        sessionStorage.removeItem("pms_products_filter_state");
-                      } catch (e) {}
-                    }
-                  }}
-                  prefetch={true}
-                  className={`flex items-center gap-3 px-3.5 py-2.5 rounded-lg text-sm font-medium transition-all ${
-                    isActive
-                      ? "bg-indigo-600 text-white shadow-lg shadow-indigo-600/25"
-                      : "text-slate-300 hover:bg-slate-800 hover:text-white"
-                  }`}
-                >
-                  <Icon className={`w-4 h-4 ${isActive ? "text-white" : "text-slate-400"}`} />
-                  {item.name}
-                </Link>
+                <div key={item.name} className="space-y-1">
+                  <Link
+                    href={item.href}
+                    onClick={() => {
+                      if (item.href === "/products") {
+                        try {
+                          sessionStorage.removeItem("pms_products_filter_state_v2");
+                          sessionStorage.removeItem("pms_products_filter_state");
+                        } catch (e) {}
+                      }
+                    }}
+                    prefetch={true}
+                    className={`flex items-center gap-3 px-3.5 py-2.5 rounded-lg text-sm font-medium transition-all ${
+                      isActive
+                        ? "bg-indigo-600 text-white shadow-lg shadow-indigo-600/25"
+                        : "text-slate-300 hover:bg-slate-800 hover:text-white"
+                    }`}
+                  >
+                    <Icon className={`w-4 h-4 ${isActive ? "text-white" : "text-slate-400"}`} />
+                    {item.name}
+                  </Link>
+
+                  {/* R&D Submenu */}
+                  {item.href === "/rad" && (pathname.startsWith("/rad") || pathname.startsWith("/checklist")) && (
+                    <div className="pl-7 pr-1 py-1 space-y-1 border-l border-slate-800 ml-4 my-1">
+                      <Link
+                        href="/rad/project-proposal"
+                        className={`block px-2.5 py-1.5 rounded-md text-xs font-medium transition-colors ${
+                          pathname.startsWith("/rad/project-proposal")
+                            ? "bg-teal-950/80 text-teal-300 font-semibold border border-teal-800/60"
+                            : "text-slate-400 hover:text-white hover:bg-slate-800/60"
+                        }`}
+                      >
+                        Project Proposals
+                      </Link>
+                      <Link
+                        href="/rad/3d-print"
+                        className={`block px-2.5 py-1.5 rounded-md text-xs font-medium transition-colors ${
+                          pathname.startsWith("/rad/3d-print")
+                            ? "bg-amber-950/80 text-amber-300 font-semibold border border-amber-800/60"
+                            : "text-slate-400 hover:text-white hover:bg-slate-800/60"
+                        }`}
+                      >
+                        3D Print Quotations
+                      </Link>
+                      <Link
+                        href="/rad/pcb"
+                        className={`block px-2.5 py-1.5 rounded-md text-xs font-medium transition-colors ${
+                          pathname.startsWith("/rad/pcb")
+                            ? "bg-emerald-950/80 text-emerald-300 font-semibold border border-emerald-800/60"
+                            : "text-slate-400 hover:text-white hover:bg-slate-800/60"
+                        }`}
+                      >
+                        PCB Fabrication Plans
+                      </Link>
+                      <Link
+                        href="/rad/checklist"
+                        className={`block px-2.5 py-1.5 rounded-md text-xs font-medium transition-colors ${
+                          (pathname.startsWith("/rad/checklist") || pathname.startsWith("/checklist")) &&
+                          !pathname.startsWith("/rad/handover") &&
+                          !pathname.startsWith("/handover")
+                            ? "bg-cyan-950/80 text-cyan-300 font-semibold border border-cyan-800/60"
+                            : "text-slate-400 hover:text-white hover:bg-slate-800/60"
+                        }`}
+                      >
+                        QC Checklists
+                      </Link>
+                      <Link
+                        href="/rad/handover"
+                        className={`block px-2.5 py-1.5 rounded-md text-xs font-medium transition-colors ${
+                          pathname.startsWith("/rad/handover") || pathname.startsWith("/handover")
+                            ? "bg-amber-950/80 text-amber-300 font-semibold border border-amber-800/60"
+                            : "text-slate-400 hover:text-white hover:bg-slate-800/60"
+                        }`}
+                      >
+                        Handover Letters
+                      </Link>
+                    </div>
+                  )}
+                </div>
               );
             })}
           </nav>
