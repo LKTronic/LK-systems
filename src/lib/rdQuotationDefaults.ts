@@ -109,7 +109,7 @@ export const DEFAULT_PCB_SPECS: PcbSpecs = {
 };
 
 export const DEFAULT_THREE_D_PRINT_TERMS = [
-  "Validity of Quotation: This quotation is valid for a period of fourteen (14) days from the date of issue. Upon expiry of this period, the prices, availability, and terms specified herein shall be subject to change and may be adjusted based on market conditions, supplier revisions, or other applicable factors.",
+  "Validity of Quotation: This quotation is valid for a period of five (05) days from the date of issue. Upon expiry of this period, the prices, availability, and terms specified herein shall be subject to change and may be adjusted based on market conditions, supplier revisions, or other applicable factors.",
   "Printing Job Scheduling & Availability: All 3D printing jobs are scheduled subject to the availability of printers at the LK TRONICS R&D facility. Customers are requested to confirm machine availability with the relevant officer in the LK TRONICS R&D Department prior to order placement.",
   "Design Responsibility & Warranty: Printing will be performed strictly according to the STL file provided by the customer. LK TRONICS shall not be liable for any design inaccuracies or dimensional errors arising from customer-supplied files. No warranty is applicable to 3D-printed parts, as they are custom-produced based on client specifications.",
   "Delivery Terms: If delivery charges are not specified in the quotation table, the client shall be responsible for either collecting the goods from our store or bearing the applicable delivery cost if delivery is required. LK TRONICS will not be held liable for any damages that may occur during transportation or delivery.",
@@ -153,14 +153,14 @@ export function numberToWordsValidity(num: number): string {
 }
 
 export function formatValidityDaysText(days: number | string): string {
-  const num = Math.max(1, Math.round(Number(days) || 14));
+  const num = Math.max(1, Math.round(Number(days) || 5));
   const word = numberToWordsValidity(num);
   const padded = num < 10 ? `0${num}` : String(num);
   const unit = num === 1 ? "day" : "days";
   return `${word} (${padded}) ${unit}`;
 }
 
-export function getThreeDPrintTerms(validityDays: number | string = 14): string[] {
+export function getThreeDPrintTerms(validityDays: number | string = 5): string[] {
   const daysText = formatValidityDaysText(validityDays);
   return [
     `Validity of Quotation: This quotation is valid for a period of ${daysText} from the date of issue. Upon expiry of this period, the prices, availability, and terms specified herein shall be subject to change and may be adjusted based on market conditions, supplier revisions, or other applicable factors.`,
@@ -176,7 +176,7 @@ export function getPcbTerms(validityDays: number | string = 5): string[] {
   ];
 }
 
-export function getProjectProposalTerms(validityDays: number | string = 4): string[] {
+export function getProjectProposalTerms(validityDays: number | string = 5): string[] {
   return [
     "Engineering Supervision: For your convenience, the project will be directed by an R&D engineer from start to finish, and all project milestones will be communicated directly via email.",
     "Warranty: If a warranty (for manufacturing faults) is provided for any component used in the project, it is clearly stated in the quotation.",
@@ -232,14 +232,14 @@ export function extractAdditionalTerms(rawTerms: string | null | undefined): str
 
 export function getProjectProposalCombinedTerms(
   additionalTermsText: string | null | undefined,
-  validityDays: number | string = 4
+  validityDays: number | string = 5
 ): string[] {
   const defaultTerms = getProjectProposalTerms(validityDays);
   const additional = extractAdditionalTerms(additionalTermsText);
   return [...additional, ...defaultTerms];
 }
 
-export const DEFAULT_PROJECT_PROPOSAL_TERMS = getProjectProposalTerms(4);
+export const DEFAULT_PROJECT_PROPOSAL_TERMS = getProjectProposalTerms(5);
 
 export const DEFAULT_PROJECT_PROPOSAL_HARDWARE = [
   { productOrService: "Arduino Nano", quantity: 12 },

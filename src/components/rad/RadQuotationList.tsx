@@ -193,6 +193,9 @@ export function RadQuotationList({
           if (diff > 0) resolvedValidity = diff;
         } catch {}
       }
+      if (!resolvedValidity || Number(resolvedValidity) <= 0) {
+        resolvedValidity = 5;
+      }
 
       const pdfData: RdQuotationPdfData = {
         type: q.type,
