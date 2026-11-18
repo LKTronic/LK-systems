@@ -73,57 +73,25 @@ export async function generateHandoverLetterPdf(
   const rightMargin = 196;
   const contentWidth = rightMargin - leftMargin;
 
-  // ================= 1. LETTERHEAD BACKGROUND & CLEAN TOP =================
+  // ================= 1. LETTERHEAD BACKGROUND (OFFICIAL QUOTATION HEADING) =================
   if (bgBase64) {
     try {
       doc.addImage(bgBase64, "JPEG", 0, 0, 210, 297, undefined, "FAST");
     } catch {
       // Background fallback
     }
+  } else {
+    // Fallback quotation teal header banner if background image fails
+    doc.setFillColor(43, 98, 103);
+    doc.rect(0, 0, 210, 23.3, "F");
+    doc.setFont("times", "bold");
+    doc.setFontSize(22);
+    doc.setTextColor(255, 255, 255);
+    doc.text("LK TRONICS", 105, 15.5, { align: "center" });
   }
 
-  // Ensure the upper half of the letterhead (Y: 0 to 65mm) is completely clean white
-  // with NO background centered logo and NO repeating "QUOTATION" watermark text
-  doc.setFillColor(255, 255, 255);
-  doc.rect(0, 0, 210, 65, "F");
-
-  // ================= 2. HEADER: LOGO TO LEFT & QUOTATION ADDRESS =================
-  // LK Tronics circular logo positioned on the LEFT
-  if (logoBase64) {
-    try {
-      const format = logoBase64.includes("image/png") ? "PNG" : "JPEG";
-      doc.addImage(logoBase64, format, leftMargin, 3.8, 16.5, 16.5, undefined, "FAST");
-    } catch {}
-  }
-
-  // Under-logo tagline
-  doc.setFont("times", "normal");
-  doc.setFontSize(5.5);
-  doc.setTextColor(71, 85, 105);
-  doc.text("COMPONENTS FOR THE FUTURE", leftMargin + 8.25, 21.6, { align: "center" });
-
-  // Company Brand & Contact Details (placed beside the logo)
-  const brandColX = leftMargin + 20;
-  doc.setFont("times", "bold");
-  doc.setFontSize(13.5);
-  doc.setTextColor(17, 24, 39); // Deep Slate
-  doc.text("LK TRONICS", brandColX, 9.8);
-
-  doc.setFont("times", "normal");
-  doc.setFontSize(8.2);
-  doc.setTextColor(51, 65, 85);
-  doc.text("Tele : +94 76 357 31 31 | 011 4 215 515", brandColX, 14.2);
-  doc.text("E mail : admin@lk-tronics.com | sales@lk-tronics.com", brandColX, 18.2);
-
-  // Top Right Contact & Registration Info
-  doc.setFont("times", "normal");
-  doc.setFontSize(8.2);
-  doc.setTextColor(51, 65, 85);
-  doc.text("Web : www.lk-tronics.com", rightMargin, 14.2, { align: "right" });
-  doc.text("Reg No : P-V 00336036", rightMargin, 18.2, { align: "right" });
-
-  // ================= 3. SIGNATURE QUOTATION TEAL BAR =================
-  // Teal address bar matching quotation template
+  // ================= 2. SIGNATURE QUOTATION TEAL ADDRESS BAR =================
+  // Crisp vector teal address bar matching quotation template
   doc.setFillColor(74, 144, 152); // Official LK Teal quotation color
   doc.rect(0, 23.3, 210, 6.8, "F");
 
@@ -132,6 +100,12 @@ export async function generateHandoverLetterPdf(
   doc.setTextColor(235, 248, 250);
   doc.text("LK TRONICS, HIGH-LEVEL ROAD, HOMAGAMA, SRI LANKA.", leftMargin, 27.8);
   doc.text("TEL : 011 4 215 515 | REG NO - P-V 00336036", rightMargin, 27.8, { align: "right" });
+
+  // ================= 3. CLEAN BODY CANVAS =================
+  // Ensure the body area below the teal bar (Y: 30.1 to 65mm) is pure clean white
+  // with NO background center logo and NO repeating "QUOTATION" watermark text
+  doc.setFillColor(255, 255, 255);
+  doc.rect(0, 30.1, 210, 34.9, "F");
 
   // ================= 4. DOCUMENT TITLE & OPTIONAL REFERENCE =================
   let currentY = 38.5;
