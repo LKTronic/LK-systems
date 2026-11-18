@@ -22,6 +22,10 @@ import {
   calculate3DPrintPrice,
   DEFAULT_PROJECT_PROPOSAL_HARDWARE,
   DEFAULT_PROJECT_PROPOSAL_SERVICES,
+  DEFAULT_UNI_QUOTATION_SPECS,
+  DEFAULT_UNI_QUOTATION_ITEMS,
+  DEFAULT_UNI_QUOTATION_GENERAL_TERMS,
+  getUniQuotationTerms,
   extractAdditionalTerms,
   getProjectProposalCombinedTerms,
 } from "../src/lib/rdQuotationDefaults";
@@ -1071,5 +1075,41 @@ describe("Unit Tests: Supply Excel Supplier Image Handling", () => {
     assert.equal(combined[1], extracted[1]);
     assert.equal(combined[2], extracted[2]);
     assert.equal(combined[3], extracted[3]);
+  });
+
+  it("generates sequential quotation numbers for UNI_QUOTATION using PQV series", async () => {
+    const fixedDate = new Date(2026, 9, 14); // 2026-10-14
+    const nextNo1 = await getNextRdQuotationNo([], "UNI_QUOTATION", fixedDate);
+    assert.equal(nextNo1, "20261014PQV1");
+
+    const nextNo2 = await getNextRdQuotationNo(
+      [{ quotationNo: "20261014PQV1" }],
+      "UNI_QUOTATION",
+      fixedDate
+    );
+    assert.equal(nextNo2, "20261014PQV2");
+  });
+
+  it("validates Uni Quotation terms matching Doc/20161014PQV1.docx", () => {
+    assert.equal(DEFAULT_UNI_QUOTATION_GENERAL_TERMS.length, 6);
+    assert.ok(DEFAULT_UNI_QUOTATION_GENERAL_TERMS[0].includes("Ownership of project shall remain with LK TRONICS"));
+    assert.ok(DEFAULT_UNI_QUOTATION_GENERAL_TERMS[1].includes("Orders once confirmed cannot be cancelled"));
+    assert.ok(DEFAULT_UNI_QUOTATION_GENERAL_TERMS[5].includes("Testing and demonstration will be carried out jointly"));
+
+    const terms = getUniQuotationTerms(5, "10 business working days", "80% advance payment");
+    assert.ok(terms.validityTerm.includes("five (05) days"));
+    assert.ok(terms.durationTerm.includes("10 business working days"));
+    assert.ok(terms.deliveryTerm.includes("collection of the goods from our store"));
+    assert.ok(terms.confidentialityTerm.includes("maintain confidentiality"));
+    assert.ok(terms.paymentTerm.includes("80% advance payment"));
+  });
+
+  it("validates Uni Quotation default components and specs matching 20161014PQV1.docx", () => {
+    assert.equal(DEFAULT_UNI_QUOTATION_ITEMS.length, 4);
+    assert.equal(DEFAULT_UNI_QUOTATION_ITEMS[0].productOrService, "ESP32 Development Board 2.4GHz WIFI Bluetooth 38 Pin");
+    assert.equal(DEFAULT_UNI_QUOTATION_ITEMS[2].quantity, 192);
+    assert.equal(DEFAULT_UNI_QUOTATION_SPECS.completionTime, "10 business working days");
+    assert.equal(DEFAULT_UNI_QUOTATION_SPECS.engineeringCharges, 37580);
+    assert.equal(DEFAULT_UNI_QUOTATION_SPECS.discount, 4580);
   });
 });

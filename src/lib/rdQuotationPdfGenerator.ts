@@ -9,6 +9,8 @@ import {
   DEFAULT_PCB_TERMS,
   DEFAULT_PROJECT_PROPOSAL_TERMS,
   DEFAULT_PROJECT_PROPOSAL_INTRO,
+  DEFAULT_UNI_QUOTATION_GENERAL_TERMS,
+  getUniQuotationTerms,
   getProjectProposalTerms,
   getProjectProposalCombinedTerms,
   LK_TRONICS_BANK_DETAILS,
@@ -24,6 +26,7 @@ export interface RdQuotationPdfItem {
   unitPrice: number;
   totalPrice: number;
   notes?: string | null;
+  image?: string | null;
 }
 
 export interface RdQuotationPdfData {
@@ -2061,6 +2064,550 @@ async function generateProjectProposalPdf(
 }
 
 /**
+ * Uni Quotation PDF Generator (Matching Doc/20161014PQV1.docx)
+ */
+async function generateUniQuotationPdf(
+  data: RdQuotationPdfData,
+  assets: {
+    letterheadBg: string | null;
+    stamp: string | null;
+    brandsSheet: string | null;
+  }
+): Promise<jsPDF> {
+  const doc = new jsPDF({
+    orientation: "portrait",
+    unit: "mm",
+    format: "a4",
+    compress: true,
+  });
+
+  doc.setFont("times", "normal");
+
+  const drawLetterheadBackground = () => {
+    if (assets.letterheadBg) {
+      try {
+        doc.addImage(assets.letterheadBg, "JPEG", 0, 0, 210, 297, undefined, "FAST");
+      } catch (err) {
+        console.error("Failed to render letterhead background:", err);
+      }
+    }
+  };
+
+  const ensureSpace = (neededHeight: number, currentY: number): number => {
+    if (currentY + neededHeight > 265.0) {
+      doc.addPage();
+      doc.setFont("times", "normal");
+      drawLetterheadBackground();
+      return 62.0;
+    }
+    return currentY;
+  };
+
+  // Parse technical specs
+  let parsedSpecs: any = {};
+  if (data.technicalSpecs) {
+    if (typeof data.technicalSpecs === "string") {
+      try {
+        parsedSpecs = JSON.parse(data.technicalSpecs);
+      } catch {
+        parsedSpecs = {};
+      }
+    } else {
+      parsedSpecs = data.technicalSpecs;
+    }
+  }
+
+  // Pre-load component images for Table 1
+  const itemImages: (string | null)[] = [];
+  for (let i = 0; i < data.items.length; i++) {
+    const item = data.items[i];
+    let imgCandidate: string | null = item.image || null;
+    if (!imgCandidate && item.notes) {
+      try {
+        const parsedNotes = JSON.parse(item.notes);
+        if (parsedNotes?.image) imgCandidate = parsedNotes.image;
+      } catch {
+        if (
+          item.notes.startsWith("data:image/") ||
+          item.notes.startsWith("/") ||
+          item.notes.startsWith("http")
+        ) {
+          imgCandidate = item.notes;
+        }
+      }
+    }
+    if (!imgCandidate && Array.isArray(parsedSpecs?.itemImages)) {
+      imgCandidate = parsedSpecs.itemImages[i] || null;
+    }
+
+    if (imgCandidate) {
+      const b64 = await loadImageAsBase64(imgCandidate);
+      itemImages.push(b64);
+    } else {
+      itemImages.push(null);
+    }
+  }
+
+  // --- PAGE 1 ---
+  drawLetterheadBackground();
+
+  // --- TOP RIGHT: METADATA BOX ---
+  const metaBoxW = 74.0;
+  const metaBoxX = 184.6 - metaBoxW; // 110.6mm
+  const metaBoxY = 62.0;
+  const metaBoxH = 26.5;
+
+  doc.setDrawColor(0, 0, 0);
+  doc.setLineWidth(0.25);
+  doc.setFillColor(255, 255, 255);
+  doc.rect(metaBoxX, metaBoxY, metaBoxW, metaBoxH, "FD");
+
+  let paymentMethodDisplay = data.paymentMethod || "80% advance payment";
+  if (paymentMethodDisplay === "ADVANCE_PAYMENT") {
+    paymentMethodDisplay = `${data.advancePercent || 80}% advance payment`;
+  } else if (
+    paymentMethodDisplay === "FULL_PAYMENT" ||
+    paymentMethodDisplay === "100% payment"
+  ) {
+    paymentMethodDisplay = "100% payment";
+  }
+
+  const metaRows = [
+    { label: "Quotation No", val: data.quotationNo },
+    { label: "Quotation Prepared Date", val: data.preparedDate },
+    { label: "Quotation Expire Date", val: data.expireDate },
+    { label: "Payment Method", val: paymentMethodDisplay },
+    { label: "Prepared by", val: `[${data.preparedBy || "LK TRONICS"}]` },
+  ];
+
+  const labelX = metaBoxX + 2.5;
+  const colonX = metaBoxX + 38.0;
+  const valX = colonX + 2.0;
+
+  let currentMetaY = metaBoxY + 4.6;
+  metaRows.forEach((r) => {
+    doc.setFont("times", "normal");
+    doc.setFontSize(9.5);
+    doc.setTextColor(0, 0, 0);
+    doc.text(r.label, labelX, currentMetaY);
+    doc.text(":", colonX, currentMetaY);
+    doc.text(String(r.val), valX, currentMetaY);
+    currentMetaY += 4.5;
+  });
+
+  // --- TOP LEFT: QUOTATION TO ---
+  const customerLeftX = 25.4;
+  doc.setFont("times", "bold");
+  doc.setFontSize(11);
+  doc.setTextColor(0, 0, 0);
+  doc.text("QUOTATION TO -", customerLeftX, 66.0);
+
+  doc.setFont("times", "normal");
+  doc.setFontSize(10.5);
+  doc.setTextColor(0, 0, 0);
+
+  const rawQuotationTo = data.quotationTo || "Client";
+  const customerLines = rawQuotationTo
+    .split("\n")
+    .map((l) => l.trim())
+    .filter(Boolean);
+
+  let custY = 72.0;
+  customerLines.forEach((line) => {
+    const splitLines = doc.splitTextToSize(line, 78);
+    doc.text(splitLines, customerLeftX, custY);
+    custY += splitLines.length * 5.0;
+  });
+
+  // --- PROJECT PROPOSAL TITLE (Centered Bold 13pt) ---
+  const titleY = Math.max(custY + 2.0, metaBoxY + metaBoxH + 4.0);
+  const projTitle = data.projectTitle || "University Project Proposal";
+  doc.setFont("times", "bold");
+  doc.setFontSize(13);
+  doc.setTextColor(0, 0, 0);
+  doc.text(`Project Proposal Title – ${projTitle}`, 105, titleY, { align: "center" });
+
+  // --- ESTIMATED PROJECT COMPLETION TIME (Left Bold 11pt) ---
+  const completionTime =
+    data.leadTime ||
+    parsedSpecs?.completionTime ||
+    parsedSpecs?.leadTime ||
+    "10 business working days";
+  const completionY = titleY + 6.5;
+  doc.setFont("times", "bold");
+  doc.setFontSize(11);
+  doc.setTextColor(0, 0, 0);
+  doc.text(
+    `Estimated Project Completion Time – ${completionTime}`,
+    25.4,
+    completionY
+  );
+
+  // --- TABLE 1: COMPONENTS UTILIZED IN THIS PROJECT ---
+  const t1IntroY = completionY + 6.0;
+  doc.setFont("times", "normal");
+  doc.setFontSize(10.5);
+  doc.setTextColor(0, 0, 0);
+  doc.text(
+    "The following table outlines the key components utilized in this project.",
+    25.4,
+    t1IntroY
+  );
+
+  const t1Body: any[][] = [];
+  data.items.forEach((item, i) => {
+    t1Body.push([
+      (i + 1).toString(),
+      "", // Image column rendered via didDrawCell
+      item.productOrService || "",
+      item.quantity?.toString() || "1",
+    ]);
+  });
+
+  const hasAnyImages = itemImages.some((img) => img !== null);
+  const t1RowMinHeight = hasAnyImages ? 20.0 : 8.0;
+
+  autoTable(doc, {
+    startY: t1IntroY + 2.5,
+    margin: { left: 25.4, right: 25.4 },
+    head: [["No.", "Image", "Product/Service", "Quantity"]],
+    body: t1Body,
+    theme: "plain",
+    tableLineColor: [0, 0, 0],
+    tableLineWidth: 0.25,
+    styles: {
+      font: "times",
+      fontSize: 10,
+      textColor: [0, 0, 0],
+      lineColor: [0, 0, 0],
+      lineWidth: 0.25,
+      cellPadding: { top: 2.0, right: 2.5, bottom: 2.0, left: 2.5 },
+      minCellHeight: t1RowMinHeight,
+      valign: "middle",
+    },
+    headStyles: {
+      fillColor: [255, 255, 255],
+      font: "times",
+      fontStyle: "bold",
+      fontSize: 10,
+      textColor: [0, 0, 0],
+      halign: "center",
+      valign: "middle",
+      lineColor: [0, 0, 0],
+      lineWidth: 0.25,
+      minCellHeight: 8.0,
+    },
+    columnStyles: {
+      0: { cellWidth: 12.0, halign: "center", font: "times", fontStyle: "bold" },
+      1: { cellWidth: 36.0, halign: "center" },
+      2: { cellWidth: 92.2, halign: "left", font: "times" },
+      3: { cellWidth: 19.0, halign: "center", font: "times", fontStyle: "bold" },
+    },
+    didDrawCell: (hook) => {
+      if (hook.section === "body" && hook.column.index === 1) {
+        const b64 = itemImages[hook.row.index];
+        if (b64) {
+          try {
+            const cellW = hook.cell.width;
+            const cellH = hook.cell.height;
+            const maxW = 30.0;
+            const maxH = 16.0;
+            const imgX = hook.cell.x + (cellW - maxW) / 2;
+            const imgY = hook.cell.y + (cellH - maxH) / 2;
+            doc.addImage(b64, "PNG", imgX, imgY, maxW, maxH, undefined, "FAST");
+          } catch {}
+        }
+      }
+    },
+    willDrawPage: () => {
+      drawLetterheadBackground();
+    },
+  });
+
+  let curY = (doc as any).lastAutoTable.finalY + 7.0;
+
+  // --- TABLE 2: KEY COST ELEMENTS ASSOCIATED WITH THIS PROJECT ---
+  curY = ensureSpace(45.0, curY);
+
+  doc.setFont("times", "normal");
+  doc.setFontSize(10.5);
+  doc.setTextColor(0, 0, 0);
+  doc.text(
+    "The following table outlines the key cost elements associated with this project.",
+    25.4,
+    curY
+  );
+
+  let componentsTotal = Number(parsedSpecs?.componentsTotal);
+  if (!componentsTotal || isNaN(componentsTotal) || componentsTotal <= 0) {
+    componentsTotal = data.items.reduce(
+      (acc, it) => acc + (Number(it.totalPrice) || 0),
+      0
+    );
+  }
+
+  const engineeringCharges = Number(parsedSpecs?.engineeringCharges || 0);
+  const discount = Number(parsedSpecs?.discount || 0);
+  const calculatedGrandTotal = Math.max(
+    0,
+    componentsTotal + engineeringCharges - discount
+  );
+  const grandTotal =
+    Number(data.totalAmount) > 0 ? Number(data.totalAmount) : calculatedGrandTotal;
+
+  const t2Body: any[][] = [
+    [
+      "1",
+      "Total Estimated Cost of Project Components",
+      "-",
+      "-",
+      formatLKR(componentsTotal).replace("LKR", "").trim(),
+    ],
+    [
+      "2",
+      "Engineering Charges",
+      "-",
+      "-",
+      formatLKR(engineeringCharges).replace("LKR", "").trim(),
+    ],
+  ];
+
+  if (discount > 0) {
+    t2Body.push([
+      "",
+      "Discount",
+      "",
+      "",
+      `-${formatLKR(discount).replace("LKR", "").trim()}`,
+    ]);
+  }
+
+  t2Body.push([
+    "",
+    "Total Project Cost",
+    "",
+    "",
+    formatLKR(grandTotal).replace("LKR", "").trim(),
+  ]);
+
+  autoTable(doc, {
+    startY: curY + 2.5,
+    margin: { left: 25.4, right: 25.4 },
+    head: [["No.", "Description", "Quantity", "Unit Cost", "Total Cost"]],
+    body: t2Body,
+    theme: "plain",
+    tableLineColor: [0, 0, 0],
+    tableLineWidth: 0.25,
+    styles: {
+      font: "times",
+      fontSize: 10,
+      textColor: [0, 0, 0],
+      lineColor: [0, 0, 0],
+      lineWidth: 0.25,
+      cellPadding: { top: 2.0, right: 2.5, bottom: 2.0, left: 2.5 },
+      minCellHeight: 7.2,
+      valign: "middle",
+    },
+    headStyles: {
+      fillColor: [255, 255, 255],
+      font: "times",
+      fontStyle: "bold",
+      fontSize: 10,
+      textColor: [0, 0, 0],
+      halign: "center",
+      valign: "middle",
+      lineColor: [0, 0, 0],
+      lineWidth: 0.25,
+    },
+    columnStyles: {
+      0: { cellWidth: 12.0, halign: "center", font: "times", fontStyle: "bold" },
+      1: { cellWidth: 75.2, halign: "left", font: "times" },
+      2: { cellWidth: 20.0, halign: "center", font: "times", fontStyle: "bold" },
+      3: { cellWidth: 26.0, halign: "center", font: "times", fontStyle: "bold" },
+      4: { cellWidth: 26.0, halign: "right", font: "times", fontStyle: "bold" },
+    },
+    didParseCell: (dataHook) => {
+      dataHook.cell.styles.font = "times";
+      const rowIndex = dataHook.row.index;
+      const isDiscountRow = discount > 0 && rowIndex === t2Body.length - 2;
+      const isTotalRow = rowIndex === t2Body.length - 1;
+      if (isDiscountRow || isTotalRow) {
+        dataHook.cell.styles.fontStyle = "bold";
+      }
+    },
+    willDrawPage: () => {
+      drawLetterheadBackground();
+    },
+  });
+
+  curY = (doc as any).lastAutoTable.finalY + 8.0;
+
+  // --- GENERAL TERMS AND CONDITIONS FOR THE CLIENT ---
+  curY = ensureSpace(30.0, curY);
+
+  doc.setFont("times", "bold");
+  doc.setFontSize(11.5);
+  doc.setTextColor(0, 0, 0);
+  doc.text("General Terms and Conditions for the Client", 25.4, curY);
+  curY += 5.5;
+
+  const generalTerms = DEFAULT_UNI_QUOTATION_GENERAL_TERMS;
+  generalTerms.forEach((term) => {
+    curY = ensureSpace(9.0, curY);
+    doc.setFont("times", "normal");
+    doc.setFontSize(9.5);
+    const bulletText = `•  ${term}`;
+    const wrapped = doc.splitTextToSize(bulletText, 159.2);
+    doc.text(wrapped, 25.4, curY);
+    curY += wrapped.length * 4.2 + 1.5;
+  });
+
+  curY += 2.0;
+
+  // Sub-sections
+  const resolvedValidityDays =
+    Number(data.validityDays) || Number(parsedSpecs?.validityDays) || 5;
+  const validityDaysText = formatValidityDaysText(resolvedValidityDays);
+  const termsConfig = getUniQuotationTerms(
+    resolvedValidityDays,
+    completionTime,
+    paymentMethodDisplay,
+    data.warranty || parsedSpecs?.warrantyText
+  );
+
+  const subTerms = [
+    { heading: "Validity of Quotation", body: termsConfig.validityTerm },
+    { heading: "Project Duration", body: termsConfig.durationTerm },
+    { heading: "Warranty Terms", body: termsConfig.warrantyTerm },
+    { heading: "Delivery from Homagama Warehouse", body: termsConfig.deliveryTerm },
+    { heading: "Confidentiality", body: termsConfig.confidentialityTerm },
+    { heading: "Payment Terms", body: termsConfig.paymentTerm },
+  ];
+
+  subTerms.forEach((term) => {
+    curY = ensureSpace(16.0, curY);
+    doc.setFont("times", "bold");
+    doc.setFontSize(10);
+    doc.setTextColor(0, 0, 0);
+    doc.text(term.heading, 25.4, curY);
+    curY += 4.2;
+
+    doc.setFont("times", "normal");
+    doc.setFontSize(9.2);
+    const wrapped = doc.splitTextToSize(term.body, 159.2);
+    doc.text(wrapped, 25.4, curY);
+    curY += wrapped.length * 4.0 + 3.0;
+  });
+
+  // --- BANK DETAILS & AUTHORIZED BY STAMP SECTION ---
+  curY = ensureSpace(50.0, curY);
+  curY += 2.0;
+
+  doc.setFont("times", "bold");
+  doc.setFontSize(11.5);
+  doc.setTextColor(0, 0, 0);
+  doc.text("Bank Details", 25.4, curY);
+  curY += 4.0;
+
+  const bankBoxY = curY;
+  const bankBoxW = 112.0;
+  const bankBoxH = 32.0;
+
+  doc.setDrawColor(0, 0, 0);
+  doc.setLineWidth(0.25);
+  doc.setFillColor(255, 255, 255);
+  doc.rect(25.4, bankBoxY, bankBoxW, bankBoxH, "FD");
+
+  let activeBank = LK_TRONICS_BANK_DETAILS;
+  if (data.bankDetails) {
+    activeBank = {
+      accountName:
+        data.bankDetails.accountName || LK_TRONICS_BANK_DETAILS.accountName,
+      accountNumber:
+        data.bankDetails.accountNumber || LK_TRONICS_BANK_DETAILS.accountNumber,
+      bankName: data.bankDetails.bankName || LK_TRONICS_BANK_DETAILS.bankName,
+      branch: data.bankDetails.branch || LK_TRONICS_BANK_DETAILS.branch,
+    };
+  } else if (parsedSpecs?.bankDetails) {
+    activeBank = {
+      accountName:
+        parsedSpecs.bankDetails.accountName || LK_TRONICS_BANK_DETAILS.accountName,
+      accountNumber:
+        parsedSpecs.bankDetails.accountNumber ||
+        LK_TRONICS_BANK_DETAILS.accountNumber,
+      bankName:
+        parsedSpecs.bankDetails.bankName || LK_TRONICS_BANK_DETAILS.bankName,
+      branch:
+        parsedSpecs.bankDetails.branch || LK_TRONICS_BANK_DETAILS.branch,
+    };
+  }
+
+  const bankRows = [
+    { label: "Account Name", val: activeBank.accountName },
+    { label: "Account Number", val: activeBank.accountNumber },
+    { label: "Bank Name", val: activeBank.bankName },
+    { label: "Bank Branch", val: activeBank.branch },
+  ];
+
+  let bRowY = bankBoxY + 6.0;
+  bankRows.forEach((r) => {
+    doc.setFont("times", "normal");
+    doc.setFontSize(10.5);
+    doc.setTextColor(0, 0, 0);
+    doc.text(r.label, 28.0, bRowY);
+    doc.text(r.val, 62.0, bRowY);
+    bRowY += 6.5;
+  });
+
+  // Stamp & Signature Line (Right side of Bank Box)
+  const stampX = 145.0;
+  if (assets.stamp) {
+    try {
+      doc.addImage(
+        assets.stamp,
+        "PNG",
+        stampX,
+        bankBoxY - 2.0,
+        36.0,
+        17.5,
+        undefined,
+        "FAST"
+      );
+    } catch {}
+  }
+
+  doc.setFont("times", "normal");
+  doc.setFontSize(10);
+  doc.setTextColor(0, 0, 0);
+  doc.text("…………………………………", stampX, bankBoxY + 22.0);
+  doc.text("Authorized by", stampX + 4.0, bankBoxY + 27.0);
+
+  // Appreciation Note
+  const appY = Math.min(bankBoxY + bankBoxH + 9.0, 268.0);
+  doc.setFont("times", "bold");
+  doc.setFontSize(10.5);
+  doc.setTextColor(0, 0, 0);
+  doc.text(
+    "We sincerely appreciate the opportunity to submit this quotation and look forward to supporting your requirements.",
+    105,
+    appY,
+    { align: "center" }
+  );
+
+  // --- BRAND PARTNERS SHEET PAGE ---
+  if (assets.brandsSheet) {
+    try {
+      doc.addPage();
+      doc.addImage(assets.brandsSheet, "PNG", 0, 0, 210, 297, undefined, "FAST");
+    } catch (err) {
+      console.warn("Could not append brand sheet page:", err);
+    }
+  }
+
+  return doc;
+}
+
+/**
  * Universal R&D PDF generator entry point
  */
 export async function generateRdQuotationPdf(
@@ -2098,6 +2645,17 @@ export async function generateRdQuotationPdf(
       bgClients,
       bgPartners,
       warrantyBadge: warrantyBadge || WARRANTY_BADGE_BASE64,
+    });
+  } else if (data.type === "UNI_QUOTATION") {
+    const [letterheadBg, stamp, brandsSheet] = await Promise.all([
+      loadImageAsBase64("/template_assets/rd_3d_letterhead.jpg"),
+      loadImageAsBase64("/template_assets/rd_3d_stamp.png"),
+      loadImageAsBase64("/template_assets/brands_sheet.png"),
+    ]);
+    return await generateUniQuotationPdf(data, {
+      letterheadBg,
+      stamp,
+      brandsSheet,
     });
   } else {
     const bgBase64 = await loadImageAsBase64("/template_assets/rd_3d_letterhead.jpg");

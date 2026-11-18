@@ -17,6 +17,10 @@ import {
   DEFAULT_PCB_TERMS,
   DEFAULT_PROJECT_PROPOSAL_TERMS,
   DEFAULT_PROJECT_PROPOSAL_INTRO,
+  DEFAULT_UNI_QUOTATION_SPECS,
+  DEFAULT_UNI_QUOTATION_ITEMS,
+  DEFAULT_UNI_QUOTATION_GENERAL_TERMS,
+  getUniQuotationTerms,
   getProjectProposalTerms,
   extractAdditionalTerms,
   LK_TRONICS_BANK_DETAILS,
@@ -42,6 +46,7 @@ import {
   Printer,
   Cpu,
   Lightbulb,
+  GraduationCap,
   Clock,
   Shield,
   FileText,
@@ -71,6 +76,7 @@ interface ItemRow {
   quantity: number;
   unitPrice: number;
   notes?: string;
+  image?: string;
   calcMode?: "MANUAL" | "AUTO";
   material?: string;
   filamentLengthM?: number | string;
@@ -135,6 +141,11 @@ export default function EditRadQuotationPage({
   const [isUploadingDesignImages, setIsUploadingDesignImages] = useState(false);
   const [customHardwareTotal, setCustomHardwareTotal] = useState<string>("");
   const [customServicesTotal, setCustomServicesTotal] = useState<string>("");
+
+  // Uni Quotation Specific Fields
+  const [engineeringCharges, setEngineeringCharges] = useState<number | string>(37580);
+  const [discount, setDiscount] = useState<number | string>(4580);
+  const [uniCompletionTime, setUniCompletionTime] = useState<string>("10 business working days");
 
   // Bank Accounts Management & Selection
   const [bankAccounts, setBankAccounts] = useState<BankAccount[]>([]);
@@ -732,6 +743,18 @@ export default function EditRadQuotationPage({
           if (parsedSpecs?.commercialNote) {
             setCommercialNote(String(parsedSpecs.commercialNote));
           }
+        } else if (q.type === "UNI_QUOTATION") {
+          if (parsedSpecs?.engineeringCharges != null) {
+            setEngineeringCharges(parsedSpecs.engineeringCharges);
+          }
+          if (parsedSpecs?.discount != null) {
+            setDiscount(parsedSpecs.discount);
+          }
+          if (parsedSpecs?.completionTime) {
+            setUniCompletionTime(parsedSpecs.completionTime);
+          } else if (q.leadTime) {
+            setUniCompletionTime(q.leadTime);
+          }
         }
 
         // Extract saved bank account selection from parsed technicalSpecs
@@ -765,13 +788,32 @@ export default function EditRadQuotationPage({
                 ? calc.printTimeHours
                 : (ptm !== "" ? Math.round((Number(ptm) / 60) * 100) / 100 : "");
 
+              let img: string | undefined = undefined;
+              let cleanNotes = it.notes && it.notes.startsWith("3D_CALC:") ? "" : (it.notes || "");
+              if (it.notes && typeof it.notes === "string") {
+                if (it.notes.startsWith("data:image/") || it.notes.startsWith("/") || it.notes.startsWith("http")) {
+                  img = it.notes;
+                  cleanNotes = "";
+                } else if (it.notes.startsWith("{")) {
+                  try {
+                    const parsed = JSON.parse(it.notes);
+                    if (parsed.image) img = parsed.image;
+                    if (parsed.note !== undefined) cleanNotes = parsed.note;
+                  } catch {}
+                }
+              }
+              if (!img && Array.isArray(parsedSpecs?.itemImages)) {
+                img = parsedSpecs.itemImages[idx] || undefined;
+              }
+
               return {
                 id: `item-${it.id || Math.random()}`,
                 itemType: it.itemType || "HARDWARE",
                 productOrService: it.productOrService || "",
                 quantity: Number(it.quantity) || 1,
                 unitPrice: Number(it.unitPrice) || 0,
-                notes: it.notes && it.notes.startsWith("3D_CALC:") ? "" : (it.notes || ""),
+                notes: cleanNotes,
+                image: img,
                 calcMode: calc.calcMode || parsedSpecs?.pricingMode || "AUTO",
                 material: calc.material || parsedSpecs?.material || "PLA",
                 filamentLengthM: fl,
@@ -885,14 +927,23 @@ export default function EditRadQuotationPage({
       ? Number(customServicesTotal)
       : computedServicesTotal;
 
+  const componentsTotal = items.reduce(
+    (sum, i) =>
+      sum + (Number(i.quantity) || 0) * (Number(i.unitPrice) || 0),
+    0
+  );
+
   const totalAmount =
     quotationType === "PROJECT_PROPOSAL"
       ? hardwareTotal + servicesTotal
-      : items.reduce(
-          (sum, i) =>
-            sum + (Number(i.quantity) || 0) * (Number(i.unitPrice) || 0),
-          0
-        );
+      : quotationType === "UNI_QUOTATION"
+      ? Math.max(
+          0,
+          componentsTotal +
+            (Number(engineeringCharges) || 0) -
+            (Number(discount) || 0)
+        )
+      : componentsTotal;
 
   // Add Item
   const handleAddItem = (type: "HARDWARE" | "SERVICE" = "HARDWARE") => {
@@ -1032,6 +1083,19 @@ export default function EditRadQuotationPage({
           }
         : quotationType === "PCB"
         ? { ...pcbSpecs, images: pcbImages, leadTime: pcbLeadTime || "12 - 21 Days", bankDetails: activeBank, bankAccountId: activeBank?.id }
+        : quotationType === "UNI_QUOTATION"
+        ? {
+            completionTime: uniCompletionTime || leadTime || "10 business working days",
+            componentsTotal,
+            engineeringCharges: Number(engineeringCharges) || 0,
+            discount: Number(discount) || 0,
+            validityDays: Number(validityDays) || 5,
+            warrantyText: warranty || null,
+            paymentTermsText: paymentMethod || "80% advance payment",
+            itemImages: items.map((it) => it.image || null),
+            bankDetails: activeBank,
+            bankAccountId: activeBank?.id,
+          }
         : {
             systemDesignImages,
             advancePercent: Number(advancePercent) || 60,
@@ -1047,7 +1111,10 @@ export default function EditRadQuotationPage({
       quotationNo,
       registrationNo,
       status: targetStatus || quotationStatus || "COMPLETED",
-      projectTitle: quotationType === "PROJECT_PROPOSAL" ? projectTitle : null,
+      projectTitle:
+        quotationType === "PROJECT_PROPOSAL" || quotationType === "UNI_QUOTATION"
+          ? projectTitle
+          : null,
       preparedDate,
       expireDate,
       validityDays: Number(validityDays) || 5,
@@ -1061,17 +1128,32 @@ export default function EditRadQuotationPage({
           ? printSpecs.leadTime
           : quotationType === "PCB"
           ? pcbLeadTime
+          : quotationType === "UNI_QUOTATION"
+          ? uniCompletionTime || leadTime
           : leadTime,
-      warranty: quotationType === "PROJECT_PROPOSAL" ? warranty : null,
+      warranty:
+        quotationType === "PROJECT_PROPOSAL" || quotationType === "UNI_QUOTATION"
+          ? warranty
+          : null,
       hardwareTotal:
-        quotationType === "PROJECT_PROPOSAL" ? hardwareTotal : null,
+        quotationType === "PROJECT_PROPOSAL"
+          ? hardwareTotal
+          : quotationType === "UNI_QUOTATION"
+          ? componentsTotal
+          : null,
       servicesTotal:
-        quotationType === "PROJECT_PROPOSAL" ? servicesTotal : null,
+        quotationType === "PROJECT_PROPOSAL"
+          ? servicesTotal
+          : quotationType === "UNI_QUOTATION"
+          ? Number(engineeringCharges) || 0
+          : null,
       totalAmount,
       overview: quotationType === "PROJECT_PROPOSAL" ? overview : null,
       technicalSpecs,
       termsAndConditions:
-        quotationType === "PROJECT_PROPOSAL" ? terms : null,
+        quotationType === "PROJECT_PROPOSAL" || quotationType === "UNI_QUOTATION"
+          ? terms
+          : null,
       items: items.map((it, idx) => ({
         itemIndex: idx + 1,
         itemType: it.itemType,
@@ -1088,6 +1170,8 @@ export default function EditRadQuotationPage({
                 printTimeMinutes: it.printTimeMinutes !== undefined && it.printTimeMinutes !== "" ? Number(it.printTimeMinutes) : (it.printTimeHours ? Number(it.printTimeHours) * 60 : ""),
                 calcMode: it.calcMode || printSpecs.pricingMode || "AUTO",
               })}`
+            : quotationType === "UNI_QUOTATION" && it.image
+            ? JSON.stringify({ image: it.image, note: it.notes || "" })
             : (it.notes || null),
       })),
     };
@@ -1115,9 +1199,9 @@ export default function EditRadQuotationPage({
     } else if (preparedDate && new Date(expireDate) < new Date(preparedDate)) {
       missing["expireDate"] = "Quotation Expire Date (must be on or after Prepared Date)";
     }
-    if (quotationType === "PROJECT_PROPOSAL") {
+    if (quotationType === "PROJECT_PROPOSAL" || quotationType === "UNI_QUOTATION") {
       if (!projectTitle.trim()) {
-        missing["projectTitle"] = "Project Title";
+        missing["projectTitle"] = "Project Proposal Title";
       }
     }
     if (items.length === 0) {
@@ -1321,12 +1405,16 @@ export default function EditRadQuotationPage({
       ? "/rad/project-proposal"
       : quotationType === "THREE_D_PRINT"
       ? "/rad/3d-print"
+      : quotationType === "UNI_QUOTATION"
+      ? "/rad/uni-quotation"
       : "/rad/pcb";
 
   const savedLabel =
     quotationType === "PROJECT_PROPOSAL"
       ? "Saved Proposals"
       : quotationType === "THREE_D_PRINT"
+      ? "Saved Quotations"
+      : quotationType === "UNI_QUOTATION"
       ? "Saved Quotations"
       : "Saved Plans";
 
@@ -1335,6 +1423,8 @@ export default function EditRadQuotationPage({
       ? "bg-teal-600 text-white"
       : quotationType === "THREE_D_PRINT"
       ? "bg-amber-600 text-white"
+      : quotationType === "UNI_QUOTATION"
+      ? "bg-blue-600 text-white"
       : "bg-emerald-600 text-white";
 
   return (
@@ -1690,6 +1780,56 @@ export default function EditRadQuotationPage({
                   </p>
                 )}
               </div>
+
+              {/* Uni Quotation Specific Header Fields */}
+              {quotationType === "UNI_QUOTATION" && (
+                <div className="space-y-4 pt-3 border-t border-slate-800">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-xs font-semibold text-blue-400 mb-1">
+                        Project Proposal Title * (e.g. Cartridge Lighting System)
+                      </label>
+                      <input
+                        id="field-projectTitle"
+                        type="text"
+                        value={projectTitle}
+                        onChange={(e) => {
+                          setProjectTitle(e.target.value);
+                          if (e.target.value.trim()) clearFieldError("projectTitle");
+                        }}
+                        placeholder="e.g. Cartridge Lighting System"
+                        className={`w-full rounded-lg px-3 py-2 text-sm text-white font-medium focus:outline-none transition-colors ${
+                          unfilledFields["projectTitle"]
+                            ? "border-2 border-red-500 ring-2 ring-red-500/50 bg-red-950/30 text-white placeholder-red-300/60"
+                            : "bg-slate-950 border border-slate-700 focus:border-blue-500"
+                        }`}
+                      />
+                      {unfilledFields["projectTitle"] && (
+                        <p className="text-[11px] text-red-400 font-medium mt-1 flex items-center gap-1">
+                          <AlertCircle className="w-3 h-3 text-red-400 shrink-0" />
+                          <span>Project Proposal Title is required</span>
+                        </p>
+                      )}
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-300 mb-1">
+                        Estimated Project Completion Time *
+                      </label>
+                      <input
+                        type="text"
+                        value={uniCompletionTime}
+                        onChange={(e) => {
+                          setUniCompletionTime(e.target.value);
+                          setLeadTime(e.target.value);
+                        }}
+                        placeholder="e.g. 10 business working days"
+                        className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-500"
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
 
               {/* Slide 1 & Slide 2 Fields for Project Proposal */}
               {quotationType === "PROJECT_PROPOSAL" && (
@@ -3410,9 +3550,55 @@ export default function EditRadQuotationPage({
                           </div>
                         </div>
                       ) : (
-                        /* Manual Unit Rate Layout (Standard or PCB) */
-                        <div className="grid grid-cols-1 md:grid-cols-12 gap-3">
-                          <div className="md:col-span-6">
+                        /* Manual Unit Rate Layout (Standard, PCB or Uni Quotation) */
+                        <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-start">
+                          {quotationType === "UNI_QUOTATION" && (
+                            <div className="md:col-span-2">
+                              <label className="block text-[11px] font-medium text-blue-400 mb-1">
+                                Image
+                              </label>
+                              <div className="flex items-center gap-1.5">
+                                {item.image ? (
+                                  <div className="relative group w-10 h-10 rounded border border-slate-700 bg-slate-900 overflow-hidden shrink-0">
+                                    <img
+                                      src={item.image}
+                                      alt="Part"
+                                      className="w-full h-full object-contain"
+                                    />
+                                    <button
+                                      type="button"
+                                      onClick={() => handleItemChange(item.id, "image", "")}
+                                      className="absolute inset-0 bg-red-950/80 text-white text-[10px] flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                                      title="Remove"
+                                    >
+                                      ✕
+                                    </button>
+                                  </div>
+                                ) : null}
+                                <label className="px-2 py-1.5 bg-slate-900 hover:bg-slate-800 text-blue-300 border border-slate-700 rounded text-[10px] font-medium cursor-pointer inline-flex items-center gap-1">
+                                  <Upload className="w-3 h-3" />
+                                  <span>{item.image ? "Change" : "Upload"}</span>
+                                  <input
+                                    type="file"
+                                    accept="image/*"
+                                    className="hidden"
+                                    onChange={(e) => {
+                                      const file = e.target.files?.[0];
+                                      if (file) {
+                                        const reader = new FileReader();
+                                        reader.onload = () => {
+                                          handleItemChange(item.id, "image", reader.result as string);
+                                        };
+                                        reader.readAsDataURL(file);
+                                      }
+                                    }}
+                                  />
+                                </label>
+                              </div>
+                            </div>
+                          )}
+
+                          <div className={quotationType === "UNI_QUOTATION" ? "md:col-span-4" : "md:col-span-6"}>
                             <label className="block text-[11px] font-medium text-slate-400 mb-1">
                               Product / Item Description *
                             </label>
@@ -3548,6 +3734,56 @@ export default function EditRadQuotationPage({
                   </div>
                   <div className="border-t border-slate-800 pt-2 flex justify-between items-center">
                     <span className="text-teal-400 font-bold text-sm">Total Investment:</span>
+                    <span className="font-mono text-emerald-400 text-lg font-bold">
+                      {formatLKR(totalAmount)}
+                    </span>
+                  </div>
+                </div>
+              ) : quotationType === "UNI_QUOTATION" ? (
+                <div className="space-y-3 bg-slate-950/60 p-3.5 rounded-lg border border-slate-800/80 text-xs">
+                  <div className="flex justify-between items-center text-slate-400">
+                    <span>1. Components Cost:</span>
+                    <span className="font-mono text-slate-200 font-semibold">
+                      {formatLKR(componentsTotal)}
+                    </span>
+                  </div>
+
+                  <div className="space-y-1">
+                    <div className="flex justify-between items-center text-slate-400">
+                      <span>2. Engineering Charges:</span>
+                      <span className="font-mono text-slate-200 font-semibold">
+                        {formatLKR(Number(engineeringCharges) || 0)}
+                      </span>
+                    </div>
+                    <input
+                      type="number"
+                      min="0"
+                      value={engineeringCharges}
+                      onChange={(e) => setEngineeringCharges(e.target.value)}
+                      placeholder="Engineering Charges (LKR)"
+                      className="w-full bg-slate-900 border border-slate-700 rounded px-2.5 py-1 text-xs text-white font-mono focus:outline-none focus:border-blue-500"
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <div className="flex justify-between items-center text-amber-400">
+                      <span>3. Discount (Deduction):</span>
+                      <span className="font-mono text-amber-300 font-semibold">
+                        -{formatLKR(Number(discount) || 0)}
+                      </span>
+                    </div>
+                    <input
+                      type="number"
+                      min="0"
+                      value={discount}
+                      onChange={(e) => setDiscount(e.target.value)}
+                      placeholder="Discount Amount (LKR)"
+                      className="w-full bg-slate-900 border border-slate-700 rounded px-2.5 py-1 text-xs text-white font-mono focus:outline-none focus:border-blue-500"
+                    />
+                  </div>
+
+                  <div className="border-t border-slate-800 pt-2 flex justify-between items-center">
+                    <span className="text-blue-400 font-bold text-sm">Total Project Cost:</span>
                     <span className="font-mono text-emerald-400 text-lg font-bold">
                       {formatLKR(totalAmount)}
                     </span>

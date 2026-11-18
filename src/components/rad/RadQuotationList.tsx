@@ -38,7 +38,7 @@ interface RdQuotationItem {
 
 interface RdQuotation {
   id: number;
-  type: "PROJECT_PROPOSAL" | "THREE_D_PRINT" | "PCB";
+  type: "PROJECT_PROPOSAL" | "THREE_D_PRINT" | "PCB" | "UNI_QUOTATION";
   registrationNo?: string | null;
   quotationNo: string;
   projectTitle?: string | null;
@@ -63,7 +63,7 @@ interface RdQuotation {
 }
 
 interface RadQuotationListProps {
-  type: "PROJECT_PROPOSAL" | "THREE_D_PRINT" | "PCB";
+  type: "PROJECT_PROPOSAL" | "THREE_D_PRINT" | "PCB" | "UNI_QUOTATION";
   title: string;
   subtitle: string;
   createLabel: string;
@@ -71,7 +71,7 @@ interface RadQuotationListProps {
   createHref: string;
   icon: React.ComponentType<{ className?: string }>;
   badgeText: string;
-  themeColor: "teal" | "amber" | "emerald";
+  themeColor: "teal" | "amber" | "emerald" | "blue";
 }
 
 export function RadQuotationList({
@@ -325,6 +325,13 @@ export function RadQuotationList({
       accentBorder: "border-emerald-500",
       activeTab: "bg-emerald-600 text-white",
     },
+    blue: {
+      btnBg: "bg-blue-600 hover:bg-blue-500",
+      iconColor: "text-blue-400",
+      badgeClass: "bg-blue-900/50 text-blue-300 border-blue-700/60",
+      accentBorder: "border-blue-500",
+      activeTab: "bg-blue-600 text-white",
+    },
   }[themeColor];
 
   const defaultSavedLabel =
@@ -333,6 +340,8 @@ export function RadQuotationList({
       ? "Saved Proposals"
       : type === "THREE_D_PRINT"
       ? "Saved Quotes"
+      : type === "UNI_QUOTATION"
+      ? "Saved Uni Quotes"
       : "Saved Plans");
 
   return (
