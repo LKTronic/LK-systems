@@ -3,8 +3,7 @@ import { PrismaClient } from "@prisma/client";
 /**
  * Generate sequential R&D quotation numbers based on type:
  * - PROJECT_PROPOSAL: YYYYMMDDPQV1, YYYYMMDDPQV2, ...
- * - THREE_D_PRINT: YYYYMMDD3DQ1, YYYYMMDD3DQ2, ...
- * - PCB: YYYYMMDDPCB1, YYYYMMDDPCB2, ...
+ * - THREE_D_PRINT & PCB: YYYYMMDDQV1, YYYYMMDDQV2, ... (shared sequence for both 3D & PCB)
  */
 export async function getNextRdQuotationNo(
   tx: any,
@@ -17,10 +16,10 @@ export async function getNextRdQuotationNo(
   const dd = String(now.getDate()).padStart(2, "0");
   const datePrefix = `${yyyy}${mm}${dd}`;
 
+  // Both THREE_D_PRINT and PCB share the "QV" prefix and sequential counter
   let codePrefix = "QV";
   if (type === "PROJECT_PROPOSAL") codePrefix = "PQV";
-  else if (type === "THREE_D_PRINT") codePrefix = "3DQ";
-  else if (type === "PCB") codePrefix = "PCB";
+  else codePrefix = "QV";
 
   const basePattern = `${datePrefix}${codePrefix}`;
 

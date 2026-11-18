@@ -717,24 +717,22 @@ describe("Unit Tests: Supply Excel Supplier Image Handling", () => {
       "20261116PQV3"
     );
 
-    // 3D Print (3DQ)
+    // 3D Print & PCB Fabrication (Shared QV Series)
     assert.equal(
       await getNextRdQuotationNo([], "THREE_D_PRINT", fixedDate),
-      "202611163DQ1"
+      "20261116QV1"
     );
     assert.equal(
-      await getNextRdQuotationNo(["202611163DQ1", "202611163DQ7"], "THREE_D_PRINT", fixedDate),
-      "202611163DQ8"
-    );
-
-    // PCB Fabrication (PCB)
-    assert.equal(
-      await getNextRdQuotationNo([], "PCB", fixedDate),
-      "20261116PCB1"
+      await getNextRdQuotationNo(["20261116QV1"], "PCB", fixedDate),
+      "20261116QV2"
     );
     assert.equal(
-      await getNextRdQuotationNo(["20261116PCB4"], "PCB", fixedDate),
-      "20261116PCB5"
+      await getNextRdQuotationNo(["20261116QV1", "20261116QV2"], "THREE_D_PRINT", fixedDate),
+      "20261116QV3"
+    );
+    assert.equal(
+      await getNextRdQuotationNo(["20261116QV1", "20261116QV7"], "PCB", fixedDate),
+      "20261116QV8"
     );
   });
 

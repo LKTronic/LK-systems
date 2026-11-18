@@ -13,7 +13,7 @@ export default function PcbQuotationsPage() {
       savedLabel="Saved Plans"
       createHref="/rad/create?type=PCB"
       icon={Cpu}
-      badgeText="PCB Series"
+      badgeText="QV Series"
       themeColor="emerald"
     />
   );
