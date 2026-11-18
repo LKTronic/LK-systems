@@ -96,7 +96,7 @@ def draw_slide_footer(img, draw, page_num=2):
     draw.line([(W - 280, H - 145), (W - 80, H - 145)], fill=LK_TEAL + (255,), width=4)
 
     # Ecosystem individual logos footer
-    footer_logos = ['lk_tronics', 'iot', 'orange_pi', 'arduino', 'stm32', 'raspberry_pi']
+    footer_logos = ['lk_tronics', 'iot', 'nvidia_jetson', 'arduino', 'stm32', 'raspberry_pi']
     start_x = 90
     total_w = 1150
     slot_w = total_w / len(footer_logos)
@@ -106,7 +106,7 @@ def draw_slide_footer(img, draw, page_num=2):
         logo_path = f"public/template_assets/logos/footer/{name}.png"
         if os.path.exists(logo_path):
             l_img = Image.open(logo_path).convert("RGBA")
-            max_h = 75 if name in ("lk_tronics", "iot", "lk_tronics_iot") else 60
+            max_h = 75 if name in ("lk_tronics", "iot", "lk_tronics_iot") else 65 if name == "nvidia_jetson" else 60
             scaled = fit_logo(l_img, slot_w - 35, max_h)
             sw, sh = scaled.size
             cx = int(start_x + i * slot_w + slot_w / 2)
