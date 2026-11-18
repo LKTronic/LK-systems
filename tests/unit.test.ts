@@ -895,6 +895,43 @@ describe("Unit Tests: Supply Excel Supplier Image Handling", () => {
     const defInv = getDefaultInverterInfo();
     assert.equal(defInv.batterySystem, "48V DC");
     assert.equal(defInv.physicalDamage, "None / No physical damage observed");
+    assert.equal(defInv.serialNumberBox, "");
+    assert.equal(defInv.serialNumberInverter, "");
+  });
+
+  it("generates official Letterhead Product Checklist PDF for Inverter without MAC address and with box/inverter serials", async () => {
+    const inverterChecklist: ProductChecklist = {
+      id: "chk-inv-01",
+      checklistNo: "QC-INV-20261118-01",
+      type: "INVERTER",
+      inverterInfo: {
+        arrivedDate: "2026-11-18",
+        modelNumber: "Deye SUN-5K-SG03LP1",
+        serialNumberInverter: "INV202611-1234",
+        serialNumberBox: "BX-INV202611-1234",
+        batterySystem: "48V DC Low Voltage",
+        physicalDamage: "None / Pristine factory packaging",
+      },
+      checkedDate: "2026-11-18",
+      tests: getDefaultTestItems("INVERTER"),
+      checkedByName: "Kasun Perera",
+      checkedByDesignation: "Quality Control & Hardware Engineer",
+      additionalNotes: [],
+      overallQcPassed: true,
+      createdAt: "2026-11-18T06:00:00.000Z",
+      updatedAt: "2026-11-18T06:00:00.000Z",
+    };
+
+    const doc = await generateChecklistPdf(inverterChecklist);
+    assert.ok(doc);
+    assert.equal(doc.getNumberOfPages(), 1);
+
+    const pageStream = (doc as any).internal.pages[1].join("\n");
+    assert.ok(pageStream.includes("Serial Number \\(Inveter\\):"));
+    assert.ok(pageStream.includes("Serial Number \\(Box\\):"));
+    assert.ok(pageStream.includes("INV202611-1234"));
+    assert.ok(pageStream.includes("BX-INV202611-1234"));
+    assert.ok(!pageStream.includes("MAC Address:"));
   });
 
   it("generates official Letterhead Product Checklist PDF cleanly without errors", async () => {

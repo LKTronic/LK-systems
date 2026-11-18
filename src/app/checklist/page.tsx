@@ -72,6 +72,7 @@ export default function ChecklistPage() {
   const [batteryInfo, setBatteryInfo] = useState<BatteryInfo>(getDefaultBatteryInfo());
   const [inverterInfo, setInverterInfo] = useState<InverterInfo>(getDefaultInverterInfo());
   const [boxSerialManuallyDiverged, setBoxSerialManuallyDiverged] = useState(false);
+  const [inverterBoxSerialDiverged, setInverterBoxSerialDiverged] = useState(false);
 
   // Section 2: QC Tests & Dates
   const [checkedDate, setCheckedDate] = useState<string>(() => new Date().toISOString().split("T")[0]);
@@ -158,6 +159,7 @@ export default function ChecklistPage() {
     setChecklistType(newType);
     setTests(getDefaultTestItems(newType));
     setBoxSerialManuallyDiverged(false);
+    setInverterBoxSerialDiverged(false);
     if (!editingId && isNumberAutoLocked) {
       setChecklistNo(formatAutoChecklistNo(newType));
       fetchNextNumber(newType);
@@ -188,6 +190,33 @@ export default function ChecklistPage() {
       serialNumberBox: prev.serialNumberBattery,
     }));
     showNotification("success", "Swapped Battery Serial and Box Serial numbers");
+  };
+
+  const handleInverterSerialChange = (val: string) => {
+    setInverterInfo((prev) => ({
+      ...prev,
+      serialNumberInverter: val,
+      serialNumber: val,
+      serialNumberBox: inverterBoxSerialDiverged ? prev.serialNumberBox : val,
+    }));
+  };
+
+  const handleInverterBoxSerialChange = (val: string) => {
+    setInverterBoxSerialDiverged(true);
+    setInverterInfo((prev) => ({
+      ...prev,
+      serialNumberBox: val,
+    }));
+  };
+
+  const handleSwapInverterSerials = () => {
+    setInverterInfo((prev) => ({
+      ...prev,
+      serialNumberInverter: prev.serialNumberBox,
+      serialNumberBox: prev.serialNumberInverter,
+      serialNumber: prev.serialNumberBox,
+    }));
+    showNotification("success", "Swapped Inverter Serial and Box Serial numbers");
   };
 
   // Toggle Test Checkbox
@@ -252,7 +281,12 @@ export default function ChecklistPage() {
       setBatteryInfo(item.batteryInfo);
     }
     if (item.type === "INVERTER" && item.inverterInfo) {
-      setInverterInfo(item.inverterInfo);
+      setInverterInfo({
+        ...getDefaultInverterInfo(),
+        ...item.inverterInfo,
+        serialNumberInverter: item.inverterInfo.serialNumberInverter || item.inverterInfo.serialNumber || "",
+        serialNumberBox: item.inverterInfo.serialNumberBox || "",
+      });
     }
     setCheckedDate(item.checkedDate || new Date().toISOString().split("T")[0]);
     setTests(item.tests || getDefaultTestItems(item.type));
@@ -360,7 +394,7 @@ export default function ChecklistPage() {
       : (c.inverterInfo?.modelNumber || "").toLowerCase();
     const serial = c.type === "BATTERY"
       ? ((c.batteryInfo?.serialNumberBox || "") + " " + (c.batteryInfo?.serialNumberBattery || "")).toLowerCase()
-      : (c.inverterInfo?.serialNumber || "").toLowerCase();
+      : ((c.inverterInfo?.serialNumberBox || "") + " " + (c.inverterInfo?.serialNumberInverter || "") + " " + (c.inverterInfo?.serialNumber || "")).toLowerCase();
     const checker = (c.checkedByName || "").toLowerCase();
     return no.includes(q) || model.includes(q) || serial.includes(q) || checker.includes(q);
   });
@@ -746,30 +780,41 @@ export default function ChecklistPage() {
                     />
                   </div>
 
-                  {/* MAC Address */}
+                  {/* Serial Number (Inverter) */}
                   <div>
-                    <label className="block text-xs font-semibold text-slate-400 mb-1">
-                      MAC Address *
-                    </label>
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="text-xs font-semibold text-slate-400">
+                        Serial Number (Inveter) *
+                      </label>
+                      <button
+                        type="button"
+                        onClick={handleSwapInverterSerials}
+                        className="text-[10px] text-teal-400 hover:text-teal-300 flex items-center gap-1 transition-colors"
+                        title="Swap Inverter and Box serial numbers"
+                      >
+                        <ArrowLeftRight className="w-3 h-3" />
+                        <span>Swap Serials</span>
+                      </button>
+                    </div>
                     <input
                       type="text"
-                      value={inverterInfo.macAddress}
-                      onChange={(e) => setInverterInfo({ ...inverterInfo, macAddress: e.target.value })}
-                      placeholder="e.g. 74:83:C2:59:E1:9F"
+                      value={inverterInfo.serialNumberInverter}
+                      onChange={(e) => handleInverterSerialChange(e.target.value)}
+                      placeholder="e.g. INV2410-983021"
                       className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-teal-500 font-mono"
                     />
                   </div>
 
-                  {/* Serial Number */}
+                  {/* Serial Number (Box) */}
                   <div>
                     <label className="block text-xs font-semibold text-slate-400 mb-1">
-                      Serial Number *
+                      Serial Number (Box) *
                     </label>
                     <input
                       type="text"
-                      value={inverterInfo.serialNumber}
-                      onChange={(e) => setInverterInfo({ ...inverterInfo, serialNumber: e.target.value })}
-                      placeholder="e.g. INV2410-983021"
+                      value={inverterInfo.serialNumberBox}
+                      onChange={(e) => handleInverterBoxSerialChange(e.target.value)}
+                      placeholder="e.g. BX-INV2410-983021"
                       className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-teal-500 font-mono"
                     />
                   </div>
@@ -1242,7 +1287,7 @@ export default function ChecklistPage() {
                     : item.inverterInfo?.modelNumber || "N/A";
                   const serialNo = isBat
                     ? item.batteryInfo?.serialNumberBattery || item.batteryInfo?.serialNumberBox || "N/A"
-                    : item.inverterInfo?.serialNumber || "N/A";
+                    : item.inverterInfo?.serialNumberInverter || item.inverterInfo?.serialNumberBox || item.inverterInfo?.serialNumber || "N/A";
                   const arrivedDate = isBat
                     ? item.batteryInfo?.arrivedDate || "-"
                     : item.inverterInfo?.arrivedDate || "-";

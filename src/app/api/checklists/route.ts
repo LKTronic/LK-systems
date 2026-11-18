@@ -28,7 +28,7 @@ export async function GET(req: NextRequest) {
           : (c.inverterInfo?.modelNumber || "").toLowerCase();
         const serial = c.type === "BATTERY"
           ? ((c.batteryInfo?.serialNumberBox || "") + " " + (c.batteryInfo?.serialNumberBattery || "")).toLowerCase()
-          : (c.inverterInfo?.serialNumber || "").toLowerCase();
+          : ((c.inverterInfo?.serialNumberBox || "") + " " + (c.inverterInfo?.serialNumberInverter || "") + " " + (c.inverterInfo?.serialNumber || "")).toLowerCase();
         const checker = (c.checkedByName || "").toLowerCase();
 
         return no.includes(query) || model.includes(query) || serial.includes(query) || checker.includes(query);
