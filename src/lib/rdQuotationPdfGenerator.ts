@@ -221,9 +221,9 @@ async function generateHardwareOrPcbPdf(
 
   // --- METADATA BOX (Top Right) ---
   // Positioned below the center circular logo and watermark (Y=32-62mm)
-  // Right aligned with table right border (184.6mm), width 70mm, left 114.6mm
-  const metaBoxW = 70.0;
-  const metaBoxX = 184.6 - metaBoxW; // 114.6mm
+  // Right-aligned with table right border (184.6mm), compact width 59mm to reduce middle space
+  const metaBoxW = 59.0;
+  const metaBoxX = 184.6 - metaBoxW; // 125.6mm
   const metaBoxY = 65.5;
   const metaBoxH = 24.5;
 
@@ -254,7 +254,8 @@ async function generateHardwareOrPcbPdf(
     doc.setFont("times", "normal");
     doc.setFontSize(9.5);
     doc.setTextColor(0, 0, 0);
-    doc.text(`${r.label}  ${r.val}`, metaBoxX + 2.5, currentMetaY);
+    doc.text(r.label, metaBoxX + 2.5, currentMetaY);
+    doc.text(String(r.val), metaBoxX + metaBoxW - 2.5, currentMetaY, { align: "right" });
     currentMetaY += 4.8;
   });
 
