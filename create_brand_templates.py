@@ -171,31 +171,35 @@ def make_slide1():
     draw_chamfered_card(draw, 140, ref_y, W - 140, ref_y + ref_h, chamfer=20, fill=CARD_BG, stroke=BORDER_COLOR, width=2)
 
     # Left Column: Official Contact & Communication Channels (x from 180 to 920)
-    draw.text((180, ref_y + 65), "COMMUNICATION CHANNELS:", font=font_sm_bold, fill=LK_MUTED + (255,))
-    draw.text((180, ref_y + 115), "Email: rad@lk-tronics.com", font=font_body, fill=LK_SLATE + (255,))
-    draw.text((180, ref_y + 165), "Hotline: (+94) 77 739 4782 / 0114 215 515", font=font_body, fill=LK_SLATE + (255,))
-    draw.text((180, ref_y + 215), "Web: https://www.lk-tronics.com", font=font_body, fill=LK_TEAL_LIGHT + (255,))
-    draw.text((180, ref_y + 265), "Address: High-Level Road, Homagama, Sri Lanka", font=font_body, fill=LK_SLATE + (255,))
+    font_comm_header = ImageFont.truetype(os.path.join(FONT_DIR, "arialbd.ttf"), 26)
+    font_comm_text = ImageFont.truetype(os.path.join(FONT_DIR, "arial.ttf"), 32)
+    draw.text((180, ref_y + 55), "COMMUNICATION CHANNELS:", font=font_comm_header, fill=LK_MUTED + (255,))
+    draw.text((180, ref_y + 110), "Email: rad@lk-tronics.com", font=font_comm_text, fill=LK_SLATE + (255,))
+    draw.text((180, ref_y + 168), "Hotline: (+94) 77 739 4782 / 0114 215 515", font=font_comm_text, fill=LK_SLATE + (255,))
+    draw.text((180, ref_y + 226), "Web: https://www.lk-tronics.com", font=font_comm_text, fill=LK_TEAL_LIGHT + (255,))
+    draw.text((180, ref_y + 284), "Address: High-Level Road, Homagama, Sri Lanka", font=font_comm_text, fill=LK_SLATE + (255,))
 
     # Divider 1
     draw.line([(920, ref_y + 30), (920, ref_y + ref_h - 30)], fill=BORDER_COLOR + (255,), width=2)
 
     # Center Column: Quotation To, Prepared Date & Validity Period (x from 960 to 1800)
-    draw.text((960, ref_y + 35), "QUOTATION TO / CLIENT DETAILS:", font=font_sm_bold, fill=LK_MUTED + (255,))
-    # (jsPDF prints dynamic data.quotationTo here in bold LK Slate at Y=137.0mm)
+    font_meta_header = ImageFont.truetype(os.path.join(FONT_DIR, "arialbd.ttf"), 26)
+    font_meta_sub = ImageFont.truetype(os.path.join(FONT_DIR, "arial.ttf"), 24)
+    draw.text((960, ref_y + 35), "QUOTATION TO / CLIENT DETAILS:", font=font_meta_header, fill=LK_MUTED + (255,))
+    # (jsPDF prints dynamic data.quotationTo here in bold LK Slate at Y=137.5mm at 22pt)
 
     # Inner horizontal divider in Center Column
     draw.line([(960, ref_y + 225), (1780, ref_y + 225)], fill=BORDER_COLOR + (255,), width=1)
 
     # Sub-col A: Prepared Date
-    draw.text((960, ref_y + 250), "PREPARED DATE:", font=font_sm_bold, fill=LK_MUTED + (255,))
-    draw.text((960, ref_y + 342), "Official Issue Date", font=font_sm, fill=LK_MUTED + (255,))
-    # (jsPDF prints dynamic data.preparedDate here at Y=180.0mm)
+    draw.text((960, ref_y + 245), "PREPARED DATE:", font=font_meta_header, fill=LK_MUTED + (255,))
+    draw.text((960, ref_y + 348), "Official Issue Date", font=font_meta_sub, fill=LK_MUTED + (255,))
+    # (jsPDF prints dynamic data.preparedDate here at Y=180.0mm at 21pt)
 
     # Sub-col B: Validity Period
-    draw.text((1380, ref_y + 250), "VALIDITY PERIOD:", font=font_sm_bold, fill=LK_MUTED + (255,))
-    draw.text((1380, ref_y + 342), "Commercial Validity Term", font=font_sm, fill=LK_MUTED + (255,))
-    # (jsPDF prints dynamic validity period here at Y=180.0mm)
+    draw.text((1380, ref_y + 245), "VALIDITY PERIOD:", font=font_meta_header, fill=LK_MUTED + (255,))
+    draw.text((1380, ref_y + 348), "Commercial Validity Term", font=font_meta_sub, fill=LK_MUTED + (255,))
+    # (jsPDF prints dynamic validity period here at Y=180.0mm at 21pt)
 
     # Divider 2
     draw.line([(1815, ref_y + 30), (1815, ref_y + ref_h - 30)], fill=BORDER_COLOR + (255,), width=2)
@@ -309,7 +313,9 @@ def make_slide5():
 
     # Left Box: Payment Terms & Credit Facility
     draw_chamfered_card(draw, 180, 200, 1440, 580, chamfer=16, fill=(248, 250, 252), stroke=BORDER_COLOR, width=2)
-    draw.text((220, 230), "PURCHASE ORDER & ADVANCE TERMS", font=font_sm_bold, fill=LK_ORANGE + (255,))
+    font_po_title = ImageFont.truetype(os.path.join(FONT_DIR, "arialbd.ttf"), 30)
+    font_po_body = ImageFont.truetype(os.path.join(FONT_DIR, "arial.ttf"), 36)
+    draw.text((220, 230), "PURCHASE ORDER & ADVANCE TERMS", font=font_po_title, fill=LK_ORANGE + (255,))
     default_clause = (
         "The total value of the product or 60% of the total value\n"
         "should be payable together with your purchase order.\n\n"
@@ -317,7 +323,7 @@ def make_slide5():
         "credit facility can be extended for your orders.\n"
         "To initiate this credit facility, kindly reach out to us.)"
     )
-    draw.text((220, 280), default_clause, font=font_body, fill=LK_SLATE + (255,), spacing=8)
+    draw.text((220, 285), default_clause, font=font_po_body, fill=LK_SLATE + (255,), spacing=10)
 
     # Right Box: Corporate Banking Card (Hatton National Bank)
     bank_x1, bank_y1, bank_x2, bank_y2 = 180, 630, W - 180, 1170
@@ -333,8 +339,10 @@ def make_slide5():
     draw.text((bank_x1 + 300, bank_y1 + 260), "Commercial Escrow Account", font=font_sm, fill=(200, 220, 230, 255), anchor="ma")
     draw.text((bank_x1 + 300, bank_y1 + 440), "VERIFIED CORPORATE ENTITY", font=font_sm_bold, fill=LK_ORANGE + (255,), anchor="ma")
 
-    # Right Content Area of Bank Card
-    row_y = bank_y1 + 50
+    # Right Content Area of Bank Card (Enlarged to match 22pt high-visibility standard)
+    font_bank_label = ImageFont.truetype(os.path.join(FONT_DIR, "arialbd.ttf"), 38)
+    font_bank_val = ImageFont.truetype(os.path.join(FONT_DIR, "arialbd.ttf"), 42)
+    row_y = bank_y1 + 45
     fields = [
         ("Account Name", "LK TRONICS TRADING PVT LTD", LK_TEAL),
         ("Account Number", "047010021564", LK_ORANGE),
@@ -343,10 +351,10 @@ def make_slide5():
     ]
 
     for label, val, color in fields:
-        draw.text((bank_x1 + 650, row_y + 15), label, font=font_section, fill=LK_MUTED + (255,))
-        draw.text((bank_x1 + 1000, row_y + 15), ":", font=font_section, fill=LK_MUTED + (255,))
-        draw.text((bank_x1 + 1060, row_y + 15), val, font=font_section, fill=color + (255,))
-        draw.line([(bank_x1 + 650, row_y + 85), (bank_x2 - 50, row_y + 85)], fill=BORDER_COLOR + (255,), width=1)
+        draw.text((bank_x1 + 640, row_y + 12), label, font=font_bank_label, fill=LK_MUTED + (255,))
+        draw.text((bank_x1 + 1160, row_y + 12), ":", font=font_bank_label, fill=LK_MUTED + (255,))
+        draw.text((bank_x1 + 1210, row_y + 10), val, font=font_bank_val, fill=color + (255,))
+        draw.line([(bank_x1 + 640, row_y + 88), (bank_x2 - 50, row_y + 88)], fill=BORDER_COLOR + (255,), width=1)
         row_y += 115
 
     out_path = os.path.join(OUT_DIR, "brand_slide5_bank.png")
