@@ -20,6 +20,8 @@ import {
   DEFAULT_PCB_SPECS,
   LK_TRONICS_BANK_DETAILS,
   calculate3DPrintPrice,
+  DEFAULT_PROJECT_PROPOSAL_HARDWARE,
+  DEFAULT_PROJECT_PROPOSAL_SERVICES,
   extractAdditionalTerms,
   getProjectProposalCombinedTerms,
 } from "../src/lib/rdQuotationDefaults";
@@ -1038,6 +1040,15 @@ describe("Unit Tests: Supply Excel Supplier Image Handling", () => {
     assert.ok(pageStream.includes("1. Product Details"));
     assert.ok(pageStream.includes("4. Handover Confirmation"));
     assert.ok(pageStream.includes("Signature of Collector"));
+  });
+
+  it("limits default hardware components to 4 items and services to 2 items", () => {
+    assert.equal(DEFAULT_PROJECT_PROPOSAL_HARDWARE.length, 4);
+    assert.equal(DEFAULT_PROJECT_PROPOSAL_SERVICES.length, 2);
+    assert.equal(DEFAULT_PROJECT_PROPOSAL_HARDWARE[0].productOrService, "Arduino Nano");
+    assert.equal(DEFAULT_PROJECT_PROPOSAL_HARDWARE[3].productOrService, "HLK-20M05 AC-DC 220V to 5V Power Supply");
+    assert.equal(DEFAULT_PROJECT_PROPOSAL_SERVICES[0].productOrService, "Testing / Engineering Charges");
+    assert.equal(DEFAULT_PROJECT_PROPOSAL_SERVICES[1].productOrService, "IOT Installation and Programing");
   });
 
   it("preserves custom project proposal terms including custom warranty, delivery, and scope terms", () => {

@@ -863,12 +863,12 @@ export default function EditRadQuotationPage({
   // Add Item
   const handleAddItem = (type: "HARDWARE" | "SERVICE" = "HARDWARE") => {
     if (quotationType === "PROJECT_PROPOSAL") {
-      if (type === "HARDWARE" && hardwareItems.length >= 8) {
-        alert("Maximum 8 Hardware Components (BOM) items allowed for Slide 4 presentation.");
+      if (type === "HARDWARE" && hardwareItems.length >= 4) {
+        alert("Maximum 4 Hardware Components (BOM) items allowed for Slide 4 presentation.");
         return;
       }
-      if (type === "SERVICE" && serviceItems.length >= 4) {
-        alert("Maximum 4 Engineering Services items allowed for Slide 4 presentation.");
+      if (type === "SERVICE" && serviceItems.length >= 2) {
+        alert("Maximum 2 Engineering Services items allowed for Slide 4 presentation.");
         return;
       }
     }
@@ -2266,36 +2266,36 @@ export default function EditRadQuotationPage({
                       1. Hardware Components (BOM)
                       <span
                         className={`text-[11px] font-semibold px-2 py-0.5 rounded border ${
-                          hardwareItems.length >= 8
+                          hardwareItems.length >= 4
                             ? "bg-amber-950/70 text-amber-300 border-amber-700/60"
                             : "bg-teal-950/70 text-teal-300 border-teal-800/60"
                         }`}
                       >
-                        {hardwareItems.length}/8 (Max 8)
+                        {hardwareItems.length}/4 (Max 4)
                       </span>
                     </h2>
                     <p className="text-xs text-slate-400">
-                      Physical components and modules (Max 8 items across 2 columns on Slide 4).
+                      Physical components and modules (Max 4 items on Slide 4).
                     </p>
                   </div>
 
                   <button
                     type="button"
-                    disabled={hardwareItems.length >= 8}
+                    disabled={hardwareItems.length >= 4}
                     onClick={() => handleAddItem("HARDWARE")}
                     title={
-                      hardwareItems.length >= 8
-                        ? "Maximum 8 hardware items reached for Slide 4"
+                      hardwareItems.length >= 4
+                        ? "Maximum 4 hardware items reached for Slide 4"
                         : "Add Hardware Component"
                     }
                     className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors self-start sm:self-auto ${
-                      hardwareItems.length >= 8
+                      hardwareItems.length >= 4
                         ? "bg-slate-800 text-slate-500 border border-slate-700 cursor-not-allowed opacity-60"
                         : "bg-teal-950/70 border border-teal-800/80 hover:bg-teal-900/60 text-teal-300"
                     }`}
                   >
                     <Plus className="w-3.5 h-3.5" />
-                    + Add Hardware {hardwareItems.length >= 8 ? "(Limit Reached)" : ""}
+                    + Add Hardware {hardwareItems.length >= 4 ? "(Limit Reached)" : ""}
                   </button>
                 </div>
 
@@ -2413,36 +2413,36 @@ export default function EditRadQuotationPage({
                       2. Engineering &amp; Professional Services
                       <span
                         className={`text-[11px] font-semibold px-2 py-0.5 rounded border ${
-                          serviceItems.length >= 4
+                          serviceItems.length >= 2
                             ? "bg-amber-950/70 text-amber-300 border-amber-700/60"
                             : "bg-indigo-950/70 text-indigo-300 border-indigo-800/60"
                         }`}
                       >
-                        {serviceItems.length}/4 (Max 4)
+                        {serviceItems.length}/2 (Max 2)
                       </span>
                     </h2>
                     <p className="text-xs text-slate-400">
-                      Engineering charges, installation, programming, testing &amp; calibration services (Max 4 services on Slide 4).
+                      Engineering charges, installation, programming, testing &amp; calibration services (Max 2 services on Slide 4).
                     </p>
                   </div>
 
                   <button
                     type="button"
-                    disabled={serviceItems.length >= 4}
+                    disabled={serviceItems.length >= 2}
                     onClick={() => handleAddItem("SERVICE")}
                     title={
-                      serviceItems.length >= 4
-                        ? "Maximum 4 services reached for Slide 4"
+                      serviceItems.length >= 2
+                        ? "Maximum 2 services reached for Slide 4"
                         : "Add Engineering Service"
                     }
                     className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors self-start sm:self-auto ${
-                      serviceItems.length >= 4
+                      serviceItems.length >= 2
                         ? "bg-slate-800 text-slate-500 border border-slate-700 cursor-not-allowed opacity-60"
                         : "bg-indigo-950/70 border border-indigo-800/80 hover:bg-indigo-900/60 text-indigo-300"
                     }`}
                   >
                     <Plus className="w-3.5 h-3.5" />
-                    + Add Service {serviceItems.length >= 4 ? "(Limit Reached)" : ""}
+                    + Add Service {serviceItems.length >= 2 ? "(Limit Reached)" : ""}
                   </button>
                 </div>
 

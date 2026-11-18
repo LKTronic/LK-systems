@@ -214,8 +214,6 @@ export const DEFAULT_PROJECT_PROPOSAL_HARDWARE = [
   { productOrService: "LM2696 Buck converter", quantity: 12 },
   { productOrService: "8pin serial connector", quantity: 12 },
   { productOrService: "HLK-20M05 AC-DC 220V to 5V Power Supply", quantity: 12 },
-  { productOrService: "ASUS RT-N12+ B1 3 IN 1 ROUTER/AP/RANGE EXTENDER 90IG01N0-BG310", quantity: 1 },
-  { productOrService: "Industrial Modbus Serial RS232 RS485 RS422 to WiFi Ethernet Converter Device TC-P IP Telnet 4M Flash D-TU Connector HF2211", quantity: 6 },
 ];
 
 export const DEFAULT_PROJECT_PROPOSAL_SERVICES = [
