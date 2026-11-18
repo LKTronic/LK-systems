@@ -115,57 +115,72 @@ export async function POST(request: NextRequest) {
       overview,
       technicalSpecs,
       termsAndConditions,
+      status: requestedStatus,
       items = [],
     } = body;
 
-    if (!preparedDate || !expireDate || !quotationTo || !preparedBy) {
-      return NextResponse.json(
-        { error: "Required fields missing: preparedDate, expireDate, quotationTo, or preparedBy." },
-        { status: 400 }
-      );
+    const isDraft = requestedStatus === "DRAFT";
+    const finalStatus = isDraft ? "DRAFT" : "COMPLETED";
+
+    if (!isDraft) {
+      if (!preparedDate || !expireDate || !quotationTo || !preparedBy) {
+        return NextResponse.json(
+          { error: "Required fields missing: preparedDate, expireDate, quotationTo, or preparedBy." },
+          { status: 400 }
+        );
+      }
+
+      if (new Date(expireDate) < new Date(preparedDate)) {
+        return NextResponse.json(
+          { error: "Quotation Expire Date must be on or after Prepared Date." },
+          { status: 400 }
+        );
+      }
+
+      if (type === "PROJECT_PROPOSAL" && (!projectTitle || !projectTitle.trim())) {
+        return NextResponse.json(
+          { error: "Project Title is required for Project Proposals." },
+          { status: 400 }
+        );
+      }
+
+      if (!Array.isArray(items) || items.length === 0) {
+        return NextResponse.json(
+          { error: "Quotation must contain at least one line item." },
+          { status: 400 }
+        );
+      }
+
+      if (items.some((i: any) => !i.productOrService || !i.productOrService.trim())) {
+        return NextResponse.json(
+          { error: "All line items must have a valid description or service title." },
+          { status: 400 }
+        );
+      }
+
+      if (items.some((i: any) => Number(i.quantity) < 1)) {
+        return NextResponse.json(
+          { error: "All line item quantities must be at least 1." },
+          { status: 400 }
+        );
+      }
+
+      if (items.some((i: any) => Number(i.unitPrice) < 0 || Number(i.totalPrice) < 0)) {
+        return NextResponse.json(
+          { error: "Line item prices cannot be negative." },
+          { status: 400 }
+        );
+      }
     }
 
-    if (new Date(expireDate) < new Date(preparedDate)) {
-      return NextResponse.json(
-        { error: "Quotation Expire Date must be on or after Prepared Date." },
-        { status: 400 }
-      );
-    }
-
-    if (type === "PROJECT_PROPOSAL" && (!projectTitle || !projectTitle.trim())) {
-      return NextResponse.json(
-        { error: "Project Title is required for Project Proposals." },
-        { status: 400 }
-      );
-    }
-
-    if (!Array.isArray(items) || items.length === 0) {
-      return NextResponse.json(
-        { error: "Quotation must contain at least one line item." },
-        { status: 400 }
-      );
-    }
-
-    if (items.some((i: any) => !i.productOrService || !i.productOrService.trim())) {
-      return NextResponse.json(
-        { error: "All line items must have a valid description or service title." },
-        { status: 400 }
-      );
-    }
-
-    if (items.some((i: any) => Number(i.quantity) < 1)) {
-      return NextResponse.json(
-        { error: "All line item quantities must be at least 1." },
-        { status: 400 }
-      );
-    }
-
-    if (items.some((i: any) => Number(i.unitPrice) < 0 || Number(i.totalPrice) < 0)) {
-      return NextResponse.json(
-        { error: "Line item prices cannot be negative." },
-        { status: 400 }
-      );
-    }
+    // Determine final dates and strings with draft fallbacks
+    const fallbackPreparedDate = preparedDate ? new Date(preparedDate) : new Date();
+    const fallbackExpireDate = expireDate
+      ? new Date(expireDate)
+      : new Date(fallbackPreparedDate.getTime() + (Number(validityDays) || 14) * 86400000);
+    const finalQuotationTo = quotationTo?.trim() || (isDraft ? "Draft Customer" : "Customer");
+    const finalPreparedBy = preparedBy?.trim() || (session.user as any)?.name || "LK Tronics";
+    const finalProjectTitle = projectTitle?.trim() || (type === "PROJECT_PROPOSAL" && isDraft ? "Draft Project" : null);
 
     // Determine final quotation number
     const finalQuotationNo = quotationNo?.trim() || (await getNextRdQuotationNo(prisma, type));
@@ -197,13 +212,13 @@ export async function POST(request: NextRequest) {
         type,
         quotationNo: finalQuotationNo,
         registrationNo,
-        projectTitle: projectTitle ? projectTitle.trim() : null,
-        preparedDate: new Date(preparedDate),
-        expireDate: new Date(expireDate),
+        projectTitle: finalProjectTitle,
+        preparedDate: fallbackPreparedDate,
+        expireDate: fallbackExpireDate,
         validityDays: Number(validityDays) || 14,
         paymentMethod,
-        preparedBy: preparedBy.trim(),
-        quotationTo: quotationTo.trim(),
+        preparedBy: finalPreparedBy,
+        quotationTo: finalQuotationTo,
         leadTime: leadTime ? leadTime.trim() : null,
         warranty: warranty ? warranty.trim() : null,
         hardwareTotal: Number(hardwareTotal) || 0,
@@ -212,7 +227,7 @@ export async function POST(request: NextRequest) {
         overview: overview ? overview.trim() : null,
         technicalSpecs: typeof technicalSpecs === "object" ? JSON.stringify(technicalSpecs) : technicalSpecs || null,
         termsAndConditions: termsAndConditions ? termsAndConditions.trim() : null,
-        status: "DRAFT",
+        status: finalStatus,
         createdBy: userId,
         items: {
           create: Array.isArray(items)
@@ -222,9 +237,9 @@ export async function POST(request: NextRequest) {
                 return {
                   itemIndex: idx + 1,
                   itemType: it.itemType || "HARDWARE",
-                  productOrService: it.productOrService || `Item ${idx + 1}`,
-                  quantity: qty,
-                  unitPrice: price,
+                  productOrService: it.productOrService?.trim() || `Item ${idx + 1}`,
+                  quantity: Math.max(1, qty),
+                  unitPrice: Math.max(0, price),
                   totalPrice: Number(it.totalPrice) || qty * price,
                   notes: it.notes || null,
                 };

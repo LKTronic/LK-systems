@@ -73,11 +73,13 @@ export async function POST(req: NextRequest) {
 
     const assignedNo = checklistNo || (await getNextChecklistNo(type));
     const entryId = id || `chk-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
+    const assignedStatus = body.status === "DRAFT" ? "DRAFT" : "COMPLETED";
 
     const checklistToSave: ProductChecklist = {
       id: entryId,
       checklistNo: assignedNo,
       type,
+      status: assignedStatus,
       batteryInfo: type === "BATTERY" ? batteryInfo : undefined,
       inverterInfo: type === "INVERTER" ? inverterInfo : undefined,
       checkedDate: checkedDate || new Date().toISOString().split("T")[0],

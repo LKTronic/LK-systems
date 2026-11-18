@@ -14,7 +14,7 @@ export const MATERIAL_DENSITIES: Record<string, number> = {
   "Tough Resin": 1.15,
 };
 
-export function getMaterialDensity(materialName?: string | null, fallback: number = 1.05): number {
+export function getMaterialDensity(materialName?: string | null, fallback: number = 1.27): number {
   if (!materialName) return fallback;
   const upper = materialName.toUpperCase().trim();
   if (upper.includes("PLA")) return 1.27;
@@ -82,15 +82,15 @@ export interface RdQuotationItemInput {
 export const DEFAULT_THREE_D_PRINT_SPECS: ThreeDPrintSpecs = {
   printingTechnology: "FDM (Fused Deposition Modeling)",
   infillDensity: "50%",
-  material: "ABS",
-  availableColors: "Black, White, Yellow",
+  material: "PLA",
+  availableColors: "White, Black, Transparent",
   printQuality: "Standard – 0.2 mm layer height",
   leadTime: "2 - 4 Working Days",
   filamentPricePerKg: 10000,
   filamentPricePerSpool: 10000,
   costPerHour: 200,
   markupPercent: 35,
-  materialDensity: 1.05,
+  materialDensity: 1.27,
   filamentDiameterMm: 1.75,
   spoolLengthMeters: 330,
   pricingMode: "AUTO",

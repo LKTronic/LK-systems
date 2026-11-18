@@ -100,6 +100,7 @@ export default function EditRadQuotationPage({
 
   // Common Header Fields
   const [registrationNo, setRegistrationNo] = useState("P-V 00336036");
+  const [quotationStatus, setQuotationStatus] = useState<"DRAFT" | "COMPLETED">("COMPLETED");
   const [quotationNo, setQuotationNo] = useState("");
   const [preparedDate, setPreparedDate] = useState("");
   const [expireDate, setExpireDate] = useState("");
@@ -614,6 +615,7 @@ export default function EditRadQuotationPage({
         const q = data.quotation;
 
         setQuotationType(q.type);
+        setQuotationStatus(q.status === "DRAFT" ? "DRAFT" : "COMPLETED");
         setQuotationNo(q.quotationNo || "");
         setRegistrationNo(q.registrationNo || "P-V 00336036");
         setProjectTitle(q.projectTitle || "");
@@ -761,7 +763,7 @@ export default function EditRadQuotationPage({
                 unitPrice: Number(it.unitPrice) || 0,
                 notes: it.notes && it.notes.startsWith("3D_CALC:") ? "" : (it.notes || ""),
                 calcMode: calc.calcMode || parsedSpecs?.pricingMode || "AUTO",
-                material: calc.material || parsedSpecs?.material || "ABS",
+                material: calc.material || parsedSpecs?.material || "PLA",
                 filamentLengthM: fl,
                 printTimeMinutes: ptm,
                 printTimeHours: pth,
@@ -778,7 +780,7 @@ export default function EditRadQuotationPage({
               unitPrice: 0,
               notes: "",
               calcMode: q.type === "THREE_D_PRINT" ? (parsedSpecs?.pricingMode || "AUTO") : undefined,
-              material: q.type === "THREE_D_PRINT" ? (parsedSpecs?.material || "ABS") : undefined,
+              material: q.type === "THREE_D_PRINT" ? (parsedSpecs?.material || "PLA") : undefined,
               filamentLengthM: "",
               printTimeMinutes: "",
               printTimeHours: "",
@@ -904,7 +906,7 @@ export default function EditRadQuotationPage({
         unitPrice: 0,
         notes: "",
         calcMode: quotationType === "THREE_D_PRINT" ? (printSpecs.pricingMode || "AUTO") : undefined,
-        material: quotationType === "THREE_D_PRINT" ? (printSpecs.material || "ABS") : undefined,
+        material: quotationType === "THREE_D_PRINT" ? (printSpecs.material || "PLA") : undefined,
         filamentLengthM: "",
         printTimeMinutes: "",
         printTimeHours: "",
@@ -927,8 +929,8 @@ export default function EditRadQuotationPage({
             : (Number(it.printTimeHours) || 0) * 60;
           if (mode === "AUTO" && (it.filamentLengthM || mins)) {
             const price = updatedSpecs.filamentPricePerKg ?? updatedSpecs.filamentPricePerSpool ?? 10000;
-            const itemMat = it.material || updatedSpecs.material || "ABS";
-            const density = updatedSpecs.materialDensity ?? (MATERIAL_DENSITIES[itemMat] || 1.05);
+            const itemMat = it.material || updatedSpecs.material || "PLA";
+            const density = updatedSpecs.materialDensity ?? (MATERIAL_DENSITIES[itemMat] || 1.27);
             const diameter = updatedSpecs.filamentDiameterMm ?? 1.75;
             const calc = calculate3DPrintPrice(
               it.filamentLengthM || 0,
@@ -997,7 +999,7 @@ export default function EditRadQuotationPage({
   };
 
   // Prepare Payload
-  const preparePayload = () => {
+  const preparePayload = (targetStatus?: "DRAFT" | "COMPLETED") => {
     const activeBank =
       bankAccounts.find((b) => b.id === selectedBankAccountId) ||
       bankAccounts.find((b) => b.isDefault) ||
@@ -1010,7 +1012,7 @@ export default function EditRadQuotationPage({
             ...printSpecs,
             itemCalcDetails: items.map((it) => ({
               calcMode: it.calcMode || printSpecs.pricingMode || "AUTO",
-              material: it.material || printSpecs.material || "ABS",
+              material: it.material || printSpecs.material || "PLA",
               filamentLengthM: it.filamentLengthM ?? "",
               printTimeMinutes: it.printTimeMinutes ?? (it.printTimeHours ? Number(it.printTimeHours) * 60 : ""),
               printTimeHours: it.printTimeHours ?? "",
@@ -1034,6 +1036,7 @@ export default function EditRadQuotationPage({
       type: quotationType,
       quotationNo,
       registrationNo,
+      status: targetStatus || quotationStatus || "COMPLETED",
       projectTitle: quotationType === "PROJECT_PROPOSAL" ? projectTitle : null,
       preparedDate,
       expireDate,
@@ -1070,7 +1073,7 @@ export default function EditRadQuotationPage({
         notes:
           quotationType === "THREE_D_PRINT"
             ? `3D_CALC:${JSON.stringify({
-                material: it.material || printSpecs.material || "ABS",
+                material: it.material || printSpecs.material || "PLA",
                 filamentLengthM: it.filamentLengthM !== undefined && it.filamentLengthM !== "" ? Number(it.filamentLengthM) : "",
                 printTimeMinutes: it.printTimeMinutes !== undefined && it.printTimeMinutes !== "" ? Number(it.printTimeMinutes) : (it.printTimeHours ? Number(it.printTimeHours) * 60 : ""),
                 calcMode: it.calcMode || printSpecs.pricingMode || "AUTO",
@@ -1189,15 +1192,17 @@ export default function EditRadQuotationPage({
   };
 
   // Save Quotation Handler (PUT)
-  const handleSave = async (andDownload = false) => {
-    const isValid = await validateForm();
-    if (!isValid) return;
+  const handleSave = async (targetStatus: "DRAFT" | "COMPLETED" = "COMPLETED", andDownload = false) => {
+    if (targetStatus === "COMPLETED") {
+      const isValid = await validateForm();
+      if (!isValid) return;
+    }
 
     setIsSaving(true);
     setMessage(null);
 
     try {
-      const payload = preparePayload();
+      const payload = preparePayload(targetStatus);
       const res = await fetch(`/api/rad/quotations/${quotationId}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
@@ -1209,13 +1214,23 @@ export default function EditRadQuotationPage({
         throw new Error(err.error || "Failed to update quotation");
       }
 
+      setQuotationStatus(targetStatus);
       setMessage({
         type: "success",
-        text: `Quotation ${quotationNo} updated successfully!`,
+        text: targetStatus === "DRAFT"
+          ? `Quotation ${quotationNo} saved as DRAFT successfully!`
+          : `Quotation ${quotationNo} updated and finalized successfully!`,
       });
 
       if (andDownload) {
-        await handleDownloadDirect();
+        if (targetStatus === "DRAFT") {
+          setMessage({
+            type: "error",
+            text: "Draft quotations cannot be downloaded. Please finalize first.",
+          });
+        } else {
+          await handleDownloadDirect();
+        }
       }
     } catch (err: any) {
       console.error("Update failed:", err);
@@ -1230,6 +1245,13 @@ export default function EditRadQuotationPage({
 
   // Direct PDF Download
   const handleDownloadDirect = async () => {
+    if (quotationStatus === "DRAFT") {
+      setMessage({
+        type: "error",
+        text: "Draft quotations cannot be downloaded. Please fill in all required fields and click 'Save & Download' or finalize the quotation first.",
+      });
+      return;
+    }
     const isValid = await validateForm();
     if (!isValid) return;
     setIsGeneratingPdf(true);
@@ -1351,6 +1373,15 @@ export default function EditRadQuotationPage({
               <h1 className="text-xl font-bold text-white flex items-center gap-2">
                 <FlaskConical className="w-5 h-5 text-teal-400" />
                 Edit Quotation: <span className="text-teal-400 font-mono">{quotationNo}</span>
+                {quotationStatus === "DRAFT" ? (
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-950 text-amber-300 border border-amber-800">
+                    DRAFT
+                  </span>
+                ) : (
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-950 text-emerald-300 border border-emerald-800">
+                    FINAL
+                  </span>
+                )}
               </h1>
               <p className="text-xs text-slate-400">
                 Type: {quotationType.replace(/_/g, " ")} | Registered ID #{quotationId}
@@ -1379,9 +1410,25 @@ export default function EditRadQuotationPage({
             </div>
 
             <button
+              type="button"
+              onClick={() => handleSave("DRAFT", false)}
+              disabled={isSaving}
+              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-amber-950/70 hover:bg-amber-900/80 text-amber-300 text-xs font-semibold border border-amber-800/80 transition-colors disabled:opacity-50"
+              title="Save draft without requiring all fields"
+            >
+              <Edit3 className="w-4 h-4 text-amber-400" />
+              Save as Draft
+            </button>
+            <button
+              type="button"
               onClick={handleDownloadDirect}
-              disabled={isGeneratingPdf}
-              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold border border-slate-700 transition-colors disabled:opacity-50"
+              disabled={isGeneratingPdf || quotationStatus === "DRAFT"}
+              title={quotationStatus === "DRAFT" ? "Draft quotations cannot be downloaded. Please finalize first." : "Download PDF"}
+              className={`inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-semibold border transition-colors ${
+                quotationStatus === "DRAFT"
+                  ? "bg-slate-900 border-slate-800 text-slate-600 cursor-not-allowed opacity-50"
+                  : "bg-slate-800 hover:bg-slate-700 text-slate-200 border-slate-700"
+              }`}
             >
               {isGeneratingPdf ? (
                 <Loader2 className="w-4 h-4 animate-spin text-teal-400" />
@@ -1391,7 +1438,8 @@ export default function EditRadQuotationPage({
               Download PDF
             </button>
             <button
-              onClick={() => handleSave(true)}
+              type="button"
+              onClick={() => handleSave("COMPLETED", true)}
               disabled={isSaving}
               className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-teal-600 hover:bg-teal-500 text-white text-xs font-semibold shadow-md shadow-teal-900/30 transition-colors disabled:opacity-50"
             >
@@ -1400,7 +1448,7 @@ export default function EditRadQuotationPage({
               ) : (
                 <Save className="w-4 h-4" />
               )}
-              Save & Download
+              Save &amp; Download
             </button>
           </div>
         </div>
@@ -2002,11 +2050,16 @@ export default function EditRadQuotationPage({
                           const val = e.target.value;
                           const mat = val === "CUSTOM" ? "Custom Material" : val;
                           const density = getMaterialDensity(mat);
-                          const updated = {
+                          const updated: any = {
                             ...printSpecs,
                             material: mat,
                             materialDensity: density,
                           };
+                          if (mat === "PLA") {
+                            updated.availableColors = "White, Black, Transparent";
+                          } else if (mat.includes("TPU") || mat.includes("Flexible")) {
+                            updated.availableColors = "White";
+                          }
                           setPrintSpecs(updated);
                           // Automatically recalculate all auto line items with this material & density
                           setItems((prev) =>
@@ -2039,8 +2092,8 @@ export default function EditRadQuotationPage({
                         className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-amber-500 font-medium"
                       >
                         <option value="PLA">PLA (Polylactic Acid - 1.27 g/cm³)</option>
-                        <option value="ABS">ABS (Acrylonitrile Butadiene Styrene - 1.05 g/cm³)</option>
                         <option value="TPU (Flexible)">TPU / Flexible (1.30 g/cm³)</option>
+                        <option value="ABS">ABS (Acrylonitrile Butadiene Styrene - 1.05 g/cm³)</option>
                         <option value="PETG">PETG (Polyethylene Terephthalate - 1.25 g/cm³)</option>
                         <option value="PETT">PETT (T-Glase - 1.45 g/cm³)</option>
                         <option value="HIPS">HIPS (High Impact Polystyrene - 1.04 g/cm³)</option>
@@ -2134,7 +2187,7 @@ export default function EditRadQuotationPage({
                       {/* Presets & Dropdown */}
                       <div className="flex flex-wrap items-center gap-2 pt-1 border-t border-slate-800/80">
                         <span className="text-[11px] font-semibold text-slate-400">Presets:</span>
-                        {["Black", "White", "Yellow", "Grey", "Red", "Blue", "Green", "Transparent"].map((c) => {
+                        {["White", "Black", "Transparent", "Grey", "Red", "Blue", "Green", "Yellow"].map((c) => {
                           const isSelected = selectedPrintColors.includes(c);
                           return (
                             <button
@@ -3192,7 +3245,7 @@ export default function EditRadQuotationPage({
                                 title={`Rs. ${(Number(item.unitPrice) || 0).toLocaleString()} (Rounded up to 10)`}
                               >
                                 <span className="text-[10px] text-slate-400 font-medium font-sans truncate max-w-[90px]">
-                                  {printSpecs.material || "ABS"}
+                                  {printSpecs.material || "PLA"}
                                 </span>
                                 <span>
                                   {(Number(item.unitPrice) || 0).toLocaleString(
@@ -3473,7 +3526,18 @@ export default function EditRadQuotationPage({
             <div className="bg-slate-900/90 border border-slate-800 rounded-xl p-4 shadow-sm space-y-2.5">
               <button
                 type="button"
-                onClick={() => handleSave(true)}
+                onClick={() => handleSave("DRAFT", false)}
+                disabled={isSaving}
+                className="w-full py-2.5 rounded-lg bg-amber-950/70 hover:bg-amber-900/80 text-amber-300 text-xs font-semibold flex items-center justify-center gap-2 transition-colors disabled:opacity-50 border border-amber-800/80 shadow-sm"
+                title="Save partial work as draft"
+              >
+                <Edit3 className="w-4 h-4 text-amber-400" />
+                <span>Save as Draft</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => handleSave("COMPLETED", true)}
                 disabled={isSaving}
                 className="w-full py-2.5 rounded-lg bg-teal-600 hover:bg-teal-500 text-white text-xs font-semibold shadow-md shadow-teal-900/30 flex items-center justify-center gap-2 transition-colors disabled:opacity-50"
               >
@@ -3492,12 +3556,12 @@ export default function EditRadQuotationPage({
 
               <button
                 type="button"
-                onClick={() => handleSave(false)}
+                onClick={() => handleSave("COMPLETED", false)}
                 disabled={isSaving}
                 className="w-full py-2.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold flex items-center justify-center gap-2 transition-colors disabled:opacity-50 border border-slate-700"
               >
                 <Save className="w-4 h-4 text-teal-400" />
-                <span>Save Changes Only</span>
+                <span>Update &amp; Finalize Only</span>
               </button>
 
               <Link

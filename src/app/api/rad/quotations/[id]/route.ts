@@ -106,44 +106,49 @@ export async function PUT(
       items,
     } = body;
 
-    if (preparedDate && expireDate && new Date(expireDate) < new Date(preparedDate)) {
-      return NextResponse.json(
-        { error: "Quotation Expire Date must be on or after Prepared Date." },
-        { status: 400 }
-      );
-    }
+    const isDraft = status === "DRAFT";
+    const finalStatus = isDraft ? "DRAFT" : "COMPLETED";
 
-    if (type === "PROJECT_PROPOSAL" && projectTitle !== undefined && !projectTitle?.trim()) {
-      return NextResponse.json(
-        { error: "Project Title is required for Project Proposals." },
-        { status: 400 }
-      );
-    }
+    if (!isDraft) {
+      if (preparedDate && expireDate && new Date(expireDate) < new Date(preparedDate)) {
+        return NextResponse.json(
+          { error: "Quotation Expire Date must be on or after Prepared Date." },
+          { status: 400 }
+        );
+      }
 
-    if (Array.isArray(items)) {
-      if (items.length === 0) {
+      if (type === "PROJECT_PROPOSAL" && projectTitle !== undefined && !projectTitle?.trim()) {
         return NextResponse.json(
-          { error: "Quotation must contain at least one line item." },
+          { error: "Project Title is required for Project Proposals." },
           { status: 400 }
         );
       }
-      if (items.some((i: any) => !i.productOrService || !i.productOrService.trim())) {
-        return NextResponse.json(
-          { error: "All line items must have a valid description or service title." },
-          { status: 400 }
-        );
-      }
-      if (items.some((i: any) => Number(i.quantity) < 1)) {
-        return NextResponse.json(
-          { error: "All line item quantities must be at least 1." },
-          { status: 400 }
-        );
-      }
-      if (items.some((i: any) => Number(i.unitPrice) < 0 || Number(i.totalPrice) < 0)) {
-        return NextResponse.json(
-          { error: "Line item prices cannot be negative." },
-          { status: 400 }
-        );
+
+      if (Array.isArray(items)) {
+        if (items.length === 0) {
+          return NextResponse.json(
+            { error: "Quotation must contain at least one line item." },
+            { status: 400 }
+          );
+        }
+        if (items.some((i: any) => !i.productOrService || !i.productOrService.trim())) {
+          return NextResponse.json(
+            { error: "All line items must have a valid description or service title." },
+            { status: 400 }
+          );
+        }
+        if (items.some((i: any) => Number(i.quantity) < 1)) {
+          return NextResponse.json(
+            { error: "All line item quantities must be at least 1." },
+            { status: 400 }
+          );
+        }
+        if (items.some((i: any) => Number(i.unitPrice) < 0 || Number(i.totalPrice) < 0)) {
+          return NextResponse.json(
+            { error: "Line item prices cannot be negative." },
+            { status: 400 }
+          );
+        }
       }
     }
 
@@ -202,7 +207,7 @@ export async function PUT(
           overview: overview !== undefined ? (overview ? overview.trim() : null) : undefined,
           technicalSpecs: technicalSpecs !== undefined ? (typeof technicalSpecs === "object" ? JSON.stringify(technicalSpecs) : technicalSpecs) : undefined,
           termsAndConditions: termsAndConditions !== undefined ? (termsAndConditions ? termsAndConditions.trim() : null) : undefined,
-          ...(status ? { status } : {}),
+          ...(status ? { status: finalStatus } : {}),
         },
         include: {
           items: {

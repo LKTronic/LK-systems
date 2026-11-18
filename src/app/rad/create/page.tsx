@@ -119,6 +119,7 @@ function CreateRadQuotationContent() {
 
   // Common Header Fields
   const [registrationNo, setRegistrationNo] = useState("P-V 00336036");
+  const [quotationStatus, setQuotationStatus] = useState<"DRAFT" | "COMPLETED">("COMPLETED");
   const [quotationNo, setQuotationNo] = useState<string>(() => getInitialQuotationNo(initialType));
   const [preparedDate, setPreparedDate] = useState("");
   const [expireDate, setExpireDate] = useState("");
@@ -780,9 +781,9 @@ function CreateRadQuotationContent() {
               : (Number(p.filamentPricePerSpool) >= 0 ? Number(p.filamentPricePerSpool) : 10000);
             const hourlyRate = Number(p.costPerHour) >= 0 ? Number(p.costPerHour) : 200;
             const markup = Number(p.markupPercent) >= 0 ? Number(p.markupPercent) : 35;
-            const density = Number(p.materialDensity) > 0 ? Number(p.materialDensity) : 1.05;
+            const density = Number(p.materialDensity) > 0 ? Number(p.materialDensity) : 1.27;
             const diameter = Number(p.filamentDiameterMm) > 0 ? Number(p.filamentDiameterMm) : 1.75;
-            const mat = p.materialType || "ABS";
+            const mat = p.materialType || "PLA";
 
             setPrintSpecs((prev) => ({
               ...prev,
@@ -907,7 +908,7 @@ function CreateRadQuotationContent() {
         unitPrice: 0,
         notes: "",
         calcMode: quotationType === "THREE_D_PRINT" ? (printSpecs.pricingMode || "AUTO") : undefined,
-        material: quotationType === "THREE_D_PRINT" ? (printSpecs.material || "ABS") : undefined,
+        material: quotationType === "THREE_D_PRINT" ? (printSpecs.material || "PLA") : undefined,
         filamentLengthM: "",
         printTimeMinutes: "",
         printTimeHours: "",
@@ -1000,7 +1001,7 @@ function CreateRadQuotationContent() {
   };
 
   // Prepare Payload
-  const preparePayload = () => {
+  const preparePayload = (targetStatus?: "DRAFT" | "COMPLETED") => {
     const activeBank =
       bankAccounts.find((b) => b.id === selectedBankAccountId) ||
       bankAccounts.find((b) => b.isDefault) ||
@@ -1013,7 +1014,7 @@ function CreateRadQuotationContent() {
             ...printSpecs,
             itemCalcDetails: items.map((it) => ({
               calcMode: it.calcMode || printSpecs.pricingMode || "AUTO",
-              material: it.material || printSpecs.material || "ABS",
+              material: it.material || printSpecs.material || "PLA",
               filamentLengthM: it.filamentLengthM ?? "",
               printTimeMinutes: it.printTimeMinutes ?? (it.printTimeHours ? Number(it.printTimeHours) * 60 : ""),
               printTimeHours: it.printTimeHours ?? "",
@@ -1037,6 +1038,7 @@ function CreateRadQuotationContent() {
       type: quotationType,
       quotationNo,
       registrationNo,
+      status: targetStatus || quotationStatus || "COMPLETED",
       projectTitle: quotationType === "PROJECT_PROPOSAL" ? projectTitle : null,
       preparedDate,
       expireDate,
@@ -1073,7 +1075,7 @@ function CreateRadQuotationContent() {
         notes:
           quotationType === "THREE_D_PRINT"
             ? `3D_CALC:${JSON.stringify({
-                material: it.material || printSpecs.material || "ABS",
+                material: it.material || printSpecs.material || "PLA",
                 filamentLengthM: it.filamentLengthM !== undefined && it.filamentLengthM !== "" ? Number(it.filamentLengthM) : "",
                 printTimeMinutes: it.printTimeMinutes !== undefined && it.printTimeMinutes !== "" ? Number(it.printTimeMinutes) : (it.printTimeHours ? Number(it.printTimeHours) * 60 : ""),
                 calcMode: it.calcMode || printSpecs.pricingMode || "AUTO",
@@ -1191,15 +1193,31 @@ function CreateRadQuotationContent() {
   };
 
   // Save Quotation Handler
-  const handleSave = async (andDownload = false) => {
-    const isValid = await validateForm();
-    if (!isValid) return;
+  const handleSave = async (targetStatus: "DRAFT" | "COMPLETED" = "COMPLETED", andDownload = false) => {
+    if (targetStatus === "COMPLETED") {
+      const isValid = await validateForm();
+      if (!isValid) return;
+    } else {
+      let currentNo = quotationNo.trim();
+      if (!currentNo) {
+        try {
+          const res = await fetch(`/api/rad/next-number?type=${quotationType}`);
+          if (res.ok) {
+            const data = await res.json();
+            if (data.quotationNo) {
+              currentNo = data.quotationNo;
+              setQuotationNo(currentNo);
+            }
+          }
+        } catch {}
+      }
+    }
 
     setIsSaving(true);
     setMessage(null);
 
     try {
-      const payload = preparePayload();
+      const payload = preparePayload(targetStatus);
       const endpoint = savedQuotationId
         ? `/api/rad/quotations/${savedQuotationId}`
         : "/api/rad/quotations";
@@ -1225,13 +1243,23 @@ function CreateRadQuotationContent() {
         } catch {}
       }
 
+      setQuotationStatus(targetStatus);
       setMessage({
         type: "success",
-        text: `Quotation ${quotationNo} saved successfully!`,
+        text: targetStatus === "DRAFT"
+          ? `Quotation ${quotationNo || "draft"} saved as DRAFT successfully!`
+          : `Quotation ${quotationNo} saved and finalized successfully!`,
       });
 
       if (andDownload) {
-        await handleDownloadDirect();
+        if (targetStatus === "DRAFT") {
+          setMessage({
+            type: "error",
+            text: "Draft quotations cannot be downloaded. Please finalize first.",
+          });
+        } else {
+          await handleDownloadDirect();
+        }
       }
     } catch (err: any) {
       console.error("Save failed:", err);
@@ -1246,6 +1274,13 @@ function CreateRadQuotationContent() {
 
   // Direct PDF Download Preview
   const handleDownloadDirect = async () => {
+    if (quotationStatus === "DRAFT") {
+      setMessage({
+        type: "error",
+        text: "Draft quotations cannot be downloaded. Please fill in all required fields and click 'Save & Download' or finalize the quotation first.",
+      });
+      return;
+    }
     const isValid = await validateForm();
     if (!isValid) return;
     setIsGeneratingPdf(true);
@@ -1390,9 +1425,25 @@ function CreateRadQuotationContent() {
             </div>
 
             <button
+              type="button"
+              onClick={() => handleSave("DRAFT", false)}
+              disabled={isSaving}
+              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-amber-950/70 hover:bg-amber-900/80 text-amber-300 text-xs font-semibold border border-amber-800/80 transition-colors disabled:opacity-50"
+              title="Save draft without requiring all fields"
+            >
+              <Edit3 className="w-4 h-4 text-amber-400" />
+              Save as Draft
+            </button>
+            <button
+              type="button"
               onClick={handleDownloadDirect}
-              disabled={isGeneratingPdf}
-              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold border border-slate-700 transition-colors disabled:opacity-50"
+              disabled={isGeneratingPdf || quotationStatus === "DRAFT"}
+              title={quotationStatus === "DRAFT" ? "Draft quotations cannot be downloaded. Please finalize first." : "Download PDF"}
+              className={`inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-semibold border transition-colors ${
+                quotationStatus === "DRAFT"
+                  ? "bg-slate-900 border-slate-800 text-slate-600 cursor-not-allowed opacity-50"
+                  : "bg-slate-800 hover:bg-slate-700 text-slate-200 border-slate-700"
+              }`}
             >
               {isGeneratingPdf ? (
                 <Loader2 className="w-4 h-4 animate-spin text-teal-400" />
@@ -1402,7 +1453,8 @@ function CreateRadQuotationContent() {
               Download PDF
             </button>
             <button
-              onClick={() => handleSave(true)}
+              type="button"
+              onClick={() => handleSave("COMPLETED", true)}
               disabled={isSaving}
               className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-teal-600 hover:bg-teal-500 text-white text-xs font-semibold shadow-md shadow-teal-900/30 transition-colors disabled:opacity-50"
             >
@@ -1411,7 +1463,7 @@ function CreateRadQuotationContent() {
               ) : (
                 <Save className="w-4 h-4" />
               )}
-              Save & Download
+              Save &amp; Download
             </button>
           </div>
         </div>
@@ -2039,11 +2091,16 @@ function CreateRadQuotationContent() {
                         const val = e.target.value;
                         const mat = val === "CUSTOM" ? "Custom Material" : val;
                         const density = getMaterialDensity(mat);
-                        const updated = {
+                        const updated: any = {
                           ...printSpecs,
                           material: mat,
                           materialDensity: density,
                         };
+                        if (mat === "PLA") {
+                          updated.availableColors = "White, Black, Transparent";
+                        } else if (mat.includes("TPU") || mat.includes("Flexible")) {
+                          updated.availableColors = "White";
+                        }
                         setPrintSpecs(updated);
                         // Automatically recalculate all auto line items with this material & density
                         setItems((prev) =>
@@ -2076,8 +2133,8 @@ function CreateRadQuotationContent() {
                       className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-amber-500 font-medium"
                     >
                       <option value="PLA">PLA (Polylactic Acid - 1.27 g/cm³)</option>
-                      <option value="ABS">ABS (Acrylonitrile Butadiene Styrene - 1.05 g/cm³)</option>
                       <option value="TPU (Flexible)">TPU / Flexible (1.30 g/cm³)</option>
+                      <option value="ABS">ABS (Acrylonitrile Butadiene Styrene - 1.05 g/cm³)</option>
                       <option value="PETG">PETG (Polyethylene Terephthalate - 1.25 g/cm³)</option>
                       <option value="PETT">PETT (T-Glase - 1.45 g/cm³)</option>
                       <option value="HIPS">HIPS (High Impact Polystyrene - 1.04 g/cm³)</option>
@@ -2173,7 +2230,7 @@ function CreateRadQuotationContent() {
                     {/* Presets & Dropdown */}
                     <div className="flex flex-wrap items-center gap-2 pt-1 border-t border-slate-800/80">
                       <span className="text-[11px] font-semibold text-slate-400">Presets:</span>
-                      {["Black", "White", "Yellow", "Grey", "Red", "Blue", "Green", "Transparent"].map((c) => {
+                      {["White", "Black", "Transparent", "Grey", "Red", "Blue", "Green", "Yellow"].map((c) => {
                         const isSelected = selectedPrintColors.includes(c);
                         return (
                           <button
@@ -3230,7 +3287,7 @@ function CreateRadQuotationContent() {
                                 title={`Rs. ${(Number(item.unitPrice) || 0).toLocaleString()} (Rounded up to 10)`}
                               >
                                 <span className="text-[10px] text-slate-400 font-medium font-sans truncate max-w-[90px]">
-                                  {printSpecs.material || "ABS"}
+                                  {printSpecs.material || "PLA"}
                                 </span>
                                 <span>
                                   {(Number(item.unitPrice) || 0).toLocaleString(
@@ -3511,7 +3568,18 @@ function CreateRadQuotationContent() {
             <div className="bg-slate-900/90 border border-slate-800 rounded-xl p-4 shadow-sm space-y-2.5">
               <button
                 type="button"
-                onClick={() => handleSave(true)}
+                onClick={() => handleSave("DRAFT", false)}
+                disabled={isSaving}
+                className="w-full py-2.5 rounded-lg bg-amber-950/70 hover:bg-amber-900/80 text-amber-300 text-xs font-semibold flex items-center justify-center gap-2 transition-colors disabled:opacity-50 border border-amber-800/80 shadow-sm"
+                title="Save partial work as draft"
+              >
+                <Edit3 className="w-4 h-4 text-amber-400" />
+                <span>Save as Draft</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => handleSave("COMPLETED", true)}
                 disabled={isSaving}
                 className="w-full py-2.5 rounded-lg bg-teal-600 hover:bg-teal-500 text-white text-xs font-semibold shadow-md shadow-teal-900/30 flex items-center justify-center gap-2 transition-colors disabled:opacity-50"
               >
@@ -3530,12 +3598,12 @@ function CreateRadQuotationContent() {
 
               <button
                 type="button"
-                onClick={() => handleSave(false)}
+                onClick={() => handleSave("COMPLETED", false)}
                 disabled={isSaving}
                 className="w-full py-2.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold flex items-center justify-center gap-2 transition-colors disabled:opacity-50 border border-slate-700"
               >
                 <Save className="w-4 h-4 text-teal-400" />
-                <span>Save Quotation Only</span>
+                <span>Save &amp; Finalize Only</span>
               </button>
 
               <Link
