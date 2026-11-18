@@ -1003,12 +1003,7 @@ async function generateProjectProposalPdf(
   doc.setTextColor(LK_TEAL[0], LK_TEAL[1], LK_TEAL[2]);
   doc.text(finalLines, 254.0, startY, { align: "center", lineHeightFactor: 1.22 });
 
-  // 2. Prepared By (Left Column: X=35.7mm, Baseline Y=137.0mm)
-  const prepBy = data.preparedBy || "R&D Department LK TRONICS PVT [LTD]";
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(13.5);
-  doc.setTextColor(LK_TEAL[0], LK_TEAL[1], LK_TEAL[2]);
-  doc.text(prepBy, 35.7, 137.0);
+  // 2. Prepared By - Removed from cover/main page per user requirement
 
   // 3. Quotation To / Client Details (Center Column: X=190.5mm, Baseline Y=137.0mm)
   const quoToText = data.quotationTo || "Super Administrator";

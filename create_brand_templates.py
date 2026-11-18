@@ -170,14 +170,12 @@ def make_slide1():
     ref_h = 425
     draw_chamfered_card(draw, 140, ref_y, W - 140, ref_y + ref_h, chamfer=20, fill=CARD_BG, stroke=BORDER_COLOR, width=2)
 
-    # Left Column: Author Details (x from 180 to 920)
-    draw.text((180, ref_y + 35), "PREPARED BY:", font=font_sm_bold, fill=LK_MUTED + (255,))
-    # (jsPDF prints dynamic data.preparedBy here in bold LK Teal at Y=137.0mm)
-
-    draw.text((180, ref_y + 160), "COMMUNICATION CHANNELS:", font=font_sm_bold, fill=LK_MUTED + (255,))
-    draw.text((180, ref_y + 202), "Email: rad@lk-tronics.com", font=font_body, fill=LK_SLATE + (255,))
-    draw.text((180, ref_y + 246), "Hotline: (+94) 77 739 4782 / 0114 215 515", font=font_body, fill=LK_SLATE + (255,))
-    draw.text((180, ref_y + 290), "Web: https://www.lk-tronics.com", font=font_body, fill=LK_TEAL_LIGHT + (255,))
+    # Left Column: Official Contact & Communication Channels (x from 180 to 920)
+    draw.text((180, ref_y + 65), "COMMUNICATION CHANNELS:", font=font_sm_bold, fill=LK_MUTED + (255,))
+    draw.text((180, ref_y + 115), "Email: rad@lk-tronics.com", font=font_body, fill=LK_SLATE + (255,))
+    draw.text((180, ref_y + 165), "Hotline: (+94) 77 739 4782 / 0114 215 515", font=font_body, fill=LK_SLATE + (255,))
+    draw.text((180, ref_y + 215), "Web: https://www.lk-tronics.com", font=font_body, fill=LK_TEAL_LIGHT + (255,))
+    draw.text((180, ref_y + 265), "Address: High-Level Road, Homagama, Sri Lanka", font=font_body, fill=LK_SLATE + (255,))
 
     # Divider 1
     draw.line([(920, ref_y + 30), (920, ref_y + ref_h - 30)], fill=BORDER_COLOR + (255,), width=2)
