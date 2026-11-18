@@ -212,7 +212,7 @@ def make_slide1():
     draw.text((170, 1082), "INDUSTRY TECHNOLOGY PARTNERS & HARDWARE PLATFORMS", font=font_sm_bold, fill=LK_MUTED + (255,))
     draw.line([(160, 1118), (W - 160, 1118)], fill=BORDER_COLOR + (255,), width=1)
 
-    cover_logos = ['acrel', 'lk_tronics_iot', 'raspberry_pi', 'stm32', 'mitsubishi_electric', 'airtac', 'samkoon', 'omron']
+    cover_logos = ['acrel', 'lk_tronics_iot', 'raspberry_pi', 'stm32', 'mitsubishi_electric', 'airtac', 'samkoon', 'nvidia_jetson']
     start_x = 160
     total_w = (W - 160) - start_x
     slot_w = total_w / len(cover_logos)
@@ -222,7 +222,7 @@ def make_slide1():
         logo_path = f"public/template_assets/logos/cover/{name}.png"
         if os.path.exists(logo_path):
             l_img = Image.open(logo_path).convert("RGBA")
-            target_h = 95 if name == "lk_tronics_iot" else 78 if name == "stm32" else 85
+            target_h = 95 if name == "lk_tronics_iot" else 78 if name == "stm32" else 88 if name == "nvidia_jetson" else 85
             scaled = fit_logo(l_img, slot_w - 40, target_h)
             sw, sh = scaled.size
             cx = int(start_x + i * slot_w + slot_w / 2)
