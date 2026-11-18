@@ -924,47 +924,15 @@ export default function ProductHandoverPage() {
                   </div>
 
                   {/* Physical White Paper Rendering */}
-                  <div className="bg-white text-slate-900 rounded-xl p-6 sm:p-8 shadow-2xl border border-slate-300 font-sans space-y-5 select-none">
-                    {/* Header */}
-                    <div className="flex items-start justify-between gap-4 pb-3 border-b-2 border-slate-900">
-                      {/* Left: Logo */}
-                      <div className="text-center w-20 shrink-0">
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img
-                          src="/template_assets/logos/footer/lk_tronics.png"
-                          alt="LK Tronics"
-                          className="w-12 h-12 mx-auto object-contain"
-                          onError={(e) => {
-                            (e.currentTarget as HTMLElement).style.display = "none";
-                          }}
-                        />
-                        <div className="text-[6.5px] font-bold text-slate-600 mt-0.5 tracking-tight uppercase">
-                          Components for the future
-                        </div>
-                      </div>
-
-                      {/* Beside Logo: LK TRONICS & Contacts */}
-                      <div className="text-left flex-1 pl-2">
-                        <div className="text-sm font-black text-slate-900 tracking-tight">
-                          LK TRONICS
-                        </div>
-                        <div className="text-[10px] text-slate-700 mt-0.5 leading-snug">
-                          <div><span className="font-semibold">Tele &nbsp;&nbsp;:</span> +94 76 357 31 31 | 011 4 215 515</div>
-                          <div><span className="font-semibold">E mail :</span> admin@lk-tronics.com | sales@lk-tronics.com</div>
-                        </div>
-                      </div>
-
-                      {/* Right: Reg & Web */}
-                      <div className="text-right text-[10px] text-slate-700 leading-snug shrink-0">
-                        <div><span className="font-semibold">Web :</span> www.lk-tronics.com</div>
-                        <div className="font-semibold text-slate-900 mt-0.5">Reg No : P-V 00336036</div>
-                      </div>
-                    </div>
-
-                    {/* Quotation Style Teal Address Bar */}
-                    <div className="bg-[#4a9098] text-white px-3 py-1 rounded flex items-center justify-between text-[9px] font-bold tracking-tight">
-                      <span>LK TRONICS, HIGH-LEVEL ROAD, HOMAGAMA, SRI LANKA.</span>
-                      <span>TEL : 011 4 215 515 | REG NO - P-V 00336036</span>
+                  <div className="bg-white text-slate-900 rounded-xl p-6 sm:p-8 shadow-2xl border border-slate-300 font-sans space-y-5 select-none overflow-hidden">
+                    {/* Official Quotation Template Heading */}
+                    <div className="-mx-6 sm:-mx-8 -mt-6 sm:-mt-8 shadow-sm">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src="/template_assets/quotation_header_banner.png"
+                        alt="LK Tronics Quotation Header"
+                        className="w-full h-auto object-cover block"
+                      />
                     </div>
 
                     {refNo && (
