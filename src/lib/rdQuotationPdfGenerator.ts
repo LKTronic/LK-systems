@@ -1036,27 +1036,39 @@ async function generateProjectProposalPdf(
 
   // 2. Prepared By - Removed from cover/main page per user requirement
 
-  // 3. Quotation To / Client Details (Center Column: X=190.5mm, Baseline Y=137.0mm)
+  // 3. Quotation To / Client Details (Center Column: X=190.5mm, Prominent 22pt bold matching Terms page)
   const quoToText = data.quotationTo || "Super Administrator";
+  let clientFontSize = 22.0;
   doc.setFont("helvetica", "bold");
-  doc.setFontSize(14);
+  doc.setFontSize(clientFontSize);
+  let quoToLines = doc.splitTextToSize(quoToText, 160.0);
+  if (Array.isArray(quoToLines) && quoToLines.length > 2) {
+    clientFontSize = 19.0;
+    doc.setFontSize(clientFontSize);
+    quoToLines = doc.splitTextToSize(quoToText, 160.0);
+  }
   doc.setTextColor(LK_SLATE[0], LK_SLATE[1], LK_SLATE[2]);
-  const quoToLines = doc.splitTextToSize(quoToText, 160.0);
-  doc.text(quoToLines, 190.5, 137.0, { lineHeightFactor: 1.25 });
+  doc.text(quoToLines, 190.5, 137.5, { lineHeightFactor: 1.22 });
 
-  // 4. Prepared Date (Center Column, Bottom Left: X=190.5mm, Baseline Y=180.0mm)
+  // 4. Prepared Date (Center Column, Bottom Left: X=190.5mm, Prominent 21pt bold)
   doc.setFont("helvetica", "bold");
-  doc.setFontSize(13.5);
+  doc.setFontSize(21.0);
   doc.setTextColor(LK_SLATE[0], LK_SLATE[1], LK_SLATE[2]);
   doc.text(data.preparedDate || "—", 190.5, 180.0);
 
-  // 5. Validity Period (Center Column, Bottom Right: X=273.8mm, Baseline Y=180.0mm)
+  // 5. Validity Period (Center Column, Bottom Right: X=273.8mm, Prominent 21pt bold)
   const valDays = data.validityDays ? `${data.validityDays} Days` : "4 Days";
   const expireStr = data.expireDate ? ` (Until ${data.expireDate})` : "";
+  const fullValText = `${valDays}${expireStr}`;
   doc.setFont("helvetica", "bold");
-  doc.setFontSize(13.5);
+  let valFontSize = 21.0;
+  doc.setFontSize(valFontSize);
+  if (doc.getTextWidth(fullValText) > 85.0) {
+    valFontSize = 18.5;
+    doc.setFontSize(valFontSize);
+  }
   doc.setTextColor(LK_ORANGE[0], LK_ORANGE[1], LK_ORANGE[2]);
-  doc.text(`${valDays}${expireStr}`, 273.8, 180.0);
+  doc.text(fullValText, 273.8, 180.0);
 
   // ==========================================
   // SLIDE 2: SYSTEM OVERVIEW & INTRODUCTION
@@ -1704,18 +1716,18 @@ async function generateProjectProposalPdf(
   }
 
   if (advancePercent !== 60) {
-    // Redraw the PO text box with custom percentage matching exact slide card coordinates
+    // Redraw the PO text box with custom percentage matching exact slide card coordinates (enlarged font)
     doc.setFillColor(248, 250, 252);
-    doc.rect(38.0, 42.0, 244.0, 70.0, "F");
+    doc.rect(38.0, 42.0, 244.0, 72.0, "F");
     doc.setFont("helvetica", "bold");
-    doc.setFontSize(14.0);
+    doc.setFontSize(20.0);
     doc.setTextColor(LK_ORANGE[0], LK_ORANGE[1], LK_ORANGE[2]);
-    doc.text("PURCHASE ORDER & ADVANCE TERMS", 44.0, 48.0);
+    doc.text("PURCHASE ORDER & ADVANCE TERMS", 44.0, 50.0);
     doc.setFont("helvetica", "normal");
-    doc.setFontSize(13.0);
+    doc.setFontSize(18.0);
     doc.setTextColor(LK_SLATE[0], LK_SLATE[1], LK_SLATE[2]);
     const clauseText = `The total value of the product or ${advancePercent}% of the total value\nshould be payable together with your purchase order.\n\n(If only we are registered as your vendor, a one-month\ncredit facility can be extended for your orders.\nTo initiate this credit facility, kindly reach out to us.)`;
-    doc.text(clauseText, 44.0, 56.0, { lineHeightFactor: 1.4 });
+    doc.text(clauseText, 44.0, 59.0, { lineHeightFactor: 1.35 });
   }
 
   // Resolve custom bank account for Slide 5
@@ -1749,7 +1761,7 @@ async function generateProjectProposalPdf(
     activeProposalBank.bankName !== LK_TRONICS_BANK_DETAILS.bankName;
 
   if (isCustomProposalBank) {
-    // Redraw Right Content Area of Bank Card on Slide 5
+    // Redraw Right Content Area of Bank Card on Slide 5 (enlarged font matching 22pt high-visibility standard)
     const bankRightX = 155.0;
     const bankRightY = 126.0;
     const bankRightW = 316.0;
@@ -1758,7 +1770,7 @@ async function generateProjectProposalPdf(
     doc.setFillColor(255, 255, 255);
     doc.rect(bankRightX, bankRightY, bankRightW, bankRightH, "F");
 
-    let bankRowY = bankRightY + 12.0;
+    let bankRowY = bankRightY + 14.0;
     const bankFields = [
       { label: "Account Name", val: activeProposalBank.accountName, color: LK_TEAL },
       { label: "Account Number", val: activeProposalBank.accountNumber, color: LK_ORANGE },
@@ -1768,22 +1780,22 @@ async function generateProjectProposalPdf(
 
     bankFields.forEach((field, fIdx) => {
       doc.setFont("helvetica", "bold");
-      doc.setFontSize(13.5);
+      doc.setFontSize(19.0);
       doc.setTextColor(LK_MUTED[0], LK_MUTED[1], LK_MUTED[2]);
-      doc.text(field.label, bankRightX + 10.0, bankRowY + 3.0);
-      doc.text(":", bankRightX + 70.0, bankRowY + 3.0);
+      doc.text(field.label, bankRightX + 10.0, bankRowY + 4.0);
+      doc.text(":", bankRightX + 78.0, bankRowY + 4.0);
 
       doc.setFont("helvetica", "bold");
-      doc.setFontSize(14.0);
+      doc.setFontSize(21.0);
       doc.setTextColor(field.color[0], field.color[1], field.color[2]);
-      doc.text(field.val, bankRightX + 80.0, bankRowY + 3.0);
+      doc.text(field.val, bankRightX + 88.0, bankRowY + 4.0);
 
       if (fIdx < bankFields.length - 1) {
         doc.setDrawColor(218, 225, 233);
         doc.setLineWidth(0.3);
-        doc.line(bankRightX + 10.0, bankRowY + 13.0, bankRightX + bankRightW - 10.0, bankRowY + 13.0);
+        doc.line(bankRightX + 10.0, bankRowY + 14.0, bankRightX + bankRightW - 10.0, bankRowY + 14.0);
       }
-      bankRowY += 22.0;
+      bankRowY += 23.0;
     });
   }
 
