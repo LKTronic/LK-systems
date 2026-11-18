@@ -132,6 +132,14 @@ export function RadQuotationList({
   }, [search]);
 
   const handleDownloadPdf = async (q: RdQuotation) => {
+    if (q.status === "DRAFT") {
+      setMessage({
+        type: "error",
+        text: `Draft quotation "${q.quotationNo}" cannot be downloaded. Please edit and finalize it first.`,
+      });
+      return;
+    }
+
     setDownloadingId(q.id);
     try {
       let parsedSpecs: any = {};
@@ -433,6 +441,7 @@ export function RadQuotationList({
               <thead>
                 <tr className="bg-slate-950/70 border-b border-slate-800 text-[11px] uppercase tracking-wider text-slate-400 font-semibold">
                   <th className="py-3 px-4">Quotation #</th>
+                  <th className="py-3 px-2 text-center">Status</th>
                   <th className="py-3 px-4">
                     {type === "PROJECT_PROPOSAL"
                       ? "Customer & Project Title"
@@ -460,7 +469,7 @@ export function RadQuotationList({
                 {isLoading ? (
                   <tr>
                     <td
-                      colSpan={8}
+                      colSpan={9}
                       className="py-12 text-center text-slate-400 text-xs"
                     >
                       <Loader2 className="w-6 h-6 animate-spin mx-auto text-teal-400 mb-2" />
@@ -470,7 +479,7 @@ export function RadQuotationList({
                 ) : quotations.length === 0 ? (
                   <tr>
                     <td
-                      colSpan={8}
+                      colSpan={9}
                       className="py-12 text-center text-slate-400 text-sm"
                     >
                       No {title.toLowerCase()} found. Click &quot;{createLabel}&quot; to begin!
@@ -506,6 +515,17 @@ export function RadQuotationList({
                             {q.quotationNo}
                           </Link>
                         </td>
+                        <td className="py-3 px-2 text-center whitespace-nowrap">
+                          {q.status === "DRAFT" ? (
+                            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-950/80 text-amber-300 border border-amber-800">
+                              DRAFT
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-950/80 text-emerald-300 border border-emerald-800">
+                              FINAL
+                            </span>
+                          )}
+                        </td>
                         <td className="py-3 px-4">
                           <div className="font-medium text-white">
                             {q.quotationTo}
@@ -536,10 +556,27 @@ export function RadQuotationList({
                         <td className="py-3 px-4">
                           <div className="flex items-center justify-center gap-2">
                             <button
-                              onClick={() => handleDownloadPdf(q)}
-                              disabled={downloadingId === q.id}
-                              title="Download PDF"
-                              className="p-1.5 rounded-lg bg-teal-950/60 border border-teal-800/60 text-teal-400 hover:bg-teal-900/60 hover:text-white transition-colors disabled:opacity-50"
+                              onClick={() => {
+                                if (q.status === "DRAFT") {
+                                  setMessage({
+                                    type: "error",
+                                    text: `Draft quotation "${q.quotationNo}" cannot be downloaded. Please edit and finalize it first.`,
+                                  });
+                                  return;
+                                }
+                                handleDownloadPdf(q);
+                              }}
+                              disabled={downloadingId === q.id || q.status === "DRAFT"}
+                              title={
+                                q.status === "DRAFT"
+                                  ? "Draft quotation cannot be downloaded. Please edit and finalize first."
+                                  : "Download PDF"
+                              }
+                              className={`p-1.5 rounded-lg border transition-colors ${
+                                q.status === "DRAFT"
+                                  ? "bg-slate-900 border-slate-800 text-slate-600 cursor-not-allowed opacity-40"
+                                  : "bg-teal-950/60 border-teal-800/60 text-teal-400 hover:bg-teal-900/60 hover:text-white"
+                              }`}
                             >
                               {downloadingId === q.id ? (
                                 <Loader2 className="w-4 h-4 animate-spin" />

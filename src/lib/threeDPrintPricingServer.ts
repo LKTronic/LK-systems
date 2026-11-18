@@ -26,8 +26,8 @@ export async function getThreeDPrintPricing(): Promise<ThreeDPrintPricingSetting
             ? Number(parsed.filamentPricePerKg)
             : (Number(parsed.filamentPricePerSpool) >= 0 ? Number(parsed.filamentPricePerSpool) : 10000);
           const sanitized: ThreeDPrintPricingSettings = {
-            materialType: parsed.materialType || "ABS",
-            materialDensity: Number(parsed.materialDensity) > 0 ? Number(parsed.materialDensity) : 1.05,
+            materialType: parsed.materialType || "PLA",
+            materialDensity: Number(parsed.materialDensity) > 0 ? Number(parsed.materialDensity) : 1.27,
             filamentDiameterMm: Number(parsed.filamentDiameterMm) > 0 ? Number(parsed.filamentDiameterMm) : 1.75,
             filamentPricePerKg: price,
             filamentPricePerSpool: price,
@@ -56,8 +56,8 @@ export async function saveThreeDPrintPricing(
     ? Number(settings.filamentPricePerKg)
     : (Number(settings.filamentPricePerSpool) >= 0 ? Number(settings.filamentPricePerSpool) : 10000);
   const sanitized: ThreeDPrintPricingSettings = {
-    materialType: settings.materialType || "ABS",
-    materialDensity: Number(settings.materialDensity) > 0 ? Number(settings.materialDensity) : 1.05,
+    materialType: settings.materialType || "PLA",
+    materialDensity: Number(settings.materialDensity) > 0 ? Number(settings.materialDensity) : 1.27,
     filamentDiameterMm: Number(settings.filamentDiameterMm) > 0 ? Number(settings.filamentDiameterMm) : 1.75,
     filamentPricePerKg: price,
     filamentPricePerSpool: price,

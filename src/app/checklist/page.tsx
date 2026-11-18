@@ -66,6 +66,7 @@ export default function ChecklistPage() {
   const [checklistNo, setChecklistNo] = useState<string>(() => formatAutoChecklistNo("BATTERY"));
   const [isNumberAutoLocked, setIsNumberAutoLocked] = useState(true);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [status, setStatus] = useState<"DRAFT" | "COMPLETED">("COMPLETED");
   const [isFetchingNo, setIsFetchingNo] = useState(false);
 
   // Section 1: Info
@@ -258,6 +259,7 @@ export default function ChecklistPage() {
   // Reset form to blank state
   const handleResetForm = () => {
     setEditingId(null);
+    setStatus("COMPLETED");
     setChecklistType("BATTERY");
     setBatteryInfo(getDefaultBatteryInfo());
     setInverterInfo(getDefaultInverterInfo());
@@ -274,6 +276,7 @@ export default function ChecklistPage() {
   // Load a checklist into editor
   const handleLoadForEdit = (item: ProductChecklist) => {
     setEditingId(item.id);
+    setStatus(item.status === "DRAFT" ? "DRAFT" : "COMPLETED");
     setChecklistNo(item.checklistNo);
     setIsNumberAutoLocked(false);
     setChecklistType(item.type);
@@ -315,11 +318,12 @@ export default function ChecklistPage() {
   };
 
   // Prepare full checklist data object
-  const buildCurrentChecklistData = (): ProductChecklist => {
+  const buildCurrentChecklistData = (targetStatus?: "DRAFT" | "COMPLETED"): ProductChecklist => {
     return {
       id: editingId || `chk-${Date.now()}`,
       checklistNo: checklistNo.trim() || formatAutoChecklistNo(checklistType),
       type: checklistType,
+      status: targetStatus || status || "COMPLETED",
       batteryInfo: checklistType === "BATTERY" ? batteryInfo : undefined,
       inverterInfo: checklistType === "INVERTER" ? inverterInfo : undefined,
       checkedDate,
@@ -334,10 +338,10 @@ export default function ChecklistPage() {
   };
 
   // Save Checklist to API
-  const handleSave = async () => {
+  const handleSave = async (targetStatus: "DRAFT" | "COMPLETED" = "COMPLETED") => {
     setIsSubmitting(true);
     try {
-      const payload = buildCurrentChecklistData();
+      const payload = buildCurrentChecklistData(targetStatus);
       const res = await fetch("/api/checklists", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -346,7 +350,13 @@ export default function ChecklistPage() {
 
       if (res.ok) {
         const d = await res.json();
-        showNotification("success", `Checklist ${d.checklist?.checklistNo || checklistNo} saved successfully!`);
+        setStatus(targetStatus);
+        showNotification(
+          "success",
+          targetStatus === "DRAFT"
+            ? `Inspection ${d.checklist?.checklistNo || checklistNo} saved as DRAFT!`
+            : `Checklist ${d.checklist?.checklistNo || checklistNo} saved and certified!`
+        );
         if (!editingId && d.checklist?.id) {
           setEditingId(d.checklist.id);
         }
@@ -363,9 +373,13 @@ export default function ChecklistPage() {
 
   // Download Letterhead PDF
   const handleDownloadPdf = async (customData?: ProductChecklist) => {
+    const data = customData || buildCurrentChecklistData();
+    if (data.status === "DRAFT") {
+      showNotification("error", `Draft checklist "${data.checklistNo}" cannot be downloaded. Please save and certify it first.`);
+      return;
+    }
     setIsGeneratingPdf(true);
     try {
-      const data = customData || buildCurrentChecklistData();
       const doc = await generateChecklistPdf(data);
       const safeName = (data.checklistNo || "Checklist").replace(/[/\\?%*:|"<>]/g, "_");
       doc.save(`${safeName}_Inspection_Report.pdf`);
@@ -1172,7 +1186,18 @@ export default function ChecklistPage() {
               <div className="flex items-center gap-3 w-full sm:w-auto">
                 <button
                   type="button"
-                  onClick={handleSave}
+                  onClick={() => handleSave("DRAFT")}
+                  disabled={isSubmitting}
+                  className="flex-1 sm:flex-initial px-4 py-2.5 bg-amber-950/70 hover:bg-amber-900/80 text-amber-300 border border-amber-800/80 rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition-all disabled:opacity-50 shadow-sm"
+                  title="Save partial checklist as draft without full details"
+                >
+                  <Edit3 className="w-4 h-4 text-amber-400" />
+                  <span>Save as Draft</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => handleSave("COMPLETED")}
                   disabled={isSubmitting}
                   className="flex-1 sm:flex-initial px-5 py-2.5 bg-slate-800 hover:bg-slate-700 text-teal-300 border border-teal-800/80 rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition-all disabled:opacity-50 shadow-sm"
                 >
@@ -1181,14 +1206,19 @@ export default function ChecklistPage() {
                   ) : (
                     <Save className="w-4 h-4 text-teal-400" />
                   )}
-                  <span>Save Record</span>
+                  <span>Save &amp; Certify</span>
                 </button>
 
                 <button
                   type="button"
                   onClick={() => handleDownloadPdf()}
-                  disabled={isGeneratingPdf}
-                  className="flex-1 sm:flex-initial px-5 py-2.5 bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-500 hover:to-emerald-500 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition-all shadow-md shadow-teal-900/30 disabled:opacity-50"
+                  disabled={isGeneratingPdf || status === "DRAFT"}
+                  title={status === "DRAFT" ? "Draft checklist cannot be downloaded. Please save and certify first." : "Download Letterhead PDF"}
+                  className={`flex-1 sm:flex-initial px-5 py-2.5 rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition-all shadow-md ${
+                    status === "DRAFT"
+                      ? "bg-slate-900 border border-slate-800 text-slate-600 cursor-not-allowed opacity-50"
+                      : "bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-500 hover:to-emerald-500 text-white shadow-teal-900/30 disabled:opacity-50"
+                  }`}
                 >
                   {isGeneratingPdf ? (
                     <Loader2 className="w-4 h-4 animate-spin" />
@@ -1322,15 +1352,21 @@ export default function ChecklistPage() {
                             >
                               {isBat ? "BATTERY" : "INVERTER"}
                             </span>
-                            <span
-                              className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
-                                item.overallQcPassed
-                                  ? "bg-emerald-950 text-emerald-400 border border-emerald-800"
-                                  : "bg-rose-950 text-rose-400 border border-rose-800"
-                              }`}
-                            >
-                              {item.overallQcPassed ? "✔ PASSED" : "✖ FAILED"}
-                            </span>
+                            {item.status === "DRAFT" ? (
+                              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-950 text-amber-300 border border-amber-800">
+                                DRAFT
+                              </span>
+                            ) : (
+                              <span
+                                className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                                  item.overallQcPassed
+                                    ? "bg-emerald-950 text-emerald-400 border border-emerald-800"
+                                    : "bg-rose-950 text-rose-400 border border-rose-800"
+                                }`}
+                              >
+                                {item.overallQcPassed ? "✔ PASSED" : "✖ FAILED"}
+                              </span>
+                            )}
                           </div>
 
                           <div className="text-xs text-slate-300 font-medium mt-1">
@@ -1348,9 +1384,20 @@ export default function ChecklistPage() {
                       <div className="flex items-center gap-2 shrink-0 self-end md:self-auto">
                         <button
                           type="button"
-                          onClick={() => handleDownloadPdf(item)}
-                          className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-teal-300 border border-teal-800/60 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors"
-                          title="Download official PDF"
+                          onClick={() => {
+                            if (item.status === "DRAFT") {
+                              showNotification("error", `Draft checklist "${item.checklistNo}" cannot be downloaded. Please edit and certify it first.`);
+                              return;
+                            }
+                            handleDownloadPdf(item);
+                          }}
+                          disabled={item.status === "DRAFT"}
+                          className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors ${
+                            item.status === "DRAFT"
+                              ? "bg-slate-900 border border-slate-800 text-slate-600 cursor-not-allowed opacity-40"
+                              : "bg-slate-800 hover:bg-slate-700 text-teal-300 border border-teal-800/60"
+                          }`}
+                          title={item.status === "DRAFT" ? "Draft inspection cannot be downloaded. Please certify first." : "Download official PDF"}
                         >
                           <FileDown className="w-3.5 h-3.5 text-teal-400" />
                           <span>PDF</span>

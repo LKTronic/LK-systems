@@ -20,8 +20,8 @@ export const MATERIAL_DENSITIES: Record<string, number> = {
 };
 
 export const DEFAULT_THREE_D_PRINT_PRICING: ThreeDPrintPricingSettings = {
-  materialType: "ABS",
-  materialDensity: 1.05,
+  materialType: "PLA",
+  materialDensity: 1.27,
   filamentDiameterMm: 1.75,
   filamentPricePerKg: 10000,
   filamentPricePerSpool: 10000,

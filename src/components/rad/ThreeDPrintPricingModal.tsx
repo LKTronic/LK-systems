@@ -54,8 +54,8 @@ export function ThreeDPrintPricingModal({
             : (Number(p.filamentPricePerSpool) >= 0 ? Number(p.filamentPricePerSpool) : 10000);
 
           setPricing({
-            materialType: p.materialType || "ABS",
-            materialDensity: Number(p.materialDensity) > 0 ? Number(p.materialDensity) : 1.05,
+            materialType: p.materialType || "PLA",
+            materialDensity: Number(p.materialDensity) > 0 ? Number(p.materialDensity) : 1.27,
             filamentDiameterMm: Number(p.filamentDiameterMm) > 0 ? Number(p.filamentDiameterMm) : 1.75,
             filamentPricePerKg: price,
             filamentPricePerSpool: price,
@@ -215,13 +215,13 @@ export function ThreeDPrintPricingModal({
                 Material Type
               </label>
               <select
-                value={pricing.materialType || "ABS"}
+                value={pricing.materialType || "PLA"}
                 onChange={(e) => handleMaterialChange(e.target.value)}
                 className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-amber-500 font-medium"
               >
-                <option value="ABS">ABS (Acrylonitrile Butadiene Styrene) - 1.05 g/cm³</option>
                 <option value="PLA">PLA (Polylactic Acid) - 1.27 g/cm³</option>
                 <option value="TPU">TPU (Thermoplastic Polyurethane) - 1.30 g/cm³</option>
+                <option value="ABS">ABS (Acrylonitrile Butadiene Styrene) - 1.05 g/cm³</option>
                 <option value="PETG">PETG (Polyethylene Terephthalate) - 1.25 g/cm³</option>
                 <option value="PETT">PETT (T-Glase filament) - 1.45 g/cm³</option>
                 <option value="HIPS">HIPS (High Impact Polystyrene) - 1.04 g/cm³</option>

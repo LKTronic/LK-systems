@@ -43,6 +43,7 @@ export interface ProductChecklist {
   id: string;
   checklistNo: string;
   type: ProductChecklistType;
+  status?: "DRAFT" | "COMPLETED";
   batteryInfo?: BatteryInfo;
   inverterInfo?: InverterInfo;
   checkedDate: string;
