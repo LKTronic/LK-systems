@@ -44,7 +44,9 @@ interface RdQuotation {
   projectTitle?: string | null;
   preparedDate: string;
   expireDate: string;
+  validityDays?: number | string | null;
   paymentMethod: string;
+  advancePercent?: number | string | null;
   preparedBy: string;
   quotationTo: string;
   leadTime?: string | null;
@@ -93,6 +95,14 @@ export function RadQuotationList({
     text: string;
   } | null>(null);
   const [showPricingModal, setShowPricingModal] = useState(false);
+  const [bankAccounts, setBankAccounts] = useState<any[]>([]);
+
+  useEffect(() => {
+    fetch("/api/rad/bank-accounts")
+      .then((res) => (res.ok ? res.json() : { accounts: [] }))
+      .then((data) => setBankAccounts(data.accounts || []))
+      .catch((err) => console.error("Failed to load bank accounts in list:", err));
+  }, []);
 
   const fetchQuotations = async () => {
     setIsLoading(true);
@@ -124,6 +134,58 @@ export function RadQuotationList({
   const handleDownloadPdf = async (q: RdQuotation) => {
     setDownloadingId(q.id);
     try {
+      let parsedSpecs: any = {};
+      if (q.technicalSpecs) {
+        if (typeof q.technicalSpecs === "string") {
+          try {
+            parsedSpecs = JSON.parse(q.technicalSpecs);
+          } catch {
+            parsedSpecs = {};
+          }
+        } else if (typeof q.technicalSpecs === "object") {
+          parsedSpecs = q.technicalSpecs;
+        }
+      }
+
+      // Filter out numeric keys if an object spread occurred on string
+      if (parsedSpecs && typeof parsedSpecs === "object") {
+        const nonNum: any = {};
+        for (const k of Object.keys(parsedSpecs)) {
+          if (!/^\d+$/.test(k)) {
+            nonNum[k] = parsedSpecs[k];
+          }
+        }
+        parsedSpecs = nonNum;
+      }
+
+      // Resolve bank details
+      let resolvedBank = parsedSpecs?.bankDetails || null;
+      if (!resolvedBank && parsedSpecs?.bankAccountId && bankAccounts.length > 0) {
+        resolvedBank =
+          bankAccounts.find((b) => b.id === parsedSpecs.bankAccountId) || null;
+      }
+      if (!resolvedBank && bankAccounts.length > 0) {
+        resolvedBank =
+          bankAccounts.find((b) => b.isDefault) || bankAccounts[0] || null;
+      }
+
+      // Resolve validity days (from q, parsedSpecs, or fallback to date diff)
+      let resolvedValidity = q.validityDays ?? parsedSpecs?.validityDays ?? null;
+      if (
+        (resolvedValidity === null ||
+          resolvedValidity === undefined ||
+          Number(resolvedValidity) <= 0) &&
+        q.preparedDate &&
+        q.expireDate
+      ) {
+        try {
+          const p = new Date(q.preparedDate).getTime();
+          const e = new Date(q.expireDate).getTime();
+          const diff = Math.round((e - p) / (1000 * 60 * 60 * 24));
+          if (diff > 0) resolvedValidity = diff;
+        } catch {}
+      }
+
       const pdfData: RdQuotationPdfData = {
         type: q.type,
         quotationNo: q.quotationNo,
@@ -137,17 +199,31 @@ export function RadQuotationList({
           typeof q.expireDate === "string"
             ? q.expireDate.split("T")[0]
             : new Date(q.expireDate).toISOString().split("T")[0],
+        validityDays: resolvedValidity,
         paymentMethod: q.paymentMethod,
+        advancePercent:
+          q.advancePercent ??
+          parsedSpecs?.advancePercent ??
+          (q.paymentMethod === "ADVANCE_PAYMENT" ? 60 : null),
         preparedBy: q.preparedBy,
         quotationTo: q.quotationTo,
-        leadTime: q.leadTime,
+        leadTime: q.leadTime || parsedSpecs?.leadTime || null,
         warranty: q.warranty,
         hardwareTotal: q.hardwareTotal ? Number(q.hardwareTotal) : null,
         servicesTotal: q.servicesTotal ? Number(q.servicesTotal) : null,
         totalAmount: Number(q.totalAmount) || 0,
         overview: q.overview,
-        technicalSpecs: q.technicalSpecs,
+        overviewFontSize: parsedSpecs?.overviewFontSize
+          ? Number(parsedSpecs.overviewFontSize)
+          : 22.0,
+        termsFontSize: parsedSpecs?.termsFontSize
+          ? Number(parsedSpecs.termsFontSize)
+          : 22.0,
+        commercialNote: parsedSpecs?.commercialNote || null,
+        technicalSpecs: parsedSpecs,
+        systemDesignImages: parsedSpecs?.systemDesignImages || null,
         termsAndConditions: q.termsAndConditions,
+        bankDetails: resolvedBank,
         items: (q.items || []).map((it, idx) => ({
           itemIndex: it.itemIndex || idx + 1,
           itemType: it.itemType || "HARDWARE",

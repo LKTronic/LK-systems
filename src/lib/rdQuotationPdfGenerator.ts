@@ -187,6 +187,17 @@ async function generateHardwareOrPcbPdf(
     }
   }
 
+  // Filter out numeric keys if an object spread occurred on string
+  if (parsedSpecs && typeof parsedSpecs === "object") {
+    const nonNum: any = {};
+    for (const k of Object.keys(parsedSpecs)) {
+      if (!/^\d+$/.test(k)) {
+        nonNum[k] = parsedSpecs[k];
+      }
+    }
+    parsedSpecs = nonNum;
+  }
+
   const pcbImageBase64List: string[] = [];
   if (isPcb && parsedSpecs) {
     const rawImages: any[] = Array.isArray(parsedSpecs.images)
@@ -364,7 +375,10 @@ async function generateHardwareOrPcbPdf(
 
   // --- LEAD TIME BANNER (Bold 11.5pt in Red #EE0000) ---
   const leadTimeY = finalY + 6.5;
-  const leadTimeText = data.leadTime || (is3D ? "1 Days" : "12 - 21 Days");
+  const leadTimeText =
+    data.leadTime ||
+    parsedSpecs?.leadTime ||
+    (is3D ? "1 Days" : "12 - 21 Days");
   doc.setFont("times", "bold");
   doc.setFontSize(11.5);
   doc.setTextColor(238, 0, 0); // #EE0000 Bright Red
@@ -423,6 +437,11 @@ async function generateHardwareOrPcbPdf(
     doc.setFont("times", "normal");
     doc.setFontSize(9.0);
     let resolved3dValidity = Number(data.validityDays);
+    if (!resolved3dValidity || isNaN(resolved3dValidity) || resolved3dValidity <= 0) {
+      if (parsedSpecs && parsedSpecs.validityDays) {
+        resolved3dValidity = Number(parsedSpecs.validityDays);
+      }
+    }
     if (!resolved3dValidity || isNaN(resolved3dValidity) || resolved3dValidity <= 0) {
       if (data.preparedDate && data.expireDate) {
         try {
@@ -577,6 +596,11 @@ async function generateHardwareOrPcbPdf(
   } else {
     // Resolve PCB validity matching PMS web enter Validity Period
     let resolvedPcbValidity = Number(data.validityDays);
+    if (!resolvedPcbValidity || isNaN(resolvedPcbValidity) || resolvedPcbValidity <= 0) {
+      if (parsedSpecs && parsedSpecs.validityDays) {
+        resolvedPcbValidity = Number(parsedSpecs.validityDays);
+      }
+    }
     if (!resolvedPcbValidity || isNaN(resolvedPcbValidity) || resolvedPcbValidity <= 0) {
       if (data.preparedDate && data.expireDate) {
         try {

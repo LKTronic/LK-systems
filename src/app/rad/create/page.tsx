@@ -1533,7 +1533,19 @@ function CreateRadQuotationContent() {
                   min="1"
                   max="90"
                   value={validityDays}
-                  onChange={(e) => setValidityDays(e.target.value)}
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    setValidityDays(v);
+                    const num = Number(v);
+                    if (!isNaN(num) && num > 0 && preparedDate) {
+                      const base = new Date(preparedDate);
+                      if (!isNaN(base.getTime())) {
+                        const exp = new Date(base);
+                        exp.setDate(exp.getDate() + num);
+                        setExpireDate(exp.toISOString().split("T")[0]);
+                      }
+                    }
+                  }}
                   className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-teal-500"
                 />
               </div>
@@ -1545,7 +1557,18 @@ function CreateRadQuotationContent() {
                 <input
                   type="date"
                   value={expireDate}
-                  onChange={(e) => setExpireDate(e.target.value)}
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    setExpireDate(v);
+                    if (v && preparedDate) {
+                      const p = new Date(preparedDate).getTime();
+                      const ex = new Date(v).getTime();
+                      if (!isNaN(p) && !isNaN(ex)) {
+                        const diff = Math.round((ex - p) / (1000 * 60 * 60 * 24));
+                        if (diff > 0) setValidityDays(diff);
+                      }
+                    }
+                  }}
                   className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-teal-500"
                 />
               </div>
