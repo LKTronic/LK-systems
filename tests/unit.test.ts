@@ -20,6 +20,8 @@ import {
   DEFAULT_PCB_SPECS,
   LK_TRONICS_BANK_DETAILS,
   calculate3DPrintPrice,
+  extractAdditionalTerms,
+  getProjectProposalCombinedTerms,
 } from "../src/lib/rdQuotationDefaults";
 import { DEFAULT_THREE_D_PRINT_PRICING } from "../src/lib/threeDPrintPricing";
 import {
@@ -1036,5 +1038,29 @@ describe("Unit Tests: Supply Excel Supplier Image Handling", () => {
     assert.ok(pageStream.includes("1. Product Details"));
     assert.ok(pageStream.includes("4. Handover Confirmation"));
     assert.ok(pageStream.includes("Signature of Collector"));
+  });
+
+  it("preserves custom project proposal terms including custom warranty, delivery, and scope terms", () => {
+    const customTerms = [
+      "Warranty: If a warranty (for manufacturing faults) is provided for any component used in the project, it is",
+      "Warranty: If a warranty (for manufacturing faults) is provided for any component used in the project, it is clearly stated in the",
+      "quotation nrAdditional Terms & Conditions (Optional)",
+      "Special Terms: Client will provide onsite 230V power outlet.",
+    ].join("\n");
+
+    const extracted = extractAdditionalTerms(customTerms);
+    assert.equal(extracted.length, 4);
+    assert.equal(extracted[0], "Warranty: If a warranty (for manufacturing faults) is provided for any component used in the project, it is");
+    assert.equal(extracted[1], "Warranty: If a warranty (for manufacturing faults) is provided for any component used in the project, it is clearly stated in the");
+    assert.equal(extracted[2], "quotation nrAdditional Terms & Conditions (Optional)");
+    assert.equal(extracted[3], "Special Terms: Client will provide onsite 230V power outlet.");
+
+    const combined = getProjectProposalCombinedTerms(customTerms, 4);
+    // 4 custom + 6 default terms = 10 total
+    assert.equal(combined.length, 10);
+    assert.equal(combined[0], extracted[0]);
+    assert.equal(combined[1], extracted[1]);
+    assert.equal(combined[2], extracted[2]);
+    assert.equal(combined[3], extracted[3]);
   });
 });

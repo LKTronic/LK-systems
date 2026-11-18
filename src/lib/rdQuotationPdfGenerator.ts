@@ -1799,7 +1799,7 @@ async function generateProjectProposalPdf(
   if (data.termsFontSize != null) {
     const s = Number(data.termsFontSize);
     if (!isNaN(s) && s >= 9 && s <= 30) {
-      customTermsFontSize = s <= 16.5 ? 22.0 : s;
+      customTermsFontSize = s;
     }
   } else if (data.technicalSpecs) {
     let specsObj: any = null;
@@ -1813,14 +1813,37 @@ async function generateProjectProposalPdf(
     if (specsObj && specsObj.termsFontSize != null) {
       const s = Number(specsObj.termsFontSize);
       if (!isNaN(s) && s >= 9 && s <= 30) {
-        customTermsFontSize = s <= 16.5 ? 22.0 : s;
+        customTermsFontSize = s;
       }
     }
   }
 
-  const isExtended = termsList.length > 6;
-  const defaultSize = isExtended ? (termsList.length > 8 ? 16.5 : 19.0) : 22.0;
-  const fontSize = customTermsFontSize || defaultSize;
+  // Auto-fit font size if at default 22.0 or unspecified so all terms fit on Slide 6 when possible
+  const availableH = maxTermY - 48.0; // ~202.0mm
+  let chosenTermsFontSize = customTermsFontSize || 22.0;
+
+  if (!customTermsFontSize || customTermsFontSize === 22.0) {
+    const candidateSizes = [22.0, 20.0, 18.5, 17.0, 16.0];
+    for (const testSize of candidateSizes) {
+      const testSpacing = testSize * 0.45;
+      const testPad = testSize * 0.35;
+      doc.setFontSize(testSize);
+      let totalEstimatedH = 0;
+      for (const t of termsList) {
+        const cleanT = t.replace(/^(\d+[\.\)]|\•|\-)\s*/, "").trim();
+        const lines = doc.splitTextToSize(cleanT, 426.0);
+        const lCount = Array.isArray(lines) ? lines.length : 1;
+        totalEstimatedH += lCount * testSpacing + testPad;
+      }
+      if (totalEstimatedH <= availableH) {
+        chosenTermsFontSize = testSize;
+        break;
+      }
+      chosenTermsFontSize = testSize;
+    }
+  }
+
+  const fontSize = chosenTermsFontSize;
   const lineSpacing = fontSize * 0.45;
   const termPadding = fontSize * 0.35;
 
@@ -1836,7 +1859,15 @@ async function generateProjectProposalPdf(
       bodyPart = cleanTerm.substring(colonIdx + 1).trim();
     }
 
-    if (termY > maxTermY) {
+    // Estimate height of this full term to prevent awkward orphan line splits across pages
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(fontSize);
+    const fullTermText = titlePart ? `${titlePart} ${bodyPart}` : cleanTerm;
+    const termLines = doc.splitTextToSize(fullTermText, 426.0);
+    const lineCount = Array.isArray(termLines) ? termLines.length : 1;
+    const termHeight = lineCount * lineSpacing;
+
+    if (termY + termHeight > maxTermY && termY > 55.0) {
       doc.addPage([SLIDE_W, SLIDE_H], "landscape");
       if (bgs.bgTerms) {
         try {

@@ -156,31 +156,38 @@ export function getProjectProposalTerms(validityDays: number | string = 4): stri
   ];
 }
 
+function normalizeTermForMatch(term: string): string {
+  return term
+    .toLowerCase()
+    .replace(/^(\d+[\.\)]|[•\-\*])\s*/, "") // remove leading bullet or number
+    .replace(/’/g, "'") // normalize curly apostrophe
+    .replace(/&/g, "and") // normalize & to and
+    .replace(/\s+/g, " ") // collapse multiple spaces
+    .trim();
+}
+
+const DEFAULT_TERMS_NORMALIZED: string[] = [
+  normalizeTermForMatch("Engineering Supervision: For your convenience, the project will be directed by an R&D engineer from start to finish, and all project milestones will be communicated directly via email."),
+  normalizeTermForMatch("Warranty: If a warranty (for manufacturing faults) is provided for any component used in the project, it is clearly stated in the quotation."),
+  normalizeTermForMatch("Hardware Warranty: If a warranty (for manufacturing faults) is provided for any component used in the project, it is clearly stated in the quotation."),
+  normalizeTermForMatch("Hardware Warranty: If a warranty (for manufacturing faults) is provided for any hardware component used in the project, it is clearly stated in the quotation."),
+  normalizeTermForMatch("Source Code & Design Documents: Please note that programming files, source codes, and system design documents are not included or provided as part of this project unless explicitly negotiated."),
+  normalizeTermForMatch("Delivery & Transportation: Transportation, delivery, and freight charges are not included in this quotation and will be charged separately, if applicable."),
+  normalizeTermForMatch("Scope of Work: This quotation covers only the products and scope specified in this proposal. Any additional components or materials required beyond the quoted scope shall be supplied and charged separately upon customer approval."),
+  normalizeTermForMatch("Environmental Operating Conditions: The warranty shall be considered void if the electronic devices or equipment are operated, installed, or stored under environmental conditions that do not comply with the manufacturer's specified operating requirements (excessive temperature, humidity, dust, moisture, corrosive substances, vibration)."),
+];
+
 export function isDefaultProjectProposalTerm(term: string): boolean {
-  const t = term.toLowerCase().trim();
-  const prefixes = [
-    "quotation validity",
-    "the prices and other service charges",
-    "engineering supervision",
-    "for your convenience, the project will be directed",
-    "hardware warranty",
-    "warranty",
-    "if a warranty (for manufacturing faults)",
-    "if a warranty for manufacturing faults",
-    "source code & design documents",
-    "source code and design documents",
-    "please note that programming files",
-    "delivery & transportation",
-    "delivery and transportation",
-    "transportation, delivery, and freight charges",
-    "transportation, delivery and freight charges",
-    "scope of work",
-    "this quotation covers only the products and scope",
-    "environmental operating conditions",
-    "environmental conditions",
-    "the warranty shall be considered void if the electronic devices",
-  ];
-  return prefixes.some((prefix) => t.includes(prefix));
+  const norm = normalizeTermForMatch(term);
+  if (!norm) return false;
+  if (
+    norm.startsWith(
+      "quotation validity: the prices and other service charges associated with the project are valid for"
+    )
+  ) {
+    return true;
+  }
+  return DEFAULT_TERMS_NORMALIZED.includes(norm);
 }
 
 export function extractAdditionalTerms(rawTerms: string | null | undefined): string[] {
