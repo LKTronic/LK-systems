@@ -64,9 +64,9 @@ export async function generateHandoverLetterPdf(
   }
 
   // Load official circular LK Tronics branding logo
-  let logoBase64 = await loadImageAsBase64("/template_assets/logos/footer/lk_tronics.png");
+  let logoBase64 = await loadImageAsBase64("/logo.png");
   if (!logoBase64) {
-    logoBase64 = await loadImageAsBase64("/template_assets/lk_tronics_logo.png");
+    logoBase64 = await loadImageAsBase64("/template_assets/logos/footer/lk_tronics.png");
   }
 
   const leftMargin = 14;
