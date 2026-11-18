@@ -180,7 +180,7 @@ export function getProjectProposalTerms(validityDays: number | string = 4): stri
   return [
     "Engineering Supervision: For your convenience, the project will be directed by an R&D engineer from start to finish, and all project milestones will be communicated directly via email.",
     "Warranty: If a warranty (for manufacturing faults) is provided for any component used in the project, it is clearly stated in the quotation.",
-    "Source Code & Design Documents: Please note that programming files, source codes, and system design documents are not included or provided as part of this project unless explicitly negotiated.",
+    "Source Code & Design Documents: All programming files, source codes, software, technical designs, and system design documents developed for this project remain the intellectual property of LK Tronics Solutions and are not included in the project deliverables unless explicitly agreed upon in writing.",
     "Delivery & Transportation: Transportation, delivery, and freight charges are not included in this quotation and will be charged separately, if applicable.",
     "Scope of Work: This quotation covers only the products and scope specified in this proposal. Any additional components or materials required beyond the quoted scope shall be supplied and charged separately upon customer approval.",
     "Environmental Operating Conditions: The warranty shall be considered void if the electronic devices or equipment are operated, installed, or stored under environmental conditions that do not comply with the manufacturer’s specified operating requirements (excessive temperature, humidity, dust, moisture, corrosive substances, vibration).",
@@ -202,6 +202,7 @@ const DEFAULT_TERMS_NORMALIZED: string[] = [
   normalizeTermForMatch("Warranty: If a warranty (for manufacturing faults) is provided for any component used in the project, it is clearly stated in the quotation."),
   normalizeTermForMatch("Hardware Warranty: If a warranty (for manufacturing faults) is provided for any component used in the project, it is clearly stated in the quotation."),
   normalizeTermForMatch("Hardware Warranty: If a warranty (for manufacturing faults) is provided for any hardware component used in the project, it is clearly stated in the quotation."),
+  normalizeTermForMatch("Source Code & Design Documents: All programming files, source codes, software, technical designs, and system design documents developed for this project remain the intellectual property of LK Tronics Solutions and are not included in the project deliverables unless explicitly agreed upon in writing."),
   normalizeTermForMatch("Source Code & Design Documents: Please note that programming files, source codes, and system design documents are not included or provided as part of this project unless explicitly negotiated."),
   normalizeTermForMatch("Delivery & Transportation: Transportation, delivery, and freight charges are not included in this quotation and will be charged separately, if applicable."),
   normalizeTermForMatch("Scope of Work: This quotation covers only the products and scope specified in this proposal. Any additional components or materials required beyond the quoted scope shall be supplied and charged separately upon customer approval."),
