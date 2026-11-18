@@ -113,7 +113,7 @@ export default function EditRadQuotationPage({
   const [projectTitle, setProjectTitle] = useState("");
   const [overview, setOverview] = useState("");
   const [overviewTab, setOverviewTab] = useState<"write" | "preview">("write");
-  const [overviewFontSize, setOverviewFontSize] = useState<string>("24.0");
+  const [overviewFontSize, setOverviewFontSize] = useState<string>("22.0");
   const [termsFontSize, setTermsFontSize] = useState<string>("22.0");
   const [termsTab, setTermsTab] = useState<"write" | "preview">("write");
   const [commercialNote, setCommercialNote] = useState<string>("");
@@ -1001,7 +1001,7 @@ export default function EditRadQuotationPage({
         : {
             systemDesignImages,
             advancePercent: Number(advancePercent) || 60,
-            overviewFontSize: Number(overviewFontSize) || 24.0,
+            overviewFontSize: Number(overviewFontSize) || 22.0,
             termsFontSize: Number(termsFontSize) || 22.0,
             commercialNote: commercialNote.trim() || null,
             bankDetails: activeBank,
@@ -1231,7 +1231,7 @@ export default function EditRadQuotationPage({
         servicesTotal: payload.servicesTotal,
         totalAmount: payload.totalAmount,
         overview: payload.overview,
-        overviewFontSize: Number(overviewFontSize) || 24.0,
+        overviewFontSize: Number(overviewFontSize) || 22.0,
         termsFontSize: Number(termsFontSize) || 22.0,
         commercialNote: commercialNote.trim() || null,
         technicalSpecs: payload.technicalSpecs,
@@ -1666,9 +1666,10 @@ export default function EditRadQuotationPage({
                           >
                             <option value="18.0" className="bg-slate-900 text-white">18pt (Compact)</option>
                             <option value="20.5" className="bg-slate-900 text-white">20.5pt (Standard)</option>
-                            <option value="24.0" className="bg-slate-900 text-white">24pt (Recommended)</option>
-                            <option value="26.0" className="bg-slate-900 text-white">26pt (Large)</option>
-                            <option value="28.0" className="bg-slate-900 text-white">28pt (X-Large)</option>
+                            <option value="22.0" className="bg-slate-900 text-white">22pt (Recommended)</option>
+                            <option value="24.0" className="bg-slate-900 text-white">24pt (Large)</option>
+                            <option value="26.0" className="bg-slate-900 text-white">26pt (X-Large)</option>
+                            <option value="28.0" className="bg-slate-900 text-white">28pt</option>
                           </select>
                         </div>
                         <button
