@@ -13,7 +13,7 @@ export default function ThreeDPrintQuotationsPage() {
       savedLabel="Saved Quotations"
       createHref="/rad/create?type=THREE_D_PRINT"
       icon={Printer}
-      badgeText="3DQ Series"
+      badgeText="QV Series"
       themeColor="amber"
     />
   );

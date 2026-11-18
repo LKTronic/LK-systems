@@ -569,7 +569,7 @@ export default function RadDashboardPage() {
                     <Printer className="w-4 h-4" />
                   </span>
                   <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-amber-950/60 text-amber-300 border border-amber-800/50">
-                    3DQ Series
+                    QV Series
                   </span>
                 </div>
                 <h3 className="text-xs font-semibold text-white group-hover:text-amber-300 transition-colors">
@@ -604,7 +604,7 @@ export default function RadDashboardPage() {
                     <Cpu className="w-4 h-4" />
                   </span>
                   <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-950/60 text-emerald-300 border border-emerald-800/50">
-                    PCB Series
+                    QV Series
                   </span>
                 </div>
                 <h3 className="text-xs font-semibold text-white group-hover:text-emerald-300 transition-colors">

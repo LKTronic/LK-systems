@@ -113,7 +113,7 @@ function CreateRadQuotationContent() {
     const yyyy = now.getFullYear();
     const mm = String(now.getMonth() + 1).padStart(2, "0");
     const dd = String(now.getDate()).padStart(2, "0");
-    const pfx = type === "PROJECT_PROPOSAL" ? "PQV" : type === "PCB" ? "PCB" : "3DQ";
+    const pfx = type === "PROJECT_PROPOSAL" ? "PQV" : "QV";
     return `${yyyy}${mm}${dd}${pfx}1`;
   };
 
@@ -1360,7 +1360,7 @@ function CreateRadQuotationContent() {
     },
     THREE_D_PRINT: {
       title: "Create 3D Print Quotation",
-      subtitle: "3D printing parameters, materials, layer precision & turnaround (3DQ Series)",
+      subtitle: "3D printing parameters, materials, layer precision & turnaround (QV Series)",
       icon: Printer,
       color: "text-amber-400",
       activeTabClass: "bg-amber-600 text-white",
@@ -1370,7 +1370,7 @@ function CreateRadQuotationContent() {
     },
     PCB: {
       title: "Create PCB Fabrication Plan",
-      subtitle: "PCB fabrication specifications, copper weight, layers & lead time (PCB Series)",
+      subtitle: "PCB fabrication specifications, copper weight, layers & lead time (QV Series)",
       icon: Cpu,
       color: "text-emerald-400",
       activeTabClass: "bg-emerald-600 text-white",
@@ -1527,9 +1527,7 @@ function CreateRadQuotationContent() {
                     placeholder={
                       quotationType === "PROJECT_PROPOSAL"
                         ? "e.g. 20261117PQV1"
-                        : quotationType === "PCB"
-                        ? "e.g. 20261117PCB1"
-                        : "e.g. 202611173DQ1"
+                        : "e.g. 20261118QV1"
                     }
                     className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white font-mono focus:outline-none focus:border-teal-500"
                   />
