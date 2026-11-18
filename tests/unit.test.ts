@@ -970,7 +970,8 @@ describe("Unit Tests: Supply Excel Supplier Image Handling", () => {
     assert.ok(pageStream.includes("4. Handover Confirmation"));
     assert.ok(pageStream.includes("Signature of Collector"));
     assert.ok(pageStream.includes("Date"));
-    assert.ok(pageStream.includes("Reg No -WF19731"));
+    assert.ok(pageStream.includes("P-V 00336036"));
+    assert.ok(pageStream.includes("HOMAGAMA"));
     assert.ok(pageStream.includes("+94 76 357 31 31"));
     assert.ok(pageStream.includes("LK-BAT-51.2V-100AH"));
     assert.ok(pageStream.includes("BAT202611-00812"));
