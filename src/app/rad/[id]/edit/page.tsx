@@ -657,6 +657,31 @@ export default function EditRadQuotationPage({
           }
         }
 
+        // Clean numeric keys if an object spread occurred on string
+        if (parsedSpecs && typeof parsedSpecs === "object") {
+          const nonNum: any = {};
+          for (const k of Object.keys(parsedSpecs)) {
+            if (!/^\d+$/.test(k)) {
+              nonNum[k] = parsedSpecs[k];
+            }
+          }
+          parsedSpecs = nonNum;
+        }
+
+        // Load validity days for all quotation types (3D print, PCB, Project Proposal)
+        if (q.validityDays != null) {
+          setValidityDays(q.validityDays);
+        } else if (parsedSpecs?.validityDays != null) {
+          setValidityDays(parsedSpecs.validityDays);
+        } else if (q.preparedDate && q.expireDate) {
+          try {
+            const p = new Date(q.preparedDate).getTime();
+            const e = new Date(q.expireDate).getTime();
+            const diff = Math.round((e - p) / (1000 * 60 * 60 * 24));
+            if (diff > 0) setValidityDays(diff);
+          } catch {}
+        }
+
         if (q.type === "THREE_D_PRINT") {
           setPrintSpecs({ ...DEFAULT_THREE_D_PRINT_SPECS, ...parsedSpecs });
         } else if (q.type === "PCB") {
@@ -679,9 +704,6 @@ export default function EditRadQuotationPage({
           }
           if (q.servicesTotal != null) {
             setCustomServicesTotal(String(q.servicesTotal));
-          }
-          if (q.validityDays != null) {
-            setValidityDays(q.validityDays);
           }
           if (parsedSpecs && Array.isArray(parsedSpecs.systemDesignImages)) {
             setSystemDesignImages(parsedSpecs.systemDesignImages);
@@ -1486,7 +1508,19 @@ export default function EditRadQuotationPage({
                     min="1"
                     max="90"
                     value={validityDays}
-                    onChange={(e) => setValidityDays(e.target.value)}
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      setValidityDays(v);
+                      const num = Number(v);
+                      if (!isNaN(num) && num > 0 && preparedDate) {
+                        const base = new Date(preparedDate);
+                        if (!isNaN(base.getTime())) {
+                          const exp = new Date(base);
+                          exp.setDate(exp.getDate() + num);
+                          setExpireDate(exp.toISOString().split("T")[0]);
+                        }
+                      }
+                    }}
                     className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-teal-500"
                   />
                 </div>
@@ -1498,7 +1532,18 @@ export default function EditRadQuotationPage({
                   <input
                     type="date"
                     value={expireDate}
-                    onChange={(e) => setExpireDate(e.target.value)}
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      setExpireDate(v);
+                      if (v && preparedDate) {
+                        const p = new Date(preparedDate).getTime();
+                        const ex = new Date(v).getTime();
+                        if (!isNaN(p) && !isNaN(ex)) {
+                          const diff = Math.round((ex - p) / (1000 * 60 * 60 * 24));
+                          if (diff > 0) setValidityDays(diff);
+                        }
+                      }
+                    }}
                     className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-teal-500"
                   />
                 </div>
