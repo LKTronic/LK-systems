@@ -58,3 +58,9 @@ next-env.d.ts
 
 # scratch
 scratch/
+
+# Generated docs, test previews, and uploads
+Doc/
+temp_media/
+public/uploads/products/*
+!public/uploads/products/.gitkeep

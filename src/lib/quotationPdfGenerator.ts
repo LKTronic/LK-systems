@@ -1448,26 +1448,15 @@ export async function generateQuotationPdf(
     curBankY += 6.2;
   }
 
-  // Signature Block
-  const sigY = bankBoxY + 50;
-  const sigX = 145;
-  doc.setFont("times", "normal");
-  doc.setFontSize(10);
-  doc.setTextColor(100, 100, 100);
-  doc.text("............................................", sigX, sigY);
-  doc.setFont("times", "bold");
-  doc.setFontSize(10);
-  doc.setTextColor(0, 0, 0);
-  doc.text("Authorized by", sigX + 10, sigY + 5.5);
-
   // Closing appreciation note
+  const appreciationY = bankBoxY + bankBoxH + 18;
   doc.setFont("times", "bolditalic");
   doc.setFontSize(10.5);
   doc.setTextColor(30, 41, 59);
   doc.text(
     "We sincerely appreciate the opportunity to submit this quotation and look forward to\nsupporting your requirements.",
     105,
-    sigY + 25,
+    appreciationY,
     { align: "center" }
   );
 

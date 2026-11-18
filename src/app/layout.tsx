@@ -42,27 +42,6 @@ export default function RootLayout({
       suppressHydrationWarning
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
-      <head>
-        <link rel="icon" href="/logo.png?v=20261014" type="image/png" />
-        <link rel="shortcut icon" href="/favicon.ico?v=20261014" />
-        <link rel="apple-touch-icon" href="/logo.png?v=20261014" />
-        <script
-          dangerouslySetInnerHTML={{
-            __html: `
-              try {
-                const theme = localStorage.getItem('pms-theme');
-                if (theme === 'light') {
-                  document.documentElement.classList.add('light');
-                  document.documentElement.classList.remove('dark');
-                } else {
-                  document.documentElement.classList.add('dark');
-                  document.documentElement.classList.remove('light');
-                }
-              } catch (e) {}
-            `,
-          }}
-        />
-      </head>
       <body className="min-h-full flex flex-col transition-colors duration-200" suppressHydrationWarning>
         <ExtensionErrorSilencer />
         <Providers>{children}</Providers>
