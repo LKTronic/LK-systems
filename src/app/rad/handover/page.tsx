@@ -928,46 +928,47 @@ export default function ProductHandoverPage() {
                     {/* Header */}
                     <div className="flex items-start justify-between gap-4 pb-3 border-b-2 border-slate-900">
                       {/* Left: Logo */}
-                      <div className="text-center w-24 shrink-0">
+                      <div className="text-center w-20 shrink-0">
                         {/* eslint-disable-next-line @next/next/no-img-element */}
                         <img
                           src="/template_assets/logos/footer/lk_tronics.png"
                           alt="LK Tronics"
-                          className="w-14 h-14 mx-auto object-contain"
+                          className="w-12 h-12 mx-auto object-contain"
                           onError={(e) => {
                             (e.currentTarget as HTMLElement).style.display = "none";
                           }}
                         />
-                        <div className="text-[7px] font-bold text-slate-600 mt-0.5 tracking-tight uppercase">
+                        <div className="text-[6.5px] font-bold text-slate-600 mt-0.5 tracking-tight uppercase">
                           Components for the future
                         </div>
                       </div>
 
-                      {/* Center: LK TRONICS & Contacts */}
+                      {/* Beside Logo: LK TRONICS & Contacts */}
                       <div className="text-left flex-1 pl-2">
-                        <div className="text-base font-black text-slate-900 tracking-tight">
+                        <div className="text-sm font-black text-slate-900 tracking-tight">
                           LK TRONICS
                         </div>
                         <div className="text-[10px] text-slate-700 mt-0.5 leading-snug">
-                          <div><span className="font-semibold">Tele &nbsp;&nbsp;:</span> +94 76 357 31 31</div>
+                          <div><span className="font-semibold">Tele &nbsp;&nbsp;:</span> +94 76 357 31 31 | 011 4 215 515</div>
                           <div><span className="font-semibold">E mail :</span> admin@lk-tronics.com | sales@lk-tronics.com</div>
-                          <div><span className="font-semibold">Web &nbsp;&nbsp;:</span> www.lk-tronics.com</div>
                         </div>
                       </div>
 
-                      {/* Right: Reg & Address */}
+                      {/* Right: Reg & Web */}
                       <div className="text-right text-[10px] text-slate-700 leading-snug shrink-0">
-                        <div className="font-semibold text-slate-900">Reg No -WF19731</div>
-                        <div># 408/20,</div>
-                        <div>Pitipana South,</div>
-                        <div>Delgahakanda,</div>
-                        <div>Homagama,</div>
-                        <div>Sri Lanka.</div>
+                        <div><span className="font-semibold">Web :</span> www.lk-tronics.com</div>
+                        <div className="font-semibold text-slate-900 mt-0.5">Reg No : P-V 00336036</div>
                       </div>
                     </div>
 
+                    {/* Quotation Style Teal Address Bar */}
+                    <div className="bg-[#4a9098] text-white px-3 py-1 rounded flex items-center justify-between text-[9px] font-bold tracking-tight">
+                      <span>LK TRONICS, HIGH-LEVEL ROAD, HOMAGAMA, SRI LANKA.</span>
+                      <span>TEL : 011 4 215 515 | REG NO - P-V 00336036</span>
+                    </div>
+
                     {refNo && (
-                      <div className="text-right text-[10px] font-mono font-bold text-slate-500 -mt-2">
+                      <div className="text-right text-[10px] font-mono font-bold text-slate-500 pt-1">
                         Ref: {refNo}
                       </div>
                     )}
