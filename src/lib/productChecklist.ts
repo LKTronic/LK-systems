@@ -13,8 +13,10 @@ export interface BatteryInfo {
 export interface InverterInfo {
   arrivedDate: string;
   modelNumber: string;
-  macAddress: string;
-  serialNumber: string;
+  macAddress?: string;
+  serialNumber?: string;
+  serialNumberBox: string;
+  serialNumberInverter: string;
   batterySystem: string;
   physicalDamage: string;
 }
@@ -100,6 +102,8 @@ export function getDefaultInverterInfo(): InverterInfo {
     modelNumber: "",
     macAddress: "",
     serialNumber: "",
+    serialNumberBox: "",
+    serialNumberInverter: "",
     batterySystem: "48V DC",
     physicalDamage: "None / No physical damage observed",
   };

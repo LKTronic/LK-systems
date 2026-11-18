@@ -255,10 +255,10 @@ export async function generateChecklistPdf(checklist: ProductChecklist): Promise
       inv?.batterySystem || "48V DC",
     ]);
     infoRows.push([
-      "Serial Number:",
-      inv?.serialNumber || "N/A",
-      "MAC Address:",
-      inv?.macAddress || "N/A",
+      "Serial Number (Inveter):",
+      inv?.serialNumberInverter || inv?.serialNumber || "N/A",
+      "Serial Number (Box):",
+      inv?.serialNumberBox || "N/A",
     ]);
     infoRows.push([
       "Physical Damage Assessment:",
