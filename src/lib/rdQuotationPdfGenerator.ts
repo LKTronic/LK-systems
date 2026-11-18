@@ -1830,7 +1830,7 @@ async function generateProjectProposalPdf(
   );
 
   let termY = 48.0;
-  const maxTermY = 250.0;
+  const maxTermY = 228.0;
 
   // Resolve terms font size (from data or technicalSpecs)
   let customTermsFontSize: number | null = null;
@@ -1857,11 +1857,11 @@ async function generateProjectProposalPdf(
   }
 
   // Auto-fit font size if at default 22.0 or unspecified so all terms fit on Slide 6 when possible
-  const availableH = maxTermY - 48.0; // ~202.0mm
+  const availableH = maxTermY - 48.0; // ~180.0mm
   let chosenTermsFontSize = customTermsFontSize || 22.0;
 
   if (!customTermsFontSize || customTermsFontSize === 22.0) {
-    const candidateSizes = [22.0, 20.0, 18.5, 17.0, 16.0];
+    const candidateSizes = [22.0, 20.0, 18.5];
     for (const testSize of candidateSizes) {
       const testSpacing = testSize * 0.45;
       const testPad = testSize * 0.35;
@@ -1871,13 +1871,16 @@ async function generateProjectProposalPdf(
         const cleanT = t.replace(/^(\d+[\.\)]|\•|\-)\s*/, "").trim();
         const lines = doc.splitTextToSize(cleanT, 426.0);
         const lCount = Array.isArray(lines) ? lines.length : 1;
-        totalEstimatedH += lCount * testSpacing + testPad;
+        totalEstimatedH += (lCount - 1) * testSpacing + testSpacing + testPad;
       }
       if (totalEstimatedH <= availableH) {
         chosenTermsFontSize = testSize;
         break;
       }
-      chosenTermsFontSize = testSize;
+    }
+    // If it cannot fit on 1 slide even at 18.5pt, maintain full prominent 22.0pt font across 2 slides
+    if (chosenTermsFontSize < 18.5) {
+      chosenTermsFontSize = 22.0;
     }
   }
 
@@ -1892,20 +1895,42 @@ async function generateProjectProposalPdf(
     const colonIdx = cleanTerm.indexOf(":");
     let titlePart = "";
     let bodyPart = cleanTerm;
-    if (colonIdx > 0 && colonIdx < 40) {
+    if (colonIdx > 0 && colonIdx < 45) {
       titlePart = cleanTerm.substring(0, colonIdx + 1).trim();
       bodyPart = cleanTerm.substring(colonIdx + 1).trim();
     }
 
-    // Estimate height of this full term to prevent awkward orphan line splits across pages
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(fontSize);
-    const fullTermText = titlePart ? `${titlePart} ${bodyPart}` : cleanTerm;
-    const termLines = doc.splitTextToSize(fullTermText, 426.0);
-    const lineCount = Array.isArray(termLines) ? termLines.length : 1;
-    const termHeight = lineCount * lineSpacing;
+    // Accurately simulate line wrapping for this entire term to determine its exact height
+    const startX = 44.0;
+    const maxW = 426.0;
+    let simX = startX;
+    let simLines = 1;
 
-    if (termY + termHeight > maxTermY && termY > 55.0) {
+    if (titlePart) {
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(fontSize);
+      simX += doc.getTextWidth(titlePart) + doc.getTextWidth(" ") + 1.2;
+    }
+
+    const termWords = parseSlideTokens(titlePart ? bodyPart : cleanTerm);
+    termWords.forEach((wObj) => {
+      doc.setFont("helvetica", wObj.bold ? "bold" : "normal");
+      doc.setFontSize(fontSize);
+      const wordW = doc.getTextWidth(wObj.word);
+      const spaceW = doc.getTextWidth(" ");
+
+      if (simX + wordW > startX + maxW) {
+        simLines++;
+        simX = startX + wordW + spaceW;
+      } else {
+        simX += wordW + spaceW;
+      }
+    });
+
+    const fullTermSpan = (simLines - 1) * lineSpacing;
+
+    // Atomic Term Pagination: If the full term cannot fit on the current page, move the ENTIRE term to next page
+    if (termY + fullTermSpan > maxTermY && termY > 50.0) {
       doc.addPage([SLIDE_W, SLIDE_H], "landscape");
       if (bgs.bgTerms) {
         try {
@@ -1924,8 +1949,6 @@ async function generateProjectProposalPdf(
     doc.text("•", 38.0, termY);
 
     let curX = 44.0;
-    const startX = 44.0;
-    const maxW = 426.0;
 
     if (titlePart) {
       // Bold LK Teal title prefix
@@ -1935,7 +1958,6 @@ async function generateProjectProposalPdf(
       curX += doc.getTextWidth(titlePart) + doc.getTextWidth(" ") + 1.2;
     }
 
-    const termWords = parseSlideTokens(titlePart ? bodyPart : cleanTerm);
     termWords.forEach((wObj, wIdx) => {
       doc.setFont("helvetica", wObj.bold ? "bold" : "normal");
       doc.setFontSize(fontSize);
@@ -1945,17 +1967,6 @@ async function generateProjectProposalPdf(
       if (curX + wordW > startX + maxW) {
         termY += lineSpacing;
         curX = startX;
-        if (termY > maxTermY) {
-          doc.addPage([SLIDE_W, SLIDE_H], "landscape");
-          if (bgs.bgTerms) {
-            try {
-              doc.addImage(bgs.bgTerms, "PNG", 0, 0, SLIDE_W, SLIDE_H, undefined, "FAST");
-            } catch (err) {
-              console.warn("Failed to render continuation bgTerms:", err);
-            }
-          }
-          termY = 48.0;
-        }
       }
 
       // Draw yellow highlight rectangle behind text if highlighted
