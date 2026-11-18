@@ -222,8 +222,15 @@ def make_slide1():
         logo_path = f"public/template_assets/logos/cover/{name}.png"
         if os.path.exists(logo_path):
             l_img = Image.open(logo_path).convert("RGBA")
-            target_h = 95 if name == "lk_tronics_iot" else 78 if name == "stm32" else 88 if name == "nvidia_jetson" else 85
-            scaled = fit_logo(l_img, slot_w - 40, target_h)
+            if name == "lk_tronics_iot":
+                target_h = 145
+            elif name in ("raspberry_pi", "stm32"):
+                target_h = 138
+            elif name == "nvidia_jetson":
+                target_h = 115
+            else:
+                target_h = 85
+            scaled = fit_logo(l_img, slot_w - 35, target_h)
             sw, sh = scaled.size
             cx = int(start_x + i * slot_w + slot_w / 2)
             px = cx - sw // 2
