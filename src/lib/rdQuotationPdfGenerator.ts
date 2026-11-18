@@ -1047,7 +1047,7 @@ async function generateProjectProposalPdf(
   const introText = data.overview || DEFAULT_PROJECT_PROPOSAL_INTRO;
 
   // Resolve overview font size (from data or technicalSpecs)
-  let overviewSize = 24.0;
+  let overviewSize = 22.0;
   if (data.overviewFontSize != null) {
     const s = Number(data.overviewFontSize);
     if (!isNaN(s) && s >= 10 && s <= 36) overviewSize = s;
