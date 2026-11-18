@@ -102,6 +102,16 @@ export default function EditRadQuotationPage({
   const [registrationNo, setRegistrationNo] = useState("P-V 00336036");
   const [quotationStatus, setQuotationStatus] = useState<"DRAFT" | "COMPLETED">("COMPLETED");
   const [quotationNo, setQuotationNo] = useState("");
+  const [unfilledFields, setUnfilledFields] = useState<Record<string, string>>({});
+
+  const clearFieldError = (key: string) => {
+    setUnfilledFields((prev) => {
+      if (!prev[key]) return prev;
+      const next = { ...prev };
+      delete next[key];
+      return next;
+    });
+  };
   const [preparedDate, setPreparedDate] = useState("");
   const [expireDate, setExpireDate] = useState("");
   const [validityDays, setValidityDays] = useState<number | string>(5);
@@ -591,7 +601,7 @@ export default function EditRadQuotationPage({
   const [isSaving, setIsSaving] = useState(false);
   const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
   const [message, setMessage] = useState<{
-    type: "success" | "error";
+    type: "success" | "error" | "info";
     text: string;
   } | null>(null);
 
@@ -1083,119 +1093,83 @@ export default function EditRadQuotationPage({
     };
   };
 
-  // Comprehensive validation across all quotation fields and constraints
-  const validateForm = async () => {
-    let currentNo = quotationNo.trim();
+  // Check form completion and collect missing required fields for validation and highlight
+  const getFormValidation = () => {
+    const missing: Record<string, string> = {};
+
+    const currentNo = quotationNo.trim();
     if (!currentNo) {
-      try {
-        const res = await fetch(`/api/rad/next-number?type=${quotationType}`);
-        if (res.ok) {
-          const data = await res.json();
-          const next = data.quotationNo || data.nextQuotationNo;
-          if (next) {
-            currentNo = next;
-            setQuotationNo(currentNo);
-          }
-        }
-      } catch (err) {
-        console.error("Auto generation on submit failed:", err);
-      }
-    }
-    if (!currentNo) {
-      setMessage({ type: "error", text: "Quotation number is required." });
-      return false;
-    }
-    if (!preparedBy.trim()) {
-      setMessage({ type: "error", text: "Prepared By (Author) name is required." });
-      return false;
+      missing["quotationNo"] = "Quotation Number";
     }
     if (!quotationTo.trim()) {
-      setMessage({
-        type: "error",
-        text: "Please provide customer or company details under 'Quotation To'.",
-      });
-      return false;
+      missing["quotationTo"] = "Quotation To (Customer Name / Company)";
+    }
+    if (!preparedBy.trim()) {
+      missing["preparedBy"] = "Prepared By (Author)";
     }
     if (!preparedDate) {
-      setMessage({ type: "error", text: "Quotation Prepared Date is required." });
-      return false;
+      missing["preparedDate"] = "Quotation Prepared Date";
     }
     if (!expireDate) {
-      setMessage({ type: "error", text: "Quotation Expire Date is required." });
-      return false;
-    }
-    if (new Date(expireDate) < new Date(preparedDate)) {
-      setMessage({
-        type: "error",
-        text: "Quotation Expire Date must be on or after Prepared Date.",
-      });
-      return false;
+      missing["expireDate"] = "Quotation Expire Date";
+    } else if (preparedDate && new Date(expireDate) < new Date(preparedDate)) {
+      missing["expireDate"] = "Quotation Expire Date (must be on or after Prepared Date)";
     }
     if (quotationType === "PROJECT_PROPOSAL") {
       if (!projectTitle.trim()) {
-        setMessage({
-          type: "error",
-          text: "Project Title is required for Project Proposals.",
-        });
-        return false;
-      }
-      if (advancePercent !== null && advancePercent !== undefined) {
-        const adv = Number(advancePercent);
-        if (isNaN(adv) || adv < 1 || adv > 100) {
-          setMessage({
-            type: "error",
-            text: "Advance payment percentage must be between 1% and 100%.",
-          });
-          return false;
-        }
-      }
-      if (validityDays !== null && validityDays !== undefined) {
-        const val = Number(validityDays);
-        if (isNaN(val) || val < 1) {
-          setMessage({
-            type: "error",
-            text: "Quotation validity period must be at least 1 day.",
-          });
-          return false;
-        }
+        missing["projectTitle"] = "Project Title";
       }
     }
     if (items.length === 0) {
-      setMessage({
-        type: "error",
-        text: "Please add at least one line item to the quotation.",
+      missing["items"] = "Line Items (at least 1 item required)";
+    } else {
+      items.forEach((it, idx) => {
+        if (!it.productOrService || !it.productOrService.trim()) {
+          missing[`item_${idx}_productOrService`] = `Item #${idx + 1} Description`;
+        }
+        if (Number(it.quantity) < 1) {
+          missing[`item_${idx}_quantity`] = `Item #${idx + 1} Quantity`;
+        }
+        if (Number(it.unitPrice) < 0) {
+          missing[`item_${idx}_unitPrice`] = `Item #${idx + 1} Unit Rate`;
+        }
       });
-      return false;
     }
-    if (items.some((i) => !i.productOrService.trim())) {
-      setMessage({
-        type: "error",
-        text: "All line items must have a valid description or service title.",
-      });
-      return false;
-    }
-    if (items.some((i) => Number(i.quantity) < 1)) {
-      setMessage({
-        type: "error",
-        text: "All line item quantities must be at least 1.",
-      });
-      return false;
-    }
-    if (items.some((i) => Number(i.unitPrice) < 0)) {
-      setMessage({
-        type: "error",
-        text: "Line item unit prices cannot be negative.",
-      });
-      return false;
-    }
-    return true;
+
+    return missing;
   };
 
-  // Save Quotation Handler (PUT)
-  const handleSave = async (targetStatus: "DRAFT" | "COMPLETED" = "COMPLETED", andDownload = false) => {
-    if (targetStatus === "COMPLETED") {
-      const isValid = await validateForm();
-      if (!isValid) return;
+  const scrollToFirstError = (missing: Record<string, string>) => {
+    const firstKey = Object.keys(missing)[0];
+    if (!firstKey) return;
+    const el = document.getElementById(`field-${firstKey}`);
+    if (el) {
+      el.scrollIntoView({ behavior: "smooth", block: "center" });
+      el.focus?.();
+    }
+  };
+
+  // Unified Save Quotation Handler: auto-saves DRAFT if half-filled, or COMPLETED if all required fields are filled
+  const handleSave = async (andDownload = false) => {
+    const missing = getFormValidation();
+    const isComplete = Object.keys(missing).length === 0;
+    const targetStatus: "DRAFT" | "COMPLETED" = isComplete ? "COMPLETED" : "DRAFT";
+
+    if (andDownload && !isComplete) {
+      setUnfilledFields(missing);
+      const missingList = Object.values(missing);
+      setMessage({
+        type: "error",
+        text: `Cannot download quotation. Please fill in required fields: ${missingList.join(", ")}.`,
+      });
+      scrollToFirstError(missing);
+      return;
+    }
+
+    if (!isComplete) {
+      setUnfilledFields(missing);
+    } else {
+      setUnfilledFields({});
     }
 
     setIsSaving(true);
@@ -1215,21 +1189,21 @@ export default function EditRadQuotationPage({
       }
 
       setQuotationStatus(targetStatus);
-      setMessage({
-        type: "success",
-        text: targetStatus === "DRAFT"
-          ? `Quotation ${quotationNo} saved as DRAFT successfully!`
-          : `Quotation ${quotationNo} updated and finalized successfully!`,
-      });
 
-      if (andDownload) {
-        if (targetStatus === "DRAFT") {
-          setMessage({
-            type: "error",
-            text: "Draft quotations cannot be downloaded. Please finalize first.",
-          });
-        } else {
-          await handleDownloadDirect();
+      if (targetStatus === "DRAFT") {
+        const missingList = Object.values(missing);
+        setMessage({
+          type: "info",
+          text: `Quotation saved as DRAFT (partially filled). Unfilled required fields are highlighted in red: ${missingList.join(", ")}.`,
+        });
+        scrollToFirstError(missing);
+      } else {
+        setMessage({
+          type: "success",
+          text: `Quotation ${quotationNo} updated and finalized successfully!`,
+        });
+        if (andDownload) {
+          await executePdfDownload();
         }
       }
     } catch (err: any) {
@@ -1245,18 +1219,28 @@ export default function EditRadQuotationPage({
 
   // Direct PDF Download
   const handleDownloadDirect = async () => {
-    if (quotationStatus === "DRAFT") {
+    const missing = getFormValidation();
+    const isComplete = Object.keys(missing).length === 0;
+
+    if (!isComplete) {
+      setUnfilledFields(missing);
+      const missingList = Object.values(missing);
       setMessage({
         type: "error",
-        text: "Draft quotations cannot be downloaded. Please fill in all required fields and click 'Save & Download' or finalize the quotation first.",
+        text: `Cannot download quotation. Please fill in required fields: ${missingList.join(", ")}.`,
       });
+      scrollToFirstError(missing);
       return;
     }
-    const isValid = await validateForm();
-    if (!isValid) return;
+
+    setUnfilledFields({});
+    await executePdfDownload();
+  };
+
+  const executePdfDownload = async () => {
     setIsGeneratingPdf(true);
     try {
-      const payload = preparePayload();
+      const payload = preparePayload("COMPLETED");
       const pdfData: RdQuotationPdfData = {
         type: payload.type,
         quotationNo: payload.quotationNo,
@@ -1411,24 +1395,10 @@ export default function EditRadQuotationPage({
 
             <button
               type="button"
-              onClick={() => handleSave("DRAFT", false)}
-              disabled={isSaving}
-              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg bg-amber-950/70 hover:bg-amber-900/80 text-amber-300 text-xs font-semibold border border-amber-800/80 transition-colors disabled:opacity-50"
-              title="Save draft without requiring all fields"
-            >
-              <Edit3 className="w-4 h-4 text-amber-400" />
-              Save as Draft
-            </button>
-            <button
-              type="button"
               onClick={handleDownloadDirect}
-              disabled={isGeneratingPdf || quotationStatus === "DRAFT"}
-              title={quotationStatus === "DRAFT" ? "Draft quotations cannot be downloaded. Please finalize first." : "Download PDF"}
-              className={`inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-semibold border transition-colors ${
-                quotationStatus === "DRAFT"
-                  ? "bg-slate-900 border-slate-800 text-slate-600 cursor-not-allowed opacity-50"
-                  : "bg-slate-800 hover:bg-slate-700 text-slate-200 border-slate-700"
-              }`}
+              disabled={isGeneratingPdf}
+              title="Download PDF (checks required fields)"
+              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-xs font-semibold border bg-slate-800 hover:bg-slate-700 text-slate-200 border-slate-700 transition-colors"
             >
               {isGeneratingPdf ? (
                 <Loader2 className="w-4 h-4 animate-spin text-teal-400" />
@@ -1439,16 +1409,17 @@ export default function EditRadQuotationPage({
             </button>
             <button
               type="button"
-              onClick={() => handleSave("COMPLETED", true)}
+              onClick={() => handleSave(false)}
               disabled={isSaving}
               className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg bg-teal-600 hover:bg-teal-500 text-white text-xs font-semibold shadow-md shadow-teal-900/30 transition-colors disabled:opacity-50"
+              title="Save quotation (auto-draft if partially filled, final save if complete)"
             >
               {isSaving ? (
                 <Loader2 className="w-4 h-4 animate-spin" />
               ) : (
                 <Save className="w-4 h-4" />
               )}
-              Save &amp; Download
+              Save Quotation
             </button>
           </div>
         </div>
@@ -1459,11 +1430,15 @@ export default function EditRadQuotationPage({
             className={`flex items-center gap-3 p-3.5 rounded-xl text-sm ${
               message.type === "success"
                 ? "bg-emerald-950/40 border border-emerald-800 text-emerald-300"
-                : "bg-red-950/40 border border-red-800 text-red-300"
+                : message.type === "info"
+                ? "bg-amber-950/50 border border-amber-800 text-amber-300"
+                : "bg-red-950/50 border border-red-800 text-red-300"
             }`}
           >
             {message.type === "success" ? (
               <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-400" />
+            ) : message.type === "info" ? (
+              <AlertCircle className="w-4 h-4 shrink-0 text-amber-400" />
             ) : (
               <AlertCircle className="w-4 h-4 shrink-0 text-red-400" />
             )}
@@ -1504,11 +1479,25 @@ export default function EditRadQuotationPage({
                     </button>
                   </div>
                   <input
+                    id="field-quotationNo"
                     type="text"
                     value={quotationNo}
-                    onChange={(e) => setQuotationNo(e.target.value)}
-                    className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white font-mono focus:outline-none focus:border-teal-500"
+                    onChange={(e) => {
+                      setQuotationNo(e.target.value);
+                      if (e.target.value.trim()) clearFieldError("quotationNo");
+                    }}
+                    className={`w-full rounded-lg px-3 py-2 text-sm font-mono focus:outline-none transition-colors ${
+                      unfilledFields["quotationNo"]
+                        ? "border-2 border-red-500 ring-2 ring-red-500/50 bg-red-950/30 text-white placeholder-red-300/60"
+                        : "bg-slate-950 border border-slate-700 text-white focus:border-teal-500"
+                    }`}
                   />
+                  {unfilledFields["quotationNo"] && (
+                    <p className="text-[11px] text-red-400 font-medium mt-1 flex items-center gap-1">
+                      <AlertCircle className="w-3 h-3 text-red-400 shrink-0" />
+                      <span>Quotation number is required</span>
+                    </p>
+                  )}
                 </div>
 
                 <div>
@@ -1525,26 +1514,54 @@ export default function EditRadQuotationPage({
 
                 <div>
                   <label className="block text-xs font-semibold text-slate-400 mb-1">
-                    Prepared By
+                    Prepared By (Author) *
                   </label>
                   <input
+                    id="field-preparedBy"
                     type="text"
                     value={preparedBy}
-                    onChange={(e) => setPreparedBy(e.target.value)}
-                    className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-teal-500"
+                    onChange={(e) => {
+                      setPreparedBy(e.target.value);
+                      if (e.target.value.trim()) clearFieldError("preparedBy");
+                    }}
+                    className={`w-full rounded-lg px-3 py-2 text-sm focus:outline-none transition-colors ${
+                      unfilledFields["preparedBy"]
+                        ? "border-2 border-red-500 ring-2 ring-red-500/50 bg-red-950/30 text-white placeholder-red-300/60"
+                        : "bg-slate-950 border border-slate-700 text-white focus:border-teal-500"
+                    }`}
                   />
+                  {unfilledFields["preparedBy"] && (
+                    <p className="text-[11px] text-red-400 font-medium mt-1 flex items-center gap-1">
+                      <AlertCircle className="w-3 h-3 text-red-400 shrink-0" />
+                      <span>Prepared By (Author) is required</span>
+                    </p>
+                  )}
                 </div>
 
                 <div>
                   <label className="block text-xs font-semibold text-slate-400 mb-1">
-                    Prepared Date
+                    Prepared Date *
                   </label>
                   <input
+                    id="field-preparedDate"
                     type="date"
                     value={preparedDate}
-                    onChange={(e) => setPreparedDate(e.target.value)}
-                    className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-teal-500"
+                    onChange={(e) => {
+                      setPreparedDate(e.target.value);
+                      if (e.target.value) clearFieldError("preparedDate");
+                    }}
+                    className={`w-full rounded-lg px-3 py-2 text-sm focus:outline-none transition-colors ${
+                      unfilledFields["preparedDate"]
+                        ? "border-2 border-red-500 ring-2 ring-red-500/50 bg-red-950/30 text-white"
+                        : "bg-slate-950 border border-slate-700 text-white focus:border-teal-500"
+                    }`}
                   />
+                  {unfilledFields["preparedDate"] && (
+                    <p className="text-[11px] text-red-400 font-medium mt-1 flex items-center gap-1">
+                      <AlertCircle className="w-3 h-3 text-red-400 shrink-0" />
+                      <span>Prepared Date is required</span>
+                    </p>
+                  )}
                 </div>
 
                 <div>
@@ -1566,6 +1583,7 @@ export default function EditRadQuotationPage({
                           const exp = new Date(base);
                           exp.setDate(exp.getDate() + num);
                           setExpireDate(exp.toISOString().split("T")[0]);
+                          clearFieldError("expireDate");
                         }
                       }
                     }}
@@ -1575,14 +1593,16 @@ export default function EditRadQuotationPage({
 
                 <div>
                   <label className="block text-xs font-semibold text-slate-400 mb-1">
-                    Expiry Date
+                    Expiry Date *
                   </label>
                   <input
+                    id="field-expireDate"
                     type="date"
                     value={expireDate}
                     onChange={(e) => {
                       const v = e.target.value;
                       setExpireDate(v);
+                      if (v) clearFieldError("expireDate");
                       if (v && preparedDate) {
                         const p = new Date(preparedDate).getTime();
                         const ex = new Date(v).getTime();
@@ -1592,8 +1612,18 @@ export default function EditRadQuotationPage({
                         }
                       }
                     }}
-                    className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-teal-500"
+                    className={`w-full rounded-lg px-3 py-2 text-sm focus:outline-none transition-colors ${
+                      unfilledFields["expireDate"]
+                        ? "border-2 border-red-500 ring-2 ring-red-500/50 bg-red-950/30 text-white"
+                        : "bg-slate-950 border border-slate-700 text-white focus:border-teal-500"
+                    }`}
                   />
+                  {unfilledFields["expireDate"] && (
+                    <p className="text-[11px] text-red-400 font-medium mt-1 flex items-center gap-1">
+                      <AlertCircle className="w-3 h-3 text-red-400 shrink-0" />
+                      <span>{unfilledFields["expireDate"]}</span>
+                    </p>
+                  )}
                 </div>
 
                 {/* Settlement Bank Account Selector */}
@@ -1637,14 +1667,28 @@ export default function EditRadQuotationPage({
 
               <div>
                 <label className="block text-xs font-semibold text-slate-400 mb-1">
-                  Quotation To (Customer Name & Organization) *
+                  Quotation To (Customer Name &amp; Organization) *
                 </label>
                 <textarea
+                  id="field-quotationTo"
                   rows={2}
                   value={quotationTo}
-                  onChange={(e) => setQuotationTo(e.target.value)}
-                  className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-teal-500"
+                  onChange={(e) => {
+                    setQuotationTo(e.target.value);
+                    if (e.target.value.trim()) clearFieldError("quotationTo");
+                  }}
+                  className={`w-full rounded-lg px-3 py-2 text-sm placeholder-slate-500 focus:outline-none transition-colors ${
+                    unfilledFields["quotationTo"]
+                      ? "border-2 border-red-500 ring-2 ring-red-500/50 bg-red-950/30 text-white placeholder-red-300/60"
+                      : "bg-slate-950 border border-slate-700 text-white focus:border-teal-500"
+                  }`}
                 />
+                {unfilledFields["quotationTo"] && (
+                  <p className="text-[11px] text-red-400 font-medium mt-1 flex items-center gap-1">
+                    <AlertCircle className="w-3 h-3 text-red-400 shrink-0" />
+                    <span>Customer Name and Address is required</span>
+                  </p>
+                )}
               </div>
 
               {/* Slide 1 & Slide 2 Fields for Project Proposal */}
@@ -1660,12 +1704,26 @@ export default function EditRadQuotationPage({
                       </span>
                     </div>
                     <textarea
+                      id="field-projectTitle"
                       rows={2}
                       value={projectTitle}
-                      onChange={(e) => setProjectTitle(e.target.value)}
+                      onChange={(e) => {
+                        setProjectTitle(e.target.value);
+                        if (e.target.value.trim()) clearFieldError("projectTitle");
+                      }}
                       placeholder="e.g. PETROL PUMP AUTOMATION SYSTEMS&#10;(Press Enter to break line)"
-                      className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white font-semibold focus:outline-none focus:border-teal-500 resize-y"
+                      className={`w-full rounded-lg px-3 py-2 text-sm text-white font-semibold focus:outline-none resize-y transition-colors ${
+                        unfilledFields["projectTitle"]
+                          ? "border-2 border-red-500 ring-2 ring-red-500/50 bg-red-950/30 text-white placeholder-red-300/60"
+                          : "bg-slate-950 border border-slate-700 focus:border-teal-500"
+                      }`}
                     />
+                    {unfilledFields["projectTitle"] && (
+                      <p className="text-[11px] text-red-400 font-medium mt-1 flex items-center gap-1">
+                        <AlertCircle className="w-3 h-3 text-red-400 shrink-0" />
+                        <span>Project Title is required for Project Proposals</span>
+                      </p>
+                    )}
                   </div>
 
                 <div>
@@ -2418,32 +2476,49 @@ export default function EditRadQuotationPage({
                           {/* Component Description */}
                           <div className="flex-1 w-full">
                             <input
+                              id={`field-item_${globalIndex}_productOrService`}
                               type="text"
                               value={item.productOrService}
-                              onChange={(e) =>
-                                handleItemChange(item.id, "productOrService", e.target.value)
-                              }
+                              onChange={(e) => {
+                                handleItemChange(item.id, "productOrService", e.target.value);
+                                if (e.target.value.trim()) clearFieldError(`item_${globalIndex}_productOrService`);
+                              }}
                               placeholder="Component description (e.g. Arduino Nano, Modbus Converter...)"
-                              className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-teal-500"
+                              className={`w-full rounded-lg px-3 py-2 text-xs text-white focus:outline-none transition-colors ${
+                                unfilledFields[`item_${globalIndex}_productOrService`]
+                                  ? "border-2 border-red-500 ring-2 ring-red-500/50 bg-red-950/30"
+                                  : "bg-slate-900 border border-slate-700 focus:border-teal-500"
+                              }`}
                             />
+                            {unfilledFields[`item_${globalIndex}_productOrService`] && (
+                              <p className="text-[10px] text-red-400 font-medium mt-1 flex items-center gap-1">
+                                <AlertCircle className="w-3 h-3 text-red-400 shrink-0" />
+                                <span>Component description is required</span>
+                              </p>
+                            )}
                           </div>
 
                           {/* Quantity */}
-                          <div className="w-28 shrink-0 flex items-center gap-1.5">
-                            <span className="text-[11px] text-slate-400">Qty:</span>
-                            <input
-                              type="number"
-                              min="1"
-                              value={item.quantity}
-                              onChange={(e) =>
-                                handleItemChange(
-                                  item.id,
-                                  "quantity",
-                                  parseFloat(e.target.value) || 0
-                                )
-                              }
-                              className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-2 text-xs text-teal-400 font-bold font-mono focus:outline-none focus:border-teal-500 text-center"
-                            />
+                          <div className="w-28 shrink-0 flex flex-col items-center">
+                            <div className="flex items-center gap-1.5 w-full">
+                              <span className="text-[11px] text-slate-400">Qty:</span>
+                              <input
+                                id={`field-item_${globalIndex}_quantity`}
+                                type="number"
+                                min="1"
+                                value={item.quantity}
+                                onChange={(e) => {
+                                  const val = parseFloat(e.target.value) || 0;
+                                  handleItemChange(item.id, "quantity", val);
+                                  if (val >= 1) clearFieldError(`item_${globalIndex}_quantity`);
+                                }}
+                                className={`w-full rounded-lg px-2.5 py-2 text-xs font-bold font-mono focus:outline-none text-center transition-colors ${
+                                  unfilledFields[`item_${globalIndex}_quantity`]
+                                    ? "border-2 border-red-500 ring-2 ring-red-500/50 bg-red-950/30 text-white"
+                                    : "bg-slate-900 border border-slate-700 text-teal-400 focus:border-teal-500"
+                                }`}
+                              />
+                            </div>
                           </div>
 
                           {/* Actions: PMS & Delete */}
@@ -2552,6 +2627,7 @@ export default function EditRadQuotationPage({
                     </div>
                   ) : (
                     serviceItems.map((item, sIdx) => {
+                      const globalIndex = items.findIndex((it) => it.id === item.id);
                       return (
                         <div
                           key={item.id}
@@ -2564,14 +2640,26 @@ export default function EditRadQuotationPage({
                           {/* Service Scope Description */}
                           <div className="flex-1 w-full">
                             <input
+                              id={`field-item_${globalIndex}_productOrService`}
                               type="text"
                               value={item.productOrService}
-                              onChange={(e) =>
-                                handleItemChange(item.id, "productOrService", e.target.value)
-                              }
+                              onChange={(e) => {
+                                handleItemChange(item.id, "productOrService", e.target.value);
+                                if (e.target.value.trim()) clearFieldError(`item_${globalIndex}_productOrService`);
+                              }}
                               placeholder="Service description (e.g. Testing / Engineering Charges, IoT Installation...)"
-                              className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-indigo-500"
+                              className={`w-full rounded-lg px-3 py-2 text-xs text-white focus:outline-none transition-colors ${
+                                unfilledFields[`item_${globalIndex}_productOrService`]
+                                  ? "border-2 border-red-500 ring-2 ring-red-500/50 bg-red-950/30"
+                                  : "bg-slate-900 border border-slate-700 focus:border-indigo-500"
+                              }`}
                             />
+                            {unfilledFields[`item_${globalIndex}_productOrService`] && (
+                              <p className="text-[10px] text-red-400 font-medium mt-1 flex items-center gap-1">
+                                <AlertCircle className="w-3 h-3 text-red-400 shrink-0" />
+                                <span>Service description is required</span>
+                              </p>
+                            )}
                           </div>
 
                           {/* Actions: Delete */}
@@ -3126,21 +3214,33 @@ export default function EditRadQuotationPage({
                           <div className="grid grid-cols-1 md:grid-cols-12 gap-3">
                             <div className="md:col-span-5">
                               <label className="block text-[11px] font-medium text-slate-400 mb-1">
-                                Product / Item Description
+                                Product / Item Description *
                               </label>
                               <input
+                                id={`field-item_${idx}_productOrService`}
                                 type="text"
                                 value={item.productOrService}
-                                onChange={(e) =>
+                                onChange={(e) => {
                                   handleItemChange(
                                     item.id,
                                     "productOrService",
                                     e.target.value
-                                  )
-                                }
+                                  );
+                                  if (e.target.value.trim()) clearFieldError(`item_${idx}_productOrService`);
+                                }}
                                 placeholder="e.g. Enclosure Top Lid"
-                                className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none focus:border-amber-500"
+                                className={`w-full rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none transition-colors ${
+                                  unfilledFields[`item_${idx}_productOrService`]
+                                    ? "border-2 border-red-500 ring-2 ring-red-500/50 bg-red-950/30"
+                                    : "bg-slate-900 border border-slate-700 focus:border-amber-500"
+                                }`}
                               />
+                              {unfilledFields[`item_${idx}_productOrService`] && (
+                                <p className="text-[10px] text-red-400 font-medium mt-1 flex items-center gap-1">
+                                  <AlertCircle className="w-3 h-3 text-red-400 shrink-0" />
+                                  <span>Description is required</span>
+                                </p>
+                              )}
                             </div>
 
                             <div className="md:col-span-2">
@@ -3264,20 +3364,23 @@ export default function EditRadQuotationPage({
                           <div className="grid grid-cols-1 md:grid-cols-12 gap-3 pt-2 border-t border-slate-800/80 items-center">
                             <div className="md:col-span-3">
                               <label className="block text-[11px] font-medium text-slate-400 mb-1">
-                                Qty
+                                Qty *
                               </label>
                               <input
+                                id={`field-item_${idx}_quantity`}
                                 type="number"
                                 min="1"
                                 value={item.quantity}
-                                onChange={(e) =>
-                                  handleItemChange(
-                                    item.id,
-                                    "quantity",
-                                    parseFloat(e.target.value) || 0
-                                  )
-                                }
-                                className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none focus:border-amber-500 font-mono text-center"
+                                onChange={(e) => {
+                                  const val = parseFloat(e.target.value) || 0;
+                                  handleItemChange(item.id, "quantity", val);
+                                  if (val >= 1) clearFieldError(`item_${idx}_quantity`);
+                                }}
+                                className={`w-full rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none font-mono text-center transition-colors ${
+                                  unfilledFields[`item_${idx}_quantity`]
+                                    ? "border-2 border-red-500 ring-2 ring-red-500/50 bg-red-950/30"
+                                    : "bg-slate-900 border border-slate-700 focus:border-amber-500"
+                                }`}
                               />
                             </div>
 
@@ -3311,57 +3414,75 @@ export default function EditRadQuotationPage({
                         <div className="grid grid-cols-1 md:grid-cols-12 gap-3">
                           <div className="md:col-span-6">
                             <label className="block text-[11px] font-medium text-slate-400 mb-1">
-                              Product / Item Description
+                              Product / Item Description *
                             </label>
                             <input
+                              id={`field-item_${idx}_productOrService`}
                               type="text"
                               value={item.productOrService}
-                              onChange={(e) =>
+                              onChange={(e) => {
                                 handleItemChange(
                                   item.id,
                                   "productOrService",
                                   e.target.value
-                                )
-                              }
-                              className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none focus:border-teal-500"
+                                );
+                                if (e.target.value.trim()) clearFieldError(`item_${idx}_productOrService`);
+                              }}
+                              className={`w-full rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none transition-colors ${
+                                unfilledFields[`item_${idx}_productOrService`]
+                                  ? "border-2 border-red-500 ring-2 ring-red-500/50 bg-red-950/30"
+                                  : "bg-slate-900 border border-slate-700 focus:border-teal-500"
+                              }`}
                             />
+                            {unfilledFields[`item_${idx}_productOrService`] && (
+                              <p className="text-[10px] text-red-400 font-medium mt-1 flex items-center gap-1">
+                                <AlertCircle className="w-3 h-3 text-red-400 shrink-0" />
+                                <span>Description is required</span>
+                              </p>
+                            )}
                           </div>
 
                           <div className="md:col-span-2">
                             <label className="block text-[11px] font-medium text-slate-400 mb-1">
-                              Quantity
+                              Quantity *
                             </label>
                             <input
+                              id={`field-item_${idx}_quantity`}
                               type="number"
                               min="1"
                               value={item.quantity}
-                              onChange={(e) =>
-                                handleItemChange(
-                                  item.id,
-                                  "quantity",
-                                  parseFloat(e.target.value) || 0
-                                )
-                              }
-                              className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none focus:border-teal-500 font-mono"
+                              onChange={(e) => {
+                                const val = parseFloat(e.target.value) || 0;
+                                handleItemChange(item.id, "quantity", val);
+                                if (val >= 1) clearFieldError(`item_${idx}_quantity`);
+                              }}
+                              className={`w-full rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none font-mono transition-colors ${
+                                unfilledFields[`item_${idx}_quantity`]
+                                  ? "border-2 border-red-500 ring-2 ring-red-500/50 bg-red-950/30"
+                                  : "bg-slate-900 border border-slate-700 focus:border-teal-500"
+                              }`}
                             />
                           </div>
 
                           <div className="md:col-span-2">
                             <label className="block text-[11px] font-medium text-slate-400 mb-1">
-                              Unit Rate (LKR)
+                              Unit Rate (LKR) *
                             </label>
                             <input
+                              id={`field-item_${idx}_unitPrice`}
                               type="number"
                               min="0"
                               value={item.unitPrice}
-                              onChange={(e) =>
-                                handleItemChange(
-                                  item.id,
-                                  "unitPrice",
-                                  parseFloat(e.target.value) || 0
-                                )
-                              }
-                              className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none focus:border-teal-500 font-mono"
+                              onChange={(e) => {
+                                const val = parseFloat(e.target.value) || 0;
+                                handleItemChange(item.id, "unitPrice", val);
+                                if (val >= 0) clearFieldError(`item_${idx}_unitPrice`);
+                              }}
+                              className={`w-full rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none font-mono transition-colors ${
+                                unfilledFields[`item_${idx}_unitPrice`]
+                                  ? "border-2 border-red-500 ring-2 ring-red-500/50 bg-red-950/30"
+                                  : "bg-slate-900 border border-slate-700 focus:border-teal-500"
+                              }`}
                             />
                           </div>
 
@@ -3526,18 +3647,7 @@ export default function EditRadQuotationPage({
             <div className="bg-slate-900/90 border border-slate-800 rounded-xl p-4 shadow-sm space-y-2.5">
               <button
                 type="button"
-                onClick={() => handleSave("DRAFT", false)}
-                disabled={isSaving}
-                className="w-full py-2.5 rounded-lg bg-amber-950/70 hover:bg-amber-900/80 text-amber-300 text-xs font-semibold flex items-center justify-center gap-2 transition-colors disabled:opacity-50 border border-amber-800/80 shadow-sm"
-                title="Save partial work as draft"
-              >
-                <Edit3 className="w-4 h-4 text-amber-400" />
-                <span>Save as Draft</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => handleSave("COMPLETED", true)}
+                onClick={() => handleSave(true)}
                 disabled={isSaving}
                 className="w-full py-2.5 rounded-lg bg-teal-600 hover:bg-teal-500 text-white text-xs font-semibold shadow-md shadow-teal-900/30 flex items-center justify-center gap-2 transition-colors disabled:opacity-50"
               >
@@ -3549,19 +3659,20 @@ export default function EditRadQuotationPage({
                 ) : (
                   <>
                     <Download className="w-4 h-4" />
-                    <span>Update &amp; Download PDF</span>
+                    <span>Save &amp; Download PDF</span>
                   </>
                 )}
               </button>
 
               <button
                 type="button"
-                onClick={() => handleSave("COMPLETED", false)}
+                onClick={() => handleSave(false)}
                 disabled={isSaving}
-                className="w-full py-2.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold flex items-center justify-center gap-2 transition-colors disabled:opacity-50 border border-slate-700"
+                className="w-full py-2.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold flex items-center justify-center gap-2 transition-colors disabled:opacity-50 border border-slate-700 shadow-sm"
+                title="Save quotation (auto-draft if partially filled, final save if complete)"
               >
                 <Save className="w-4 h-4 text-teal-400" />
-                <span>Update &amp; Finalize Only</span>
+                <span>Save Quotation</span>
               </button>
 
               <Link
