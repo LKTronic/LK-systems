@@ -88,6 +88,13 @@ export async function generateHandoverLetterPdf(
     doc.setFontSize(22);
     doc.setTextColor(255, 255, 255);
     doc.text("LK TRONICS", 105, 15.5, { align: "center" });
+
+    if (logoBase64) {
+      try {
+        const format = logoBase64.includes("image/png") ? "PNG" : "JPEG";
+        doc.addImage(logoBase64, format, 10, 1.8, 23, 20.7, undefined, "FAST");
+      } catch {}
+    }
   }
 
   // ================= 2. SIGNATURE QUOTATION TEAL ADDRESS BAR =================
