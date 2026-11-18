@@ -13,6 +13,7 @@ import {
   getProjectProposalCombinedTerms,
   LK_TRONICS_BANK_DETAILS,
 } from "@/lib/rdQuotationDefaults";
+import { WARRANTY_BADGE_BASE64 } from "@/lib/rdQuotationAssets";
 
 export interface RdQuotationPdfItem {
   itemIndex: number;
@@ -44,10 +45,18 @@ export interface RdQuotationPdfData {
   overview?: string | null;
   overviewFontSize?: number | string | null;
   termsFontSize?: number | string | null;
+  commercialNote?: string | null;
   technicalSpecs?: Record<string, any> | string | null;
   systemDesignImages?: string[] | null;
   termsAndConditions?: string | null;
   items: RdQuotationPdfItem[];
+  bankDetails?: {
+    id?: string;
+    accountName: string;
+    accountNumber: string;
+    bankName: string;
+    branch: string;
+  } | null;
 }
 
 /**
@@ -211,11 +220,11 @@ async function generateHardwareOrPcbPdf(
 
   // --- METADATA BOX (Top Right) ---
   // Positioned below the center circular logo and watermark (Y=32-62mm)
-  // Left: 107mm, Right: 187mm (aligned with table right), Top: 65.5mm, Bottom: 94.8mm
+  // Left: 107mm, Right: 187mm (aligned with table right), Top: 65.5mm, Bottom: 90.0mm
   const metaBoxX = 107.0;
   const metaBoxY = 65.5;
   const metaBoxW = 80.0;
-  const metaBoxH = 29.3;
+  const metaBoxH = 24.5;
 
   doc.setDrawColor(0, 0, 0);
   doc.setLineWidth(0.25);
@@ -237,7 +246,6 @@ async function generateHardwareOrPcbPdf(
     { label: "Quotation Prepared Date:", val: data.preparedDate },
     { label: "Quotation Expire Date:", val: data.expireDate },
     { label: "Payment Method:", val: paymentMethodDisplay },
-    { label: "Prepared by:", val: `[${data.preparedBy || "Vishva Varna"}]` },
   ];
 
   let currentMetaY = metaBoxY + 5.0;
@@ -612,11 +620,37 @@ async function generateHardwareOrPcbPdf(
   doc.setFillColor(255, 255, 255);
   doc.rect(25.4, bankBoxY, bankBoxW, bankBoxH, "FD");
 
+  // Resolve bank details (from data.bankDetails or data.technicalSpecs)
+  let activeBank = LK_TRONICS_BANK_DETAILS;
+  if (data.bankDetails) {
+    activeBank = {
+      accountName: data.bankDetails.accountName || LK_TRONICS_BANK_DETAILS.accountName,
+      accountNumber: data.bankDetails.accountNumber || LK_TRONICS_BANK_DETAILS.accountNumber,
+      bankName: data.bankDetails.bankName || LK_TRONICS_BANK_DETAILS.bankName,
+      branch: data.bankDetails.branch || LK_TRONICS_BANK_DETAILS.branch,
+    };
+  } else if (data.technicalSpecs) {
+    let specsObj: any = null;
+    if (typeof data.technicalSpecs === "string") {
+      try { specsObj = JSON.parse(data.technicalSpecs); } catch {}
+    } else if (typeof data.technicalSpecs === "object") {
+      specsObj = data.technicalSpecs;
+    }
+    if (specsObj && specsObj.bankDetails) {
+      activeBank = {
+        accountName: specsObj.bankDetails.accountName || LK_TRONICS_BANK_DETAILS.accountName,
+        accountNumber: specsObj.bankDetails.accountNumber || LK_TRONICS_BANK_DETAILS.accountNumber,
+        bankName: specsObj.bankDetails.bankName || LK_TRONICS_BANK_DETAILS.bankName,
+        branch: specsObj.bankDetails.branch || LK_TRONICS_BANK_DETAILS.branch,
+      };
+    }
+  }
+
   const bankRows = [
-    { label: "Account Name", val: LK_TRONICS_BANK_DETAILS.accountName },
-    { label: "Account Number", val: LK_TRONICS_BANK_DETAILS.accountNumber },
-    { label: "Bank Name", val: LK_TRONICS_BANK_DETAILS.bankName },
-    { label: "Bank Branch", val: LK_TRONICS_BANK_DETAILS.branch },
+    { label: "Account Name", val: activeBank.accountName },
+    { label: "Account Number", val: activeBank.accountNumber },
+    { label: "Bank Name", val: activeBank.bankName },
+    { label: "Bank Branch", val: activeBank.branch },
   ];
 
   let bankRowY = bankBoxY + 6.2;
@@ -654,6 +688,208 @@ interface ProjectProposalBackgrounds {
   bgTerms: string | null;
   bgClients: string | null;
   bgPartners: string | null;
+  warrantyBadge?: string | null;
+}
+
+export interface SlideToken {
+  word: string;
+  bold: boolean;
+  underline: boolean;
+  highlight: boolean;
+  color?: [number, number, number] | null;
+}
+
+const SLIDE_COLOR_MAP: Record<string, [number, number, number]> = {
+  red: [220, 38, 38], // #DC2626 Warning / Danger
+  danger: [220, 38, 38],
+  orange: [242, 142, 43], // #F28E2B LK Orange
+  warning: [217, 119, 6],
+  amber: [217, 119, 6], // #D97706 Amber
+  teal: [0, 122, 135], // #007A87 LK Teal
+  blue: [37, 99, 235], // #2563EB Blue
+  slate: [71, 85, 105], // #475569 LK Slate
+  gray: [100, 116, 139],
+};
+
+function parseSlideColor(raw: string): [number, number, number] | null {
+  const clean = raw.toLowerCase().trim().replace(/['"]/g, "");
+  if (SLIDE_COLOR_MAP[clean]) return SLIDE_COLOR_MAP[clean];
+  if (clean.startsWith("#")) {
+    const hex = clean.substring(1);
+    if (hex.length === 6) {
+      const r = parseInt(hex.substring(0, 2), 16);
+      const g = parseInt(hex.substring(2, 4), 16);
+      const b = parseInt(hex.substring(4, 6), 16);
+      if (!isNaN(r) && !isNaN(g) && !isNaN(b)) return [r, g, b];
+    }
+  }
+  return null;
+}
+
+/**
+ * Tokenize slide text into styled word units (normal, bold, underline, highlight, color)
+ * Syntax:
+ * - Bold: **text** or <b>text</b>
+ * - Underline: <u>text</u>
+ * - Highlight: ==text== or <mark>text</mark>
+ * - Color: [red]text[/red], [orange]text[/orange], [teal]text[/teal], [amber]text[/amber], [color=#hex]text[/color]
+ */
+export function parseSlideTokens(content: string): Array<SlideToken> {
+  const segments = content.split(
+    /(\*\*|<b>|<\/b>|<u>|<\/u>|==|<mark>|<\/mark>|\[\/?(?:red|danger|orange|warning|amber|teal|blue|slate|gray|color(?:=[^\]]+)?)\]|<font[^>]*>|<\/font>|<span[^>]*>|<\/span>)/gi
+  );
+  let bold = false;
+  let underline = false;
+  let highlight = false;
+  let activeColor: [number, number, number] | null = null;
+  const words: Array<SlideToken> = [];
+
+  segments.forEach((seg) => {
+    if (!seg) return;
+    const lower = seg.toLowerCase();
+    if (seg === "**" || lower === "<b>" || lower === "</b>") {
+      bold = seg === "**" ? !bold : lower === "<b>";
+    } else if (lower === "<u>" || lower === "</u>") {
+      underline = lower === "<u>";
+    } else if (seg === "==" || lower === "<mark>" || lower === "</mark>") {
+      highlight = seg === "==" ? !highlight : lower === "<mark>";
+    } else if (lower.startsWith("[color=")) {
+      const colStr = lower.substring(7, lower.length - 1);
+      activeColor = parseSlideColor(colStr);
+    } else if (
+      lower.startsWith("[/color]") ||
+      lower === "[/red]" ||
+      lower === "[/danger]" ||
+      lower === "[/orange]" ||
+      lower === "[/warning]" ||
+      lower === "[/amber]" ||
+      lower === "[/teal]" ||
+      lower === "[/blue]" ||
+      lower === "[/slate]" ||
+      lower === "[/gray]" ||
+      lower === "</span>" ||
+      lower === "</font>"
+    ) {
+      activeColor = null;
+    } else if (lower === "[red]" || lower === "[danger]") {
+      activeColor = SLIDE_COLOR_MAP.red;
+    } else if (lower === "[orange]" || lower === "[warning]") {
+      activeColor = SLIDE_COLOR_MAP.orange;
+    } else if (lower === "[amber]") {
+      activeColor = SLIDE_COLOR_MAP.amber;
+    } else if (lower === "[teal]") {
+      activeColor = SLIDE_COLOR_MAP.teal;
+    } else if (lower === "[blue]") {
+      activeColor = SLIDE_COLOR_MAP.blue;
+    } else if (lower === "[slate]") {
+      activeColor = SLIDE_COLOR_MAP.slate;
+    } else if (lower.startsWith("<font") || lower.startsWith("<span")) {
+      const colorMatch = seg.match(/color[:=]\s*["']?([^"';>]+)/i);
+      if (colorMatch) {
+        activeColor = parseSlideColor(colorMatch[1]);
+      }
+    } else {
+      const parts = seg.split(/\s+/);
+      parts.forEach((p) => {
+        if (p) {
+          words.push({ word: p, bold, underline, highlight, color: activeColor });
+        }
+      });
+    }
+  });
+  return words;
+}
+
+// Native PPTX 16:9 widescreen presentation dimensions in mm (20 in x 11.25 in = 1440pt x 810pt)
+export const SLIDE_W = 508.0;
+export const SLIDE_H = 285.75;
+
+/**
+ * Responsive layout configuration helper for Slide 3 architecture images:
+ * Dynamically increases card size when fewer images are present (e.g. 1 or 2 large prominent cards)
+ * and reduces card size when more images are present (e.g. 2 balanced rows of up to 4 cards).
+ */
+export function getDesignImageLayout(
+  totalCount: number,
+  index: number
+): { x: number; y: number; cardW: number; cardH: number } {
+  if (totalCount === 1) {
+    const cardW = 380.0;
+    const cardH = 175.0;
+    const x = (SLIDE_W - cardW) / 2;
+    const y = 56.0;
+    return { x, y, cardW, cardH };
+  }
+
+  if (totalCount === 2) {
+    // 2 images: large prominent cards side-by-side (width increased to 210mm)
+    const cardW = 210.0;
+    const cardH = 165.0;
+    const gapX = 22.0;
+    const totalRowW = 2 * cardW + gapX;
+    const startX = (SLIDE_W - totalRowW) / 2;
+    const x = startX + index * (cardW + gapX);
+    const y = 58.0;
+    return { x, y, cardW, cardH };
+  }
+
+  if (totalCount === 3) {
+    // 3 images: single row, 3 cards
+    const cardW = 138.0;
+    const cardH = 150.0;
+    const gapX = 16.0;
+    const totalRowW = 3 * cardW + 2 * gapX;
+    const startX = (SLIDE_W - totalRowW) / 2;
+    const x = startX + index * (cardW + gapX);
+    const y = 65.0;
+    return { x, y, cardW, cardH };
+  }
+
+  if (totalCount === 4) {
+    // 4 images: single row, 4 cards
+    const cardW = 104.0;
+    const cardH = 125.0;
+    const gapX = 12.0;
+    const totalRowW = 4 * cardW + 3 * gapX;
+    const startX = (SLIDE_W - totalRowW) / 2;
+    const x = startX + index * (cardW + gapX);
+    const y = 72.0;
+    return { x, y, cardW, cardH };
+  }
+
+  if (totalCount === 5 || totalCount === 6) {
+    // 2 rows: up to 3 per row
+    const cardW = 136.0;
+    const cardH = 84.0;
+    const gapX = 16.0;
+    const gapY = 14.0;
+
+    const row = Math.floor(index / 3);
+    const col = index % 3;
+    const itemsInThisRow = row === 0 ? 3 : totalCount - 3;
+    const totalRowW = itemsInThisRow * cardW + (itemsInThisRow - 1) * gapX;
+    const startX = (SLIDE_W - totalRowW) / 2;
+
+    const x = startX + col * (cardW + gapX);
+    const y = 56.0 + row * (cardH + gapY);
+    return { x, y, cardW, cardH };
+  }
+
+  // 7 or 8+ images: 2 rows of up to 4 per row (compact reduced size)
+  const cardW = 100.0;
+  const cardH = 82.0;
+  const gapX = 14.0;
+  const gapY = 14.0;
+
+  const row = Math.floor(index / 4);
+  const col = index % 4;
+  const itemsInThisRow = row === 0 ? 4 : totalCount - 4;
+  const totalRowW = itemsInThisRow * cardW + (itemsInThisRow - 1) * gapX;
+  const startX = (SLIDE_W - totalRowW) / 2;
+
+  const x = startX + col * (cardW + gapX);
+  const y = 56.0 + row * (cardH + gapY);
+  return { x, y, cardW, cardH };
 }
 
 /**
@@ -665,10 +901,6 @@ async function generateProjectProposalPdf(
   data: RdQuotationPdfData,
   bgs: ProjectProposalBackgrounds
 ): Promise<jsPDF> {
-  // Native PPTX 16:9 widescreen presentation dimensions in mm (20 in x 11.25 in = 1440pt x 810pt)
-  const SLIDE_W = 508.0;
-  const SLIDE_H = 285.75;
-
   const doc = new jsPDF({
     orientation: "landscape",
     unit: "mm",
@@ -815,10 +1047,10 @@ async function generateProjectProposalPdf(
   const introText = data.overview || DEFAULT_PROJECT_PROPOSAL_INTRO;
 
   // Resolve overview font size (from data or technicalSpecs)
-  let overviewSize = 16.5;
+  let overviewSize = 24.0;
   if (data.overviewFontSize != null) {
     const s = Number(data.overviewFontSize);
-    if (!isNaN(s) && s >= 10 && s <= 30) overviewSize = s;
+    if (!isNaN(s) && s >= 10 && s <= 36) overviewSize = s;
   } else if (data.technicalSpecs) {
     let specsObj: any = null;
     if (typeof data.technicalSpecs === "string") {
@@ -828,11 +1060,11 @@ async function generateProjectProposalPdf(
     }
     if (specsObj && specsObj.overviewFontSize != null) {
       const s = Number(specsObj.overviewFontSize);
-      if (!isNaN(s) && s >= 10 && s <= 30) overviewSize = s;
+      if (!isNaN(s) && s >= 10 && s <= 36) overviewSize = s;
     }
   }
 
-  // Rich formatted rendering helper for Slide 2 (Bold, Underline, Bullet Lists, and Features)
+  // Rich formatted rendering helper for Slide 2 (Bold, Underline, Highlight, Bullet Lists, and Features)
   const renderFormattedSlide2 = (
     text: string,
     startY: number,
@@ -842,8 +1074,8 @@ async function generateProjectProposalPdf(
     const rawLines = text.split("\n");
     let curY = startY;
     const fontSize = overviewSize;
-    const lineSpacing = overviewSize * 0.42;
-    const paraGap = overviewSize * 0.25;
+    const lineSpacing = overviewSize * 0.48;
+    const paraGap = overviewSize * 0.35;
     let customBulletCount = 0;
 
     rawLines.forEach((rawLine) => {
@@ -895,31 +1127,6 @@ async function generateProjectProposalPdf(
         ? cleanLine.substring(firstColonIdx + 1).trim()
         : cleanLine;
 
-      // Tokenize for bold (**...**) and underline (<u>...</u>)
-      const parseTokens = (content: string) => {
-        const segments = content.split(/(\*\*|<b>|<\/b>|<u>|<\/u>)/);
-        let bold = false;
-        let underline = false;
-        const words: { word: string; bold: boolean; underline: boolean }[] = [];
-
-        segments.forEach((seg) => {
-          if (!seg) return;
-          if (seg === "**" || seg === "<b>" || seg === "</b>") {
-            bold = seg === "**" ? !bold : seg === "<b>";
-          } else if (seg === "<u>" || seg === "</u>") {
-            underline = seg === "<u>";
-          } else {
-            const parts = seg.split(/\s+/);
-            parts.forEach((p) => {
-              if (p) {
-                words.push({ word: p, bold, underline });
-              }
-            });
-          }
-        });
-        return words;
-      };
-
       let curX = startX + indentX;
       doc.setFontSize(fontSize);
 
@@ -931,8 +1138,8 @@ async function generateProjectProposalPdf(
         curX += doc.getTextWidth(titlePrefix) + doc.getTextWidth(" ") + 1.2;
       }
 
-      const bodyWords = parseTokens(bodyContent);
-      bodyWords.forEach((wObj) => {
+      const bodyWords = parseSlideTokens(bodyContent);
+      bodyWords.forEach((wObj, wIdx) => {
         doc.setFont("helvetica", wObj.bold ? "bold" : "normal");
         const wordW = doc.getTextWidth(wObj.word);
         const spaceW = doc.getTextWidth(" ");
@@ -942,7 +1149,21 @@ async function generateProjectProposalPdf(
           curX = startX + indentX;
         }
 
-        if (wObj.bold) {
+        // Draw yellow highlight rectangle behind text if highlighted
+        if (wObj.highlight) {
+          const nextWord = bodyWords[wIdx + 1];
+          const hasContinuousHl =
+            nextWord &&
+            nextWord.highlight &&
+            curX + wordW + spaceW <= startX + maxW;
+          const hlW = hasContinuousHl ? wordW + spaceW + 0.8 : wordW + 0.8;
+          doc.setFillColor(255, 255, 0); // Bright Yellow #FFFF00
+          doc.rect(curX - 0.4, curY - fontSize * 0.28, hlW, fontSize * 0.36, "F");
+        }
+
+        if (wObj.color) {
+          doc.setTextColor(wObj.color[0], wObj.color[1], wObj.color[2]);
+        } else if (wObj.bold) {
           doc.setTextColor(LK_TEAL[0], LK_TEAL[1], LK_TEAL[2]);
         } else {
           doc.setTextColor(LK_SLATE[0], LK_SLATE[1], LK_SLATE[2]);
@@ -965,93 +1186,7 @@ async function generateProjectProposalPdf(
     return { endY: curY, hasCustomBullets: customBulletCount > 0 };
   };
 
-  const { endY: introEndY, hasCustomBullets } = renderFormattedSlide2(introText, 52.0);
-
-  // If user has not provided custom bullet feature points and text is short, show 3 default pillars
-  if (!hasCustomBullets && introEndY <= 95.0) {
-    const pillarsY = 100.0;
-    const pillarW = 136.0;
-    const pillarH = 56.0;
-    const pillarGap = 10.0;
-    const pillars = [
-      {
-        num: "01",
-        title: "EDGE ACQUISITION & TELEMETRY",
-        subtitle: "Sensor Sampling & Edge Buffering",
-        points: [
-          "High-frequency operational data acquisition",
-          "Deterministic edge processing & event logging",
-          "Continuous pump status monitoring & telemetry",
-        ],
-      },
-      {
-        num: "02",
-        title: "INDUSTRIAL PROTOCOL INTEGRATION",
-        subtitle: "Modbus RS232/485 & Transceiver Bridges",
-        points: [
-          "Hardware isolated serial-to-WiFi/Ethernet links",
-          "Noise immunity & transient voltage suppression",
-          "Seamless compatibility with site dispensing pumps",
-        ],
-      },
-      {
-        num: "03",
-        title: "CLOUD ANALYTICS & LOGGING",
-        subtitle: "Remote Access & Secure Cloud Dashboard",
-        points: [
-          "Encrypted operational telemetry streaming",
-          "Centralized reporting & fuel flow audit trails",
-          "Live diagnostic health checks & anomaly alerts",
-        ],
-      },
-    ];
-
-    pillars.forEach((p, idx) => {
-      const px = 40.0 + idx * (pillarW + pillarGap);
-
-      // Card background
-      doc.setFillColor(248, 250, 252);
-      doc.setDrawColor(218, 226, 237);
-      doc.setLineWidth(0.4);
-      doc.roundedRect(px, pillarsY, pillarW, pillarH, 3.5, 3.5, "FD");
-
-      // Header strip
-      doc.setFillColor(LK_TEAL[0], LK_TEAL[1], LK_TEAL[2]);
-      doc.roundedRect(px, pillarsY, pillarW, 11.0, 3.5, 3.5, "F");
-      doc.rect(px, pillarsY + 7.0, pillarW, 4.0, "F");
-
-      // Pillar Number & Title
-      doc.setFont("helvetica", "bold");
-      doc.setFontSize(9.5);
-      doc.setTextColor(LK_ORANGE[0], LK_ORANGE[1], LK_ORANGE[2]);
-      doc.text(p.num, px + 5.0, pillarsY + 7.5);
-      doc.setTextColor(255, 255, 255);
-      doc.text(p.title, px + 15.0, pillarsY + 7.5);
-
-      // Subtitle
-      doc.setFont("helvetica", "bold");
-      doc.setFontSize(9.0);
-      doc.setTextColor(LK_TEAL[0], LK_TEAL[1], LK_TEAL[2]);
-      doc.text(p.subtitle, px + 6.0, pillarsY + 17.5);
-
-      // Divider
-      doc.setDrawColor(218, 226, 237);
-      doc.setLineWidth(0.3);
-      doc.line(px + 6.0, pillarsY + 20.0, px + pillarW - 6.0, pillarsY + 20.0);
-
-      // Points
-      let ptY = pillarsY + 26.5;
-      doc.setFont("helvetica", "normal");
-      doc.setFontSize(9.0);
-      p.points.forEach((pt) => {
-        doc.setTextColor(LK_ORANGE[0], LK_ORANGE[1], LK_ORANGE[2]);
-        doc.text("•", px + 7.0, ptY);
-        doc.setTextColor(LK_SLATE[0], LK_SLATE[1], LK_SLATE[2]);
-        doc.text(pt, px + 12.0, ptY);
-        ptY += 8.2;
-      });
-    });
-  }
+  renderFormattedSlide2(introText, 58.0);
 
   // ==========================================
   // SLIDE 3: SYSTEM DESIGN & ARCHITECTURE (UP TO 8 IMAGES)
@@ -1103,19 +1238,8 @@ async function generateProjectProposalPdf(
   const totalImgCount = imagesToRender.length;
 
   if (totalImgCount > 0) {
-    const isSingleRow = totalImgCount <= 4;
-    const cols = isSingleRow ? totalImgCount : 4;
-    const cardW = 98.0;
-    const cardH = isSingleRow ? 92.0 : 72.0;
-    const gapX = 14.0;
-    const totalRowW = cols * cardW + (cols - 1) * gapX;
-    const startX = isSingleRow ? (SLIDE_W - totalRowW) / 2 : 35.0;
-
     for (let i = 0; i < totalImgCount; i++) {
-      const row = isSingleRow ? 0 : Math.floor(i / 4);
-      const col = isSingleRow ? i : i % 4;
-      const x = startX + col * (cardW + gapX);
-      const y = isSingleRow ? 90.0 : row === 0 ? 65.0 : 147.0;
+      const { x, y, cardW, cardH } = getDesignImageLayout(totalImgCount, i);
 
       // Draw sleek, modern engineering card frame with soft subtle border
       doc.setFillColor(255, 255, 255);
@@ -1130,7 +1254,7 @@ async function generateProjectProposalPdf(
             ? imgData
             : await loadImageAsBase64(imgData);
           if (imgBase64) {
-            const pad = 6.0;
+            const pad = totalImgCount <= 2 ? 8.0 : 6.0;
             const maxW = cardW - pad * 2;
             const maxH = cardH - pad * 2;
             let drawW = maxW;
@@ -1187,8 +1311,8 @@ async function generateProjectProposalPdf(
     }
   }
 
-  const hwItems = data.items.filter((it) => it.itemType !== "SERVICE");
-  const srvItems = data.items.filter((it) => it.itemType === "SERVICE");
+  const hwItems = data.items.filter((it) => it.itemType !== "SERVICE").slice(0, 8);
+  const srvItems = data.items.filter((it) => it.itemType === "SERVICE").slice(0, 4);
 
   const formatLkr = (num: number) =>
     `LKR ${num.toLocaleString("en-US", {
@@ -1214,239 +1338,329 @@ async function generateProjectProposalPdf(
   // --- 1. HARDWARE SECTION (Left Side) ---
   // Header Badge
   doc.setFillColor(LK_TEAL[0], LK_TEAL[1], LK_TEAL[2]);
-  doc.roundedRect(36.0, 36.0, 95.0, 8.5, 2.0, 2.0, "F");
+  doc.roundedRect(36.0, 36.0, 106.0, 9.5, 2.0, 2.0, "F");
   doc.setFont("helvetica", "bold");
-  doc.setFontSize(11.5);
+  doc.setFontSize(12.0);
   doc.setTextColor(255, 255, 255);
-  doc.text("1. HARDWARE COMPONENTS (BOM)", 40.0, 41.8);
+  doc.text("1. HARDWARE COMPONENTS (BOM)", 40.0, 42.4);
 
-  // Hardware items across 2 columns (up to 4 in col 1, 4 in col 2)
+  // Hardware items across 2 columns (up to 4 in col 1, 4 in col 2, max 8 items)
   const hwCol1 = hwItems.length > 4 ? hwItems.slice(0, 4) : hwItems;
   const hwCol2 = hwItems.length > 4 ? hwItems.slice(4, 8) : [];
 
-  let hwY1 = 50.0;
+  let hwY1 = 53.0;
   hwCol1.forEach((it) => {
     const name = it.productOrService;
     const qtyStr = `x ${it.quantity}`;
     const lines = doc.splitTextToSize(`•  ${name}`, 82);
     doc.setFont("helvetica", "bold");
     if (lines.length > 1) {
-      doc.setFontSize(11.0);
-      doc.setTextColor(LK_SLATE[0], LK_SLATE[1], LK_SLATE[2]);
-      doc.text(lines[0], 38.0, hwY1);
-      doc.text(lines[1], 42.0, hwY1 + 4.2);
-      doc.setFontSize(12.5);
-      doc.setTextColor(LK_ORANGE[0], LK_ORANGE[1], LK_ORANGE[2]);
-      doc.text(qtyStr, 138.0, hwY1 + 2.0, { align: "right" });
-      hwY1 += 9.2;
-    } else {
       doc.setFontSize(12.0);
       doc.setTextColor(LK_SLATE[0], LK_SLATE[1], LK_SLATE[2]);
       doc.text(lines[0], 38.0, hwY1);
+      doc.text(lines[1], 42.0, hwY1 + 4.5);
+      doc.setFontSize(13.5);
+      doc.setTextColor(LK_ORANGE[0], LK_ORANGE[1], LK_ORANGE[2]);
+      doc.text(qtyStr, 138.0, hwY1 + 2.5, { align: "right" });
+      hwY1 += 11.0;
+    } else {
+      doc.setFontSize(13.0);
+      doc.setTextColor(LK_SLATE[0], LK_SLATE[1], LK_SLATE[2]);
+      doc.text(lines[0], 38.0, hwY1);
+      doc.setFontSize(13.5);
       doc.setTextColor(LK_ORANGE[0], LK_ORANGE[1], LK_ORANGE[2]);
       doc.text(qtyStr, 138.0, hwY1, { align: "right" });
-      hwY1 += 7.8;
+      hwY1 += 9.5;
     }
   });
 
-  let hwY2 = 50.0;
+  let hwY2 = 53.0;
   hwCol2.forEach((it) => {
     const name = it.productOrService;
     const qtyStr = `x ${it.quantity}`;
     const lines = doc.splitTextToSize(`•  ${name}`, 82);
     doc.setFont("helvetica", "bold");
     if (lines.length > 1) {
-      doc.setFontSize(11.0);
-      doc.setTextColor(LK_SLATE[0], LK_SLATE[1], LK_SLATE[2]);
-      doc.text(lines[0], 146.0, hwY2);
-      doc.text(lines[1], 150.0, hwY2 + 4.2);
-      doc.setFontSize(12.5);
-      doc.setTextColor(LK_ORANGE[0], LK_ORANGE[1], LK_ORANGE[2]);
-      doc.text(qtyStr, 246.0, hwY2 + 2.0, { align: "right" });
-      hwY2 += 9.2;
-    } else {
       doc.setFontSize(12.0);
       doc.setTextColor(LK_SLATE[0], LK_SLATE[1], LK_SLATE[2]);
       doc.text(lines[0], 146.0, hwY2);
+      doc.text(lines[1], 150.0, hwY2 + 4.5);
+      doc.setFontSize(13.5);
+      doc.setTextColor(LK_ORANGE[0], LK_ORANGE[1], LK_ORANGE[2]);
+      doc.text(qtyStr, 246.0, hwY2 + 2.5, { align: "right" });
+      hwY2 += 11.0;
+    } else {
+      doc.setFontSize(13.0);
+      doc.setTextColor(LK_SLATE[0], LK_SLATE[1], LK_SLATE[2]);
+      doc.text(lines[0], 146.0, hwY2);
+      doc.setFontSize(13.5);
       doc.setTextColor(LK_ORANGE[0], LK_ORANGE[1], LK_ORANGE[2]);
       doc.text(qtyStr, 246.0, hwY2, { align: "right" });
-      hwY2 += 7.8;
+      hwY2 += 9.5;
     }
   });
 
   // Hardware Subtotal Pill
-  const hwPillY = 88.0;
+  const hwPillY = 96.0;
   doc.setFillColor(241, 245, 249);
   doc.setDrawColor(218, 226, 237);
   doc.setLineWidth(0.4);
-  doc.roundedRect(36.0, hwPillY, 96.0, 10.0, 2.5, 2.5, "FD");
+  doc.roundedRect(36.0, hwPillY, 96.0, 11.0, 2.5, 2.5, "FD");
   doc.setFont("helvetica", "bold");
-  doc.setFontSize(10.5);
+  doc.setFontSize(11.0);
   doc.setTextColor(LK_TEAL[0], LK_TEAL[1], LK_TEAL[2]);
-  doc.text("COMPONENT RELATED COST", 40.0, hwPillY + 6.5);
+  doc.text("COMPONENT RELATED COST", 40.0, hwPillY + 7.2);
 
   doc.setFillColor(LK_TEAL[0], LK_TEAL[1], LK_TEAL[2]);
-  doc.roundedRect(134.0, hwPillY, 114.0, 10.0, 2.5, 2.5, "F");
+  doc.roundedRect(134.0, hwPillY, 114.0, 11.0, 2.5, 2.5, "F");
   doc.setFont("helvetica", "bold");
-  doc.setFontSize(12.5);
+  doc.setFontSize(13.5);
   doc.setTextColor(255, 255, 255);
-  doc.text(formatLkr(hwTotal), 191.0, hwPillY + 6.8, { align: "center" });
+  doc.text(formatLkr(hwTotal), 191.0, hwPillY + 7.5, { align: "center" });
 
   // --- 2. SERVICES SECTION (Left Side) ---
-  const srvHeaderY = 104.0;
+  const srvHeaderY = 118.0;
   doc.setFillColor(LK_TEAL[0], LK_TEAL[1], LK_TEAL[2]);
-  doc.roundedRect(36.0, srvHeaderY, 95.0, 8.5, 2.0, 2.0, "F");
+  doc.roundedRect(36.0, srvHeaderY, 100.0, 9.5, 2.0, 2.0, "F");
   doc.setFont("helvetica", "bold");
-  doc.setFontSize(11.5);
+  doc.setFontSize(12.0);
   doc.setTextColor(255, 255, 255);
-  doc.text("2. ENGINEERING SERVICES", 40.0, srvHeaderY + 5.8);
+  doc.text("2. ENGINEERING SERVICES", 40.0, srvHeaderY + 6.4);
 
-  let srvY = 118.0;
+  let srvY = 134.0;
   const servicesToShow = srvItems.length > 0 ? srvItems : [
     { productOrService: "Testing / Engineering Charges", quantity: 1, unitPrice: 0, totalPrice: 0 },
     { productOrService: "IOT Installation and Programing", quantity: 1, unitPrice: 0, totalPrice: 0 },
   ];
   servicesToShow.forEach((srv) => {
     const name = srv.productOrService;
-    const qtyStr = `x ${srv.quantity}`;
-    const lines = doc.splitTextToSize(`•  ${name}`, 170);
+    const lines = doc.splitTextToSize(`•  ${name}`, 208);
     doc.setFont("helvetica", "bold");
     if (lines.length > 1) {
-      doc.setFontSize(11.5);
+      doc.setFontSize(12.5);
       doc.setTextColor(LK_SLATE[0], LK_SLATE[1], LK_SLATE[2]);
       doc.text(lines[0], 38.0, srvY);
-      doc.text(lines[1], 42.0, srvY + 4.2);
-      doc.setFontSize(12.5);
-      doc.setTextColor(LK_ORANGE[0], LK_ORANGE[1], LK_ORANGE[2]);
-      doc.text(qtyStr, 246.0, srvY + 2.0, { align: "right" });
-      srvY += 9.5;
+      doc.text(lines[1], 42.0, srvY + 4.5);
+      srvY += 11.5;
     } else {
-      doc.setFontSize(12.5);
+      doc.setFontSize(13.5);
       doc.setTextColor(LK_SLATE[0], LK_SLATE[1], LK_SLATE[2]);
       doc.text(lines[0], 38.0, srvY);
-      doc.setTextColor(LK_ORANGE[0], LK_ORANGE[1], LK_ORANGE[2]);
-      doc.text(qtyStr, 246.0, srvY, { align: "right" });
-      srvY += 8.2;
+      srvY += 9.5;
     }
   });
 
   // Services Subtotal Pill
-  const srvPillY = 140.0;
+  const srvPillY = 175.0;
   doc.setFillColor(241, 245, 249);
   doc.setDrawColor(218, 226, 237);
   doc.setLineWidth(0.4);
-  doc.roundedRect(36.0, srvPillY, 96.0, 10.0, 2.5, 2.5, "FD");
+  doc.roundedRect(36.0, srvPillY, 96.0, 11.0, 2.5, 2.5, "FD");
   doc.setFont("helvetica", "bold");
-  doc.setFontSize(10.5);
+  doc.setFontSize(11.0);
   doc.setTextColor(LK_TEAL[0], LK_TEAL[1], LK_TEAL[2]);
-  doc.text("SERVICES RELATED COST", 40.0, srvPillY + 6.5);
+  doc.text("SERVICES RELATED COST", 40.0, srvPillY + 7.2);
 
   doc.setFillColor(LK_TEAL[0], LK_TEAL[1], LK_TEAL[2]);
-  doc.roundedRect(134.0, srvPillY, 114.0, 10.0, 2.5, 2.5, "F");
+  doc.roundedRect(134.0, srvPillY, 114.0, 11.0, 2.5, 2.5, "F");
   doc.setFont("helvetica", "bold");
-  doc.setFontSize(12.5);
+  doc.setFontSize(13.5);
   doc.setTextColor(255, 255, 255);
-  doc.text(formatLkr(srvTotal), 191.0, srvPillY + 6.8, { align: "center" });
+  doc.text(formatLkr(srvTotal), 191.0, srvPillY + 7.5, { align: "center" });
 
-  // --- 3. RIGHT SIDE CARDS (Lead Time, Warranty, Engineering Oversight) ---
+  // --- 3. RIGHT SIDE CARDS (Lead Time, Warranty, Optional Commercial Note) ---
   // Lead Time Card
   doc.setFillColor(255, 255, 255);
   doc.setDrawColor(218, 226, 237);
   doc.setLineWidth(0.4);
-  doc.roundedRect(266.0, 36.0, 100.0, 48.0, 3.5, 3.5, "FD");
+  doc.roundedRect(266.0, 36.0, 100.0, 52.0, 3.5, 3.5, "FD");
   doc.setFillColor(248, 250, 252);
-  doc.roundedRect(266.0, 36.0, 100.0, 12.0, 3.5, 3.5, "F");
-  doc.rect(266.0, 44.0, 100.0, 4.0, "F");
+  doc.roundedRect(266.0, 36.0, 100.0, 12.5, 3.5, 3.5, "F");
+  doc.rect(266.0, 44.5, 100.0, 4.0, "F");
   doc.setFont("helvetica", "bold");
-  doc.setFontSize(10.0);
+  doc.setFontSize(10.5);
   doc.setTextColor(LK_MUTED[0], LK_MUTED[1], LK_MUTED[2]);
-  doc.text("PROJECT ESTIMATED LEAD TIME", 316.0, 44.0, { align: "center" });
+  doc.text("PROJECT ESTIMATED LEAD TIME", 316.0, 44.5, { align: "center" });
   doc.setDrawColor(218, 226, 237);
-  doc.line(266.0, 48.0, 366.0, 48.0);
+  doc.line(266.0, 48.5, 366.0, 48.5);
   doc.setFont("helvetica", "bold");
-  doc.setFontSize(21.0);
+  doc.setFontSize(23.0);
   doc.setTextColor(LK_SLATE[0], LK_SLATE[1], LK_SLATE[2]);
-  doc.text(data.leadTime || "10 Working Days", 316.0, 65.0, { align: "center" });
+  doc.text(data.leadTime || "10 Working Days", 316.0, 68.0, { align: "center" });
   doc.setFont("helvetica", "normal");
   doc.setFontSize(8.5);
   doc.setTextColor(LK_MUTED[0], LK_MUTED[1], LK_MUTED[2]);
-  doc.text("Commences upon purchase order & advance confirmation", 316.0, 75.0, { align: "center" });
+  doc.text("Commences upon purchase order & advance confirmation", 316.0, 80.0, { align: "center" });
 
   // Warranty Card
   doc.setFillColor(255, 255, 255);
   doc.setDrawColor(218, 226, 237);
-  doc.roundedRect(374.0, 36.0, 100.0, 48.0, 3.5, 3.5, "FD");
+  doc.roundedRect(374.0, 36.0, 100.0, 52.0, 3.5, 3.5, "FD");
   doc.setFillColor(248, 250, 252);
-  doc.roundedRect(374.0, 36.0, 100.0, 12.0, 3.5, 3.5, "F");
-  doc.rect(374.0, 44.0, 100.0, 4.0, "F");
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(10.0);
-  doc.setTextColor(LK_MUTED[0], LK_MUTED[1], LK_MUTED[2]);
-  doc.text("HARDWARE WARRANTY", 424.0, 44.0, { align: "center" });
-  doc.setDrawColor(218, 226, 237);
-  doc.line(374.0, 48.0, 474.0, 48.0);
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(21.0);
-  doc.setTextColor(LK_SLATE[0], LK_SLATE[1], LK_SLATE[2]);
-  doc.text(data.warranty || "1 Year", 424.0, 65.0, { align: "center" });
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(8.5);
-  doc.setTextColor(LK_MUTED[0], LK_MUTED[1], LK_MUTED[2]);
-  doc.text("Manufacturer fault warranty as stated in quotation terms", 424.0, 75.0, { align: "center" });
-
-  // Engineering Oversight Card
-  doc.setFillColor(248, 250, 252);
-  doc.setDrawColor(218, 226, 237);
-  doc.roundedRect(266.0, 92.0, 208.0, 58.0, 3.5, 3.5, "FD");
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(11.0);
-  doc.setTextColor(LK_TEAL[0], LK_TEAL[1], LK_TEAL[2]);
-  doc.text("ENGINEERING OVERSIGHT & QUALITY ASSURANCE", 274.0, 102.0);
-  doc.setDrawColor(LK_ORANGE[0], LK_ORANGE[1], LK_ORANGE[2]);
-  doc.setLineWidth(0.8);
-  doc.line(274.0, 105.0, 410.0, 105.0);
-
-  const engNotes = [
-    "• Directed by dedicated Senior R&D Engineer from inception to deployment.",
-    "• Regular milestone progress reports & engineering test validations.",
-    "• Industrial grade component screening & environmental stress validation.",
-    "• Comprehensive benchtop and on-site integration verification protocol.",
-  ];
-  let noteY = 113.0;
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(9.5);
-  doc.setTextColor(LK_SLATE[0], LK_SLATE[1], LK_SLATE[2]);
-  engNotes.forEach((n) => {
-    doc.text(n, 274.0, noteY);
-    noteY += 8.2;
-  });
-
-  // --- 4. GRAND TOTAL INVESTMENT BAR (Bottom Full Width) ---
-  const totalBarY = 160.0;
-  doc.setFillColor(241, 248, 249);
-  doc.setDrawColor(LK_TEAL[0], LK_TEAL[1], LK_TEAL[2]);
-  doc.setLineWidth(0.8);
-  doc.roundedRect(36.0, totalBarY, 438.0, 28.0, 4.0, 4.0, "FD");
-
-  // Left Section of Total Bar
+  doc.roundedRect(374.0, 36.0, 100.0, 12.5, 3.5, 3.5, "F");
+  doc.rect(374.0, 44.5, 100.0, 4.0, "F");
   doc.setFont("helvetica", "bold");
   doc.setFontSize(10.5);
   doc.setTextColor(LK_MUTED[0], LK_MUTED[1], LK_MUTED[2]);
-  doc.text("COMMERCIAL INVESTMENT SCHEDULE", 46.0, totalBarY + 10.0);
-  doc.setFontSize(16.0);
+  doc.text("WARRANTY", 424.0, 44.5, { align: "center" });
+  doc.setDrawColor(218, 226, 237);
+  doc.line(374.0, 48.5, 474.0, 48.5);
+
+  const badgeImg = bgs.warrantyBadge || WARRANTY_BADGE_BASE64;
+  if (badgeImg) {
+    try {
+      doc.addImage(badgeImg, "PNG", 379.0, 52.5, 33.0, 22.9, undefined, "FAST");
+    } catch {
+      try {
+        doc.addImage(badgeImg, "JPEG", 379.0, 52.5, 33.0, 22.9, undefined, "FAST");
+      } catch (err) {
+        console.warn("Failed to render warranty badge:", err);
+      }
+    }
+  }
+
+  const warrantyTextCenterX = badgeImg ? 443.0 : 424.0;
+  const warrantyTextMaxW = badgeImg ? 58.0 : 90.0;
+  const warrantyVal = (data.warranty || "1 Year").trim();
+  const warrantyFontSize = warrantyVal.length > 14 ? 16.0 : warrantyVal.length > 9 ? 19.0 : 24.0;
+
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(warrantyFontSize);
+  doc.setTextColor(LK_SLATE[0], LK_SLATE[1], LK_SLATE[2]);
+  doc.text(warrantyVal, warrantyTextCenterX, 66.0, { align: "center" });
+
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(8.0);
+  doc.setTextColor(LK_MUTED[0], LK_MUTED[1], LK_MUTED[2]);
+  const subLines = doc.splitTextToSize("Manufacturer fault warranty as stated in quotation terms", warrantyTextMaxW);
+  doc.text(subLines, warrantyTextCenterX, 75.0, { align: "center", lineHeightFactor: 1.22 });
+
+  // Resolve commercial / warranty exclusion note (Only show box if note is provided)
+  let commercialNoteText: string | null = null;
+  if (data.commercialNote && data.commercialNote.trim()) {
+    commercialNoteText = data.commercialNote.trim();
+  } else if (data.technicalSpecs) {
+    let specsObj: any = null;
+    if (typeof data.technicalSpecs === "string") {
+      try { specsObj = JSON.parse(data.technicalSpecs); } catch {}
+    } else if (typeof data.technicalSpecs === "object") {
+      specsObj = data.technicalSpecs;
+    }
+    if (specsObj?.commercialNote && typeof specsObj.commercialNote === "string" && specsObj.commercialNote.trim()) {
+      commercialNoteText = specsObj.commercialNote.trim();
+    }
+  }
+
+  if (commercialNoteText) {
+    const boxX = 266.0;
+    const boxY = 96.0;
+    const boxW = 208.0;
+    const boxH = 90.0;
+
+    // Outer Card Frame with clean subtle accent border
+    doc.setFillColor(255, 255, 255);
+    doc.setDrawColor(245, 158, 11); // Amber accent border
+    doc.setLineWidth(0.6);
+    doc.roundedRect(boxX, boxY, boxW, boxH, 3.5, 3.5, "FD");
+
+    // Card Header Banner
+    doc.setFillColor(254, 243, 199); // Amber-100 soft background
+    doc.roundedRect(boxX, boxY, boxW, 13.0, 3.5, 3.5, "F");
+    doc.rect(boxX, boxY + 8.0, boxW, 5.0, "F");
+    doc.setDrawColor(245, 158, 11);
+    doc.setLineWidth(0.4);
+    doc.line(boxX, boxY + 13.0, boxX + boxW, boxY + 13.0);
+
+    // Header Title
+    const isWarrantyExclusion = /warranty\s*exclusion/i.test(commercialNoteText);
+    const boxTitle = isWarrantyExclusion
+      ? "WARRANTY EXCLUSION & OPERATIONAL CONDITIONS"
+      : "SPECIAL OPERATIONAL NOTES & CONDITIONS";
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(10.5);
+    doc.setTextColor(180, 83, 9); // Amber-700
+    doc.text(boxTitle, boxX + 8.0, boxY + 9.0);
+
+    // Render tokens inside box
+    const noteTokens = parseSlideTokens(commercialNoteText);
+    let curX = boxX + 8.0;
+    let curY = boxY + 22.0;
+    const startX = boxX + 8.0;
+    const maxW = boxW - 16.0;
+    const fontSize = 12.0;
+    const lineSpacing = 6.4;
+    const maxNoteY = boxY + boxH - 5.0;
+
+    noteTokens.forEach((wObj, wIdx) => {
+      doc.setFont("helvetica", wObj.bold ? "bold" : "normal");
+      doc.setFontSize(fontSize);
+      const wordW = doc.getTextWidth(wObj.word);
+      const spaceW = doc.getTextWidth(" ");
+
+      if (curX + wordW > startX + maxW) {
+        curY += lineSpacing;
+        curX = startX;
+      }
+
+      if (curY <= maxNoteY) {
+        if (wObj.highlight) {
+          const nextWord = noteTokens[wIdx + 1];
+          const hasContinuousHl =
+            nextWord &&
+            nextWord.highlight &&
+            curX + wordW + spaceW <= startX + maxW;
+          const hlW = hasContinuousHl ? wordW + spaceW + 0.8 : wordW + 0.8;
+          doc.setFillColor(255, 255, 0); // Yellow #FFFF00
+          doc.rect(curX - 0.4, curY - fontSize * 0.28, hlW, fontSize * 0.36, "F");
+        }
+
+        if (wObj.color) {
+          doc.setTextColor(wObj.color[0], wObj.color[1], wObj.color[2]);
+        } else if (wObj.bold) {
+          doc.setTextColor(180, 83, 9); // Amber-700
+        } else {
+          doc.setTextColor(LK_SLATE[0], LK_SLATE[1], LK_SLATE[2]);
+        }
+
+        doc.text(wObj.word, curX, curY);
+
+        if (wObj.underline) {
+          doc.setDrawColor(245, 158, 11);
+          doc.setLineWidth(0.4);
+          doc.line(curX, curY + 0.8, curX + wordW, curY + 0.8);
+        }
+      }
+
+      curX += wordW + spaceW;
+    });
+  }
+
+  // --- 4. GRAND TOTAL INVESTMENT BAR (Bottom Full Width) ---
+  const totalBarY = 196.0;
+  doc.setFillColor(241, 248, 249);
+  doc.setDrawColor(LK_TEAL[0], LK_TEAL[1], LK_TEAL[2]);
+  doc.setLineWidth(0.9);
+  doc.roundedRect(36.0, totalBarY, 438.0, 34.0, 4.5, 4.5, "FD");
+
+  // Left Section of Total Bar
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(11.5);
+  doc.setTextColor(LK_MUTED[0], LK_MUTED[1], LK_MUTED[2]);
+  doc.text("COMMERCIAL INVESTMENT SCHEDULE", 48.0, totalBarY + 12.0);
+  doc.setFontSize(18.0);
   doc.setTextColor(LK_TEAL[0], LK_TEAL[1], LK_TEAL[2]);
-  doc.text("TOTAL PROJECT INVESTMENT", 46.0, totalBarY + 20.0);
+  doc.text("TOTAL PROJECT INVESTMENT", 48.0, totalBarY + 24.0);
 
   // Separator Line
   doc.setDrawColor(218, 226, 237);
-  doc.setLineWidth(0.5);
-  doc.line(170.0, totalBarY + 4.0, 170.0, totalBarY + 24.0);
+  doc.setLineWidth(0.6);
+  doc.line(175.0, totalBarY + 5.0, 175.0, totalBarY + 29.0);
 
   // Grand Total Amount (Massive LK Teal)
   doc.setFont("helvetica", "bold");
-  doc.setFontSize(36.0);
+  doc.setFontSize(42.0);
   doc.setTextColor(LK_TEAL[0], LK_TEAL[1], LK_TEAL[2]);
-  doc.text(formatLkr(grandTotal), 320.0, totalBarY + 19.5, { align: "center" });
+  doc.text(formatLkr(grandTotal), 325.0, totalBarY + 24.0, { align: "center" });
 
   // ==========================================
   // SLIDE 5: BANK DETAILS (DEDICATED SLIDE)
@@ -1495,6 +1709,75 @@ async function generateProjectProposalPdf(
     doc.text(clauseText, 44.0, 56.0, { lineHeightFactor: 1.4 });
   }
 
+  // Resolve custom bank account for Slide 5
+  let activeProposalBank = LK_TRONICS_BANK_DETAILS;
+  if (data.bankDetails) {
+    activeProposalBank = {
+      accountName: data.bankDetails.accountName || LK_TRONICS_BANK_DETAILS.accountName,
+      accountNumber: data.bankDetails.accountNumber || LK_TRONICS_BANK_DETAILS.accountNumber,
+      bankName: data.bankDetails.bankName || LK_TRONICS_BANK_DETAILS.bankName,
+      branch: data.bankDetails.branch || LK_TRONICS_BANK_DETAILS.branch,
+    };
+  } else if (data.technicalSpecs) {
+    let specsObj: any = null;
+    if (typeof data.technicalSpecs === "string") {
+      try { specsObj = JSON.parse(data.technicalSpecs); } catch {}
+    } else if (typeof data.technicalSpecs === "object") {
+      specsObj = data.technicalSpecs;
+    }
+    if (specsObj && specsObj.bankDetails) {
+      activeProposalBank = {
+        accountName: specsObj.bankDetails.accountName || LK_TRONICS_BANK_DETAILS.accountName,
+        accountNumber: specsObj.bankDetails.accountNumber || LK_TRONICS_BANK_DETAILS.accountNumber,
+        bankName: specsObj.bankDetails.bankName || LK_TRONICS_BANK_DETAILS.bankName,
+        branch: specsObj.bankDetails.branch || LK_TRONICS_BANK_DETAILS.branch,
+      };
+    }
+  }
+
+  const isCustomProposalBank =
+    activeProposalBank.accountNumber !== LK_TRONICS_BANK_DETAILS.accountNumber ||
+    activeProposalBank.bankName !== LK_TRONICS_BANK_DETAILS.bankName;
+
+  if (isCustomProposalBank) {
+    // Redraw Right Content Area of Bank Card on Slide 5
+    const bankRightX = 155.0;
+    const bankRightY = 126.0;
+    const bankRightW = 316.0;
+    const bankRightH = 105.0;
+
+    doc.setFillColor(255, 255, 255);
+    doc.rect(bankRightX, bankRightY, bankRightW, bankRightH, "F");
+
+    let bankRowY = bankRightY + 12.0;
+    const bankFields = [
+      { label: "Account Name", val: activeProposalBank.accountName, color: LK_TEAL },
+      { label: "Account Number", val: activeProposalBank.accountNumber, color: LK_ORANGE },
+      { label: "Bank Name", val: activeProposalBank.bankName, color: LK_SLATE },
+      { label: "Bank Branch", val: activeProposalBank.branch, color: LK_SLATE },
+    ];
+
+    bankFields.forEach((field, fIdx) => {
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(13.5);
+      doc.setTextColor(LK_MUTED[0], LK_MUTED[1], LK_MUTED[2]);
+      doc.text(field.label, bankRightX + 10.0, bankRowY + 3.0);
+      doc.text(":", bankRightX + 70.0, bankRowY + 3.0);
+
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(14.0);
+      doc.setTextColor(field.color[0], field.color[1], field.color[2]);
+      doc.text(field.val, bankRightX + 80.0, bankRowY + 3.0);
+
+      if (fIdx < bankFields.length - 1) {
+        doc.setDrawColor(218, 225, 233);
+        doc.setLineWidth(0.3);
+        doc.line(bankRightX + 10.0, bankRowY + 13.0, bankRightX + bankRightW - 10.0, bankRowY + 13.0);
+      }
+      bankRowY += 22.0;
+    });
+  }
+
   // ==========================================
   // SLIDE 6: TERMS AND CONDITIONS
   // ==========================================
@@ -1507,20 +1790,22 @@ async function generateProjectProposalPdf(
     }
   }
 
-  // Combine any additional terms ON TOP of the 7 fixed default terms
+  // Combine any additional terms ON TOP of the 6 fixed default terms
   const termsList = getProjectProposalCombinedTerms(
     data.termsAndConditions,
     data.validityDays || 4
   );
 
   let termY = 48.0;
-  const maxTermY = 248.0;
+  const maxTermY = 250.0;
 
   // Resolve terms font size (from data or technicalSpecs)
   let customTermsFontSize: number | null = null;
   if (data.termsFontSize != null) {
     const s = Number(data.termsFontSize);
-    if (!isNaN(s) && s >= 9 && s <= 24) customTermsFontSize = s;
+    if (!isNaN(s) && s >= 9 && s <= 30) {
+      customTermsFontSize = s <= 16.5 ? 22.0 : s;
+    }
   } else if (data.technicalSpecs) {
     let specsObj: any = null;
     if (typeof data.technicalSpecs === "string") {
@@ -1532,15 +1817,17 @@ async function generateProjectProposalPdf(
     }
     if (specsObj && specsObj.termsFontSize != null) {
       const s = Number(specsObj.termsFontSize);
-      if (!isNaN(s) && s >= 9 && s <= 24) customTermsFontSize = s;
+      if (!isNaN(s) && s >= 9 && s <= 30) {
+        customTermsFontSize = s <= 16.5 ? 22.0 : s;
+      }
     }
   }
 
-  const isExtended = termsList.length > 7;
-  const defaultSize = isExtended ? (termsList.length > 9 ? 12.0 : 13.5) : 15.0;
+  const isExtended = termsList.length > 6;
+  const defaultSize = isExtended ? (termsList.length > 8 ? 16.5 : 19.0) : 22.0;
   const fontSize = customTermsFontSize || defaultSize;
-  const lineSpacing = fontSize * 0.44;
-  const termPadding = fontSize * 0.28;
+  const lineSpacing = fontSize * 0.45;
+  const termPadding = fontSize * 0.35;
 
   termsList.forEach((term) => {
     const cleanTerm = term.replace(/^(\d+[\.\)]|\•|\-)\s*/, "").trim();
@@ -1554,13 +1841,7 @@ async function generateProjectProposalPdf(
       bodyPart = cleanTerm.substring(colonIdx + 1).trim();
     }
 
-    const fullTermText = titlePart ? `•  ${titlePart} ${bodyPart}` : `•  ${cleanTerm}`;
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(fontSize);
-    const wrapped = doc.splitTextToSize(fullTermText, 432.0);
-    const blockHeight = wrapped.length * lineSpacing + termPadding;
-
-    if (termY + blockHeight > maxTermY) {
+    if (termY > maxTermY) {
       doc.addPage([SLIDE_W, SLIDE_H], "landscape");
       if (bgs.bgTerms) {
         try {
@@ -1578,37 +1859,73 @@ async function generateProjectProposalPdf(
     doc.setTextColor(LK_ORANGE[0], LK_ORANGE[1], LK_ORANGE[2]);
     doc.text("•", 38.0, termY);
 
+    let curX = 44.0;
+    const startX = 44.0;
+    const maxW = 426.0;
+
     if (titlePart) {
       // Bold LK Teal title prefix
       doc.setFont("helvetica", "bold");
       doc.setTextColor(LK_TEAL[0], LK_TEAL[1], LK_TEAL[2]);
-      doc.text(titlePart, 44.0, termY);
-
-      // Remaining line text with explicit word gap
-      const titleWidth = doc.getTextWidth(titlePart) + doc.getTextWidth(" ") + 1.2;
-      doc.setFont("helvetica", "normal");
-      doc.setTextColor(LK_SLATE[0], LK_SLATE[1], LK_SLATE[2]);
-
-      // Calculate wrapped text for lines
-      const combinedLine1 = titlePart + " " + bodyPart;
-      const allWrapped = doc.splitTextToSize(combinedLine1, 426.0);
-
-      // Print first line after title
-      if (allWrapped.length > 0) {
-        const firstLineBody = allWrapped[0].substring(titlePart.length).trim();
-        doc.text(firstLineBody, 44.0 + titleWidth, termY);
-        for (let l = 1; l < allWrapped.length; l++) {
-          doc.text(allWrapped[l], 44.0, termY + l * lineSpacing);
-        }
-      }
-    } else {
-      doc.setFont("helvetica", "normal");
-      doc.setTextColor(LK_SLATE[0], LK_SLATE[1], LK_SLATE[2]);
-      const noBulletWrapped = doc.splitTextToSize(cleanTerm, 426.0);
-      doc.text(noBulletWrapped, 44.0, termY, { lineHeightFactor: 1.25 });
+      doc.text(titlePart, curX, termY);
+      curX += doc.getTextWidth(titlePart) + doc.getTextWidth(" ") + 1.2;
     }
 
-    termY += blockHeight;
+    const termWords = parseSlideTokens(titlePart ? bodyPart : cleanTerm);
+    termWords.forEach((wObj, wIdx) => {
+      doc.setFont("helvetica", wObj.bold ? "bold" : "normal");
+      doc.setFontSize(fontSize);
+      const wordW = doc.getTextWidth(wObj.word);
+      const spaceW = doc.getTextWidth(" ");
+
+      if (curX + wordW > startX + maxW) {
+        termY += lineSpacing;
+        curX = startX;
+        if (termY > maxTermY) {
+          doc.addPage([SLIDE_W, SLIDE_H], "landscape");
+          if (bgs.bgTerms) {
+            try {
+              doc.addImage(bgs.bgTerms, "PNG", 0, 0, SLIDE_W, SLIDE_H, undefined, "FAST");
+            } catch (err) {
+              console.warn("Failed to render continuation bgTerms:", err);
+            }
+          }
+          termY = 48.0;
+        }
+      }
+
+      // Draw yellow highlight rectangle behind text if highlighted
+      if (wObj.highlight) {
+        const nextWord = termWords[wIdx + 1];
+        const hasContinuousHl =
+          nextWord &&
+          nextWord.highlight &&
+          curX + wordW + spaceW <= startX + maxW;
+        const hlW = hasContinuousHl ? wordW + spaceW + 0.8 : wordW + 0.8;
+        doc.setFillColor(255, 255, 0); // Bright Yellow #FFFF00
+        doc.rect(curX - 0.4, termY - fontSize * 0.28, hlW, fontSize * 0.36, "F");
+      }
+
+      if (wObj.color) {
+        doc.setTextColor(wObj.color[0], wObj.color[1], wObj.color[2]);
+      } else if (wObj.bold) {
+        doc.setTextColor(LK_TEAL[0], LK_TEAL[1], LK_TEAL[2]);
+      } else {
+        doc.setTextColor(LK_SLATE[0], LK_SLATE[1], LK_SLATE[2]);
+      }
+
+      doc.text(wObj.word, curX, termY);
+
+      if (wObj.underline) {
+        doc.setDrawColor(LK_ORANGE[0], LK_ORANGE[1], LK_ORANGE[2]);
+        doc.setLineWidth(0.4);
+        doc.line(curX, termY + 0.8, curX + wordW, termY + 0.8);
+      }
+
+      curX += wordW + spaceW;
+    });
+
+    termY += lineSpacing + termPadding;
   });
 
   // ==========================================
@@ -1654,6 +1971,7 @@ export async function generateRdQuotationPdf(
       bgTerms,
       bgClients,
       bgPartners,
+      warrantyBadge,
     ] = await Promise.all([
       loadImageAsBase64("/template_assets/pptx_slides/brand_slide1_cover.png"),
       loadImageAsBase64("/template_assets/pptx_slides/brand_slide2_intro.png"),
@@ -1663,6 +1981,7 @@ export async function generateRdQuotationPdf(
       loadImageAsBase64("/template_assets/pptx_slides/brand_slide6_terms.png"),
       loadImageAsBase64("/template_assets/pptx_slides/brand_slide7_clients.png"),
       loadImageAsBase64("/template_assets/pptx_slides/brand_slide8_partners.png"),
+      loadImageAsBase64("/template_assets/logos/warranty_badge.png"),
     ]);
     return await generateProjectProposalPdf(data, {
       bgCover,
@@ -1673,6 +1992,7 @@ export async function generateRdQuotationPdf(
       bgTerms,
       bgClients,
       bgPartners,
+      warrantyBadge: warrantyBadge || WARRANTY_BADGE_BASE64,
     });
   } else {
     const bgBase64 = await loadImageAsBase64("/template_assets/rd_3d_letterhead.jpg");

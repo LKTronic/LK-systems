@@ -9,7 +9,8 @@ export default function ThreeDPrintQuotationsPage() {
       type="THREE_D_PRINT"
       title="3D Print Quotations"
       subtitle="Rapid 3D prototyping estimates, infill parameters, and material quotations"
-      createLabel="Create 3D Print Quote"
+      createLabel="New 3D Print Quote"
+      savedLabel="Saved Quotations"
       createHref="/rad/create?type=THREE_D_PRINT"
       icon={Printer}
       badgeText="3DQ Series"

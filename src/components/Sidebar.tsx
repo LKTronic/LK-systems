@@ -15,6 +15,7 @@ import {
   ShieldAlert,
   FileText,
   FlaskConical,
+  ClipboardCheck,
 } from "lucide-react";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { getEffectiveRole, clearOfflineAuthSession } from "@/lib/offlineAuth";
@@ -80,6 +81,8 @@ export function Sidebar() {
                   ? pathname === "/products" ||
                     (pathname.startsWith("/products/") &&
                       !pathname.startsWith("/products/pending-download"))
+                  : item.href === "/rad"
+                  ? pathname.startsWith("/rad") || pathname.startsWith("/checklist")
                   : pathname === item.href ||
                     (item.href !== "/dashboard" && pathname.startsWith(item.href));
               const Icon = item.icon;
@@ -107,7 +110,7 @@ export function Sidebar() {
                   </Link>
 
                   {/* R&D Submenu */}
-                  {item.href === "/rad" && pathname.startsWith("/rad") && (
+                  {item.href === "/rad" && (pathname.startsWith("/rad") || pathname.startsWith("/checklist")) && (
                     <div className="pl-7 pr-1 py-1 space-y-1 border-l border-slate-800 ml-4 my-1">
                       <Link
                         href="/rad/project-proposal"
@@ -138,6 +141,28 @@ export function Sidebar() {
                         }`}
                       >
                         PCB Fabrication Plans
+                      </Link>
+                      <Link
+                        href="/rad/checklist"
+                        className={`block px-2.5 py-1.5 rounded-md text-xs font-medium transition-colors ${
+                          (pathname.startsWith("/rad/checklist") || pathname.startsWith("/checklist")) &&
+                          !pathname.startsWith("/rad/handover") &&
+                          !pathname.startsWith("/handover")
+                            ? "bg-cyan-950/80 text-cyan-300 font-semibold border border-cyan-800/60"
+                            : "text-slate-400 hover:text-white hover:bg-slate-800/60"
+                        }`}
+                      >
+                        QC Checklists
+                      </Link>
+                      <Link
+                        href="/rad/handover"
+                        className={`block px-2.5 py-1.5 rounded-md text-xs font-medium transition-colors ${
+                          pathname.startsWith("/rad/handover") || pathname.startsWith("/handover")
+                            ? "bg-amber-950/80 text-amber-300 font-semibold border border-amber-800/60"
+                            : "text-slate-400 hover:text-white hover:bg-slate-800/60"
+                        }`}
+                      >
+                        Handover Letters
                       </Link>
                     </div>
                   )}

@@ -20,7 +20,10 @@ import {
   Pencil,
   ArrowLeft,
   Layers,
+  Edit3,
+  Calculator,
 } from "lucide-react";
+import { ThreeDPrintPricingModal } from "@/components/rad/ThreeDPrintPricingModal";
 
 interface RdQuotationItem {
   id: number;
@@ -62,6 +65,7 @@ interface RadQuotationListProps {
   title: string;
   subtitle: string;
   createLabel: string;
+  savedLabel?: string;
   createHref: string;
   icon: React.ComponentType<{ className?: string }>;
   badgeText: string;
@@ -73,6 +77,7 @@ export function RadQuotationList({
   title,
   subtitle,
   createLabel,
+  savedLabel,
   createHref,
   icon: Icon,
   badgeText,
@@ -87,6 +92,7 @@ export function RadQuotationList({
     type: "success" | "error";
     text: string;
   } | null>(null);
+  const [showPricingModal, setShowPricingModal] = useState(false);
 
   const fetchQuotations = async () => {
     setIsLoading(true);
@@ -216,20 +222,31 @@ export function RadQuotationList({
       iconColor: "text-teal-400",
       badgeClass: "bg-teal-900/50 text-teal-300 border-teal-700/60",
       accentBorder: "border-teal-500",
+      activeTab: "bg-teal-600 text-white",
     },
     amber: {
       btnBg: "bg-amber-600 hover:bg-amber-500",
       iconColor: "text-amber-400",
       badgeClass: "bg-amber-900/50 text-amber-300 border-amber-700/60",
       accentBorder: "border-amber-500",
+      activeTab: "bg-amber-600 text-white",
     },
     emerald: {
       btnBg: "bg-emerald-600 hover:bg-emerald-500",
       iconColor: "text-emerald-400",
       badgeClass: "bg-emerald-900/50 text-emerald-300 border-emerald-700/60",
       accentBorder: "border-emerald-500",
+      activeTab: "bg-emerald-600 text-white",
     },
   }[themeColor];
+
+  const defaultSavedLabel =
+    savedLabel ||
+    (type === "PROJECT_PROPOSAL"
+      ? "Saved Proposals"
+      : type === "THREE_D_PRINT"
+      ? "Saved Quotes"
+      : "Saved Plans");
 
   return (
     <AppLayout title={title} description={subtitle}>
@@ -260,14 +277,39 @@ export function RadQuotationList({
             </div>
           </div>
 
-          {/* Create New Button */}
-          <Link
-            href={createHref}
-            className={`inline-flex items-center gap-2 px-4 py-2.5 ${colorStyles.btnBg} text-white rounded-lg text-sm font-semibold transition-colors shadow-md shrink-0`}
-          >
-            <Plus className="w-4 h-4" />
-            <span>{createLabel}</span>
-          </Link>
+          {/* Action Buttons & Navigation Tabs */}
+          <div className="flex items-center gap-2.5 flex-wrap">
+            {type === "THREE_D_PRINT" && (
+              <button
+                type="button"
+                onClick={() => setShowPricingModal(true)}
+                className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-slate-900 hover:bg-slate-800 text-amber-300 border border-amber-600/40 hover:border-amber-500 rounded-xl text-xs font-semibold transition-all shadow-sm"
+                title="Configure 3D Print pricing defaults (filament cost, hourly rate, markup)"
+              >
+                <Calculator className="w-3.5 h-3.5 text-amber-400" />
+                <span>3D Pricing</span>
+              </button>
+            )}
+
+            {/* Navigation Pill Tabs matching QC Inspection & Handover Letter */}
+            <div className="flex items-center gap-1.5 bg-slate-950 p-1 rounded-xl border border-slate-800 self-start sm:self-auto shadow-inner">
+              <div
+                className={`px-4 py-2 rounded-lg text-xs font-semibold flex items-center gap-2 shadow-sm ${colorStyles.activeTab}`}
+              >
+                <Search className="w-3.5 h-3.5" />
+                <span>
+                  {defaultSavedLabel} ({quotations.length})
+                </span>
+              </div>
+              <Link
+                href={createHref}
+                className="px-4 py-2 rounded-lg text-xs font-semibold flex items-center gap-2 text-slate-400 hover:text-white hover:bg-slate-900 transition-all"
+              >
+                <Edit3 className="w-3.5 h-3.5" />
+                <span>{createLabel}</span>
+              </Link>
+            </div>
+          </div>
         </div>
 
         {/* Alerts */}
@@ -459,6 +501,13 @@ export function RadQuotationList({
           </div>
         </div>
       </div>
+
+      {type === "THREE_D_PRINT" && (
+        <ThreeDPrintPricingModal
+          isOpen={showPricingModal}
+          onClose={() => setShowPricingModal(false)}
+        />
+      )}
     </AppLayout>
   );
 }

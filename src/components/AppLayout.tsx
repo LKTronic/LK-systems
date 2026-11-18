@@ -130,7 +130,7 @@ export function AppLayout({
       {!isShop && <Sidebar />}
       <div suppressHydrationWarning className="flex-1 flex flex-col min-w-0 w-full">
         <Header title={title} description={description} />
-        <main suppressHydrationWarning className="flex-1 p-4 sm:p-6 lg:p-8 overflow-y-auto max-w-[1600px] w-full mx-auto">
+        <main suppressHydrationWarning className="flex-1 p-4 sm:p-6 lg:p-8 w-full min-w-0">
           {children}
         </main>
       </div>

@@ -19,7 +19,25 @@ import {
   DEFAULT_THREE_D_PRINT_SPECS,
   DEFAULT_PCB_SPECS,
   LK_TRONICS_BANK_DETAILS,
+  calculate3DPrintPrice,
 } from "../src/lib/rdQuotationDefaults";
+import { DEFAULT_THREE_D_PRINT_PRICING } from "../src/lib/threeDPrintPricing";
+import {
+  DEFAULT_BANK_ACCOUNTS,
+  resolveDefaultBankAccount,
+  BankAccount,
+} from "../src/lib/bankAccounts";
+import {
+  getDefaultTestItems,
+  getDefaultBatteryInfo,
+  getDefaultInverterInfo,
+  ProductChecklist,
+} from "../src/lib/productChecklist";
+import { generateChecklistPdf } from "../src/lib/checklistPdfGenerator";
+import {
+  generateHandoverLetterPdf,
+  ProductHandoverData,
+} from "../src/lib/handoverPdfGenerator";
 import { extractStorageLocation } from "../src/lib/formatters";
 import { productSchema } from "../src/lib/validations/product";
 import { createUserSchema, updateUserSchema } from "../src/lib/validations/user";
@@ -717,10 +735,13 @@ describe("Unit Tests: Supply Excel Supplier Image Handling", () => {
   });
 
   it("validates R&D technical default specifications and LK Tronics bank credentials", () => {
-    // 3D print specs
+    // 3D print specs & default pricing constants
     assert.equal(DEFAULT_THREE_D_PRINT_SPECS.printingTechnology, "FDM (Fused Deposition Modeling)");
     assert.ok(DEFAULT_THREE_D_PRINT_SPECS.infillDensity.includes("50%"));
-    assert.ok(DEFAULT_THREE_D_PRINT_SPECS.material.includes("PLA"));
+    assert.ok(DEFAULT_THREE_D_PRINT_SPECS.material.includes("ABS") || DEFAULT_THREE_D_PRINT_SPECS.material.includes("PLA"));
+    assert.equal(DEFAULT_THREE_D_PRINT_PRICING.filamentPricePerKg, 10000);
+    assert.equal(DEFAULT_THREE_D_PRINT_PRICING.costPerHour, 200);
+    assert.equal(DEFAULT_THREE_D_PRINT_PRICING.markupPercent, 35);
 
     // PCB specs
     assert.equal(DEFAULT_PCB_SPECS.layers, "2 Layers");
@@ -731,6 +752,32 @@ describe("Unit Tests: Supply Excel Supplier Image Handling", () => {
     assert.equal(LK_TRONICS_BANK_DETAILS.accountName, "LK TRONICS TRADING PVT LTD");
     assert.equal(LK_TRONICS_BANK_DETAILS.accountNumber, "047010021564");
     assert.equal(LK_TRONICS_BANK_DETAILS.bankName, "Hatton National Bank (HNB)");
+  });
+
+  it("calculates 3D print pricing accurately based on length, time (in minutes), and markup formula", () => {
+    // Omni Calculator formula validation:
+    // 12.5m filament, 70 mins print time, 10,000 LKR/kg, 200 LKR/hr, 35% markup, ABS (1.05 g/cm³), 1.75mm
+    // Material cost = 315.69, Labor cost = 233.33, Raw price = 741.19 LKR -> Rounded up to nearest 10 = 750 LKR
+    const omniRes = calculate3DPrintPrice(12.5, 70, 10000, 200, 35, 1.05, 1.75);
+    assert.equal(omniRes.materialCost, 315.69);
+    assert.equal(omniRes.laborCost, 233.33);
+    assert.equal(omniRes.baseCost, 549.03);
+    assert.equal(omniRes.markupAmount, 192.16);
+    assert.equal(omniRes.rawUnitPrice, 741.19);
+    assert.equal(omniRes.unitPrice, 750); // 741.19 rounded up to nearest 10 = 750
+
+    // Zero length and zero time fallback safely
+    const zeroRes = calculate3DPrintPrice(0, 0, 10000, 200, 35, 1.05, 1.75);
+    assert.equal(zeroRes.materialCost, 0);
+    assert.equal(zeroRes.laborCost, 0);
+    assert.equal(zeroRes.unitPrice, 0);
+
+    // PLA material (1.27 g/cm³): Raw 830.48 -> Rounded up to nearest 10 = 840 LKR
+    const plaRes = calculate3DPrintPrice(12.5, 70, 10000, 200, 35, 1.27, 1.75);
+    assert.equal(plaRes.materialCost, 381.84);
+    assert.equal(plaRes.laborCost, 233.33);
+    assert.equal(plaRes.rawUnitPrice, 830.48);
+    assert.equal(plaRes.unitPrice, 840);
   });
 
   it("calculates R&D project proposal dual BOM & Engineering Services totals correctly", () => {
@@ -759,5 +806,197 @@ describe("Unit Tests: Supply Excel Supplier Image Handling", () => {
     assert.equal(advancePayable, 51100);
     assert.equal(balanceRemaining, 21900);
     assert.equal(advancePayable + balanceRemaining, totalInvestment);
+  });
+
+  it("manages settlement bank accounts and resolves default account accurately", () => {
+    // Default configured accounts
+    assert.ok(DEFAULT_BANK_ACCOUNTS.length >= 2);
+    const defaultAcc = resolveDefaultBankAccount(DEFAULT_BANK_ACCOUNTS);
+    assert.ok(defaultAcc);
+    assert.equal(defaultAcc.bankName, "Hatton National Bank (HNB)");
+    assert.equal(defaultAcc.accountNumber, "047010021564");
+    assert.equal(defaultAcc.isDefault, true);
+
+    // Resolving when custom list has different default
+    const customList: BankAccount[] = [
+      {
+        id: "bank-custom-1",
+        bankName: "Commercial Bank",
+        accountName: "LK TRONICS TRADING PVT LTD",
+        accountNumber: "1000999888",
+        branch: "Colombo Fort",
+        isDefault: false,
+      },
+      {
+        id: "bank-custom-2",
+        bankName: "Sampath Bank",
+        accountName: "LK TRONICS TRADING PVT LTD",
+        accountNumber: "2000555444",
+        branch: "Kollupitiya",
+        isDefault: true,
+      },
+    ];
+
+    const resolved = resolveDefaultBankAccount(customList);
+    assert.equal(resolved?.id, "bank-custom-2");
+    assert.equal(resolved?.bankName, "Sampath Bank");
+
+    // Fallback when no account marked as default
+    const noDefaultList: BankAccount[] = [
+      {
+        id: "bank-1",
+        bankName: "BOC",
+        accountName: "LK TRONICS",
+        accountNumber: "8888",
+        branch: "Main",
+        isDefault: false,
+      },
+    ];
+    const fallback = resolveDefaultBankAccount(noDefaultList);
+    assert.equal(fallback?.id, "bank-1");
+  });
+
+  it("validates Product Checklist test items and default specifications for Inverter and Battery", () => {
+    // Inverter test parameters
+    const invTests = getDefaultTestItems("INVERTER");
+    assert.equal(invTests.length, 8);
+    const invKeys = invTests.map((t) => t.key);
+    assert.ok(invKeys.includes("pvStatus"));
+    assert.ok(invKeys.includes("acStatus"));
+    assert.ok(invKeys.includes("displayStatus"));
+    assert.ok(invKeys.includes("outputStatus"));
+    assert.ok(invKeys.includes("batteryChargingStatus"));
+    assert.ok(invKeys.includes("batteryPointBackStatus"));
+    assert.ok(invKeys.includes("loadTestStatus"));
+    assert.ok(invKeys.includes("qcPassedStatus"));
+
+    // Battery test parameters
+    const batTests = getDefaultTestItems("BATTERY");
+    assert.equal(batTests.length, 6);
+    const batKeys = batTests.map((t) => t.key);
+    assert.ok(batKeys.includes("displayStatus"));
+    assert.ok(batKeys.includes("outputStatus"));
+    assert.ok(batKeys.includes("batteryChargingStatus"));
+    assert.ok(batKeys.includes("batteryPointBackStatus"));
+    assert.ok(batKeys.includes("loadTestStatus"));
+    assert.ok(batKeys.includes("qcPassedStatus"));
+
+    // Inverter does have PV & AC, while Battery does not
+    assert.ok(!batKeys.includes("pvStatus"));
+    assert.ok(!batKeys.includes("acStatus"));
+
+    // Default info structures
+    const defBat = getDefaultBatteryInfo();
+    assert.equal(defBat.physicalDamage, "None / No physical damage observed");
+    assert.equal(defBat.macAddress, "");
+    assert.equal(defBat.serialNumberBox, "");
+    assert.equal(defBat.serialNumberBattery, "");
+
+    const defInv = getDefaultInverterInfo();
+    assert.equal(defInv.batterySystem, "48V DC");
+    assert.equal(defInv.physicalDamage, "None / No physical damage observed");
+  });
+
+  it("generates official Letterhead Product Checklist PDF cleanly without errors", async () => {
+    const mockChecklist: ProductChecklist = {
+      id: "chk-test-01",
+      checklistNo: "QC-BAT-20261117-01",
+      type: "BATTERY",
+      batteryInfo: {
+        arrivedDate: "2026-11-17",
+        modelNumber: "LK-BAT-48100-PRO",
+        macAddress: "AA:BB:CC:11:22:33",
+        serialNumberBattery: "BAT202611-9988",
+        serialNumberBox: "BX202611-9988",
+        batteryInput: "51.2V DC / 100Ah",
+        physicalDamage: "None / Pristine factory packaging",
+      },
+      checkedDate: "2026-11-17",
+      tests: getDefaultTestItems("BATTERY"),
+      checkedByName: "Kasun Perera",
+      checkedByDesignation: "Quality Control & Hardware Engineer",
+      additionalNotes: [
+        { id: "n1", text: "Cell balance within 0.005V across all 16 cells", bold: true, color: "green" },
+        { id: "n2", text: "High temperature cutoff verified at 65°C", highlight: true, color: "amber" },
+      ],
+      overallQcPassed: true,
+      createdAt: "2026-11-17T06:00:00.000Z",
+      updatedAt: "2026-11-17T06:00:00.000Z",
+    };
+
+    const doc = await generateChecklistPdf(mockChecklist);
+    assert.ok(doc);
+    assert.equal(doc.getNumberOfPages(), 1);
+
+    // Verify clean layout and removal of legacy signature/authorization blocks
+    const pageStream = (doc as any).internal.pages[1].join("\n");
+    assert.ok(pageStream.includes("PRODUCT TECHNICAL & QC"));
+    assert.ok(pageStream.includes("PASSED"));
+    assert.ok(!pageStream.includes("Authorized Signature & Official Seal"));
+    assert.ok(!pageStream.includes("Technician Signature & Stamp"));
+    assert.ok(!pageStream.includes("QUALITY ASSURANCE APPROVAL:"));
+    assert.ok(!pageStream.includes("LK Tronics R&D QA Manager"));
+    assert.ok(pageStream.includes("INSPECTED & TESTED BY:"));
+    assert.ok(pageStream.includes("VERIFICATION DATE:"));
+    // Verify test parameters are printed cleanly in column 2
+    assert.ok(pageStream.includes("Display Status"));
+    assert.ok(pageStream.includes("Output Status"));
+    assert.ok(pageStream.includes("QC Passed Status"));
+  });
+
+  it("generates official Product Handover Letter PDF matching corporate intake template", async () => {
+    const handoverData: ProductHandoverData = {
+      refNo: "QC-BAT-20261117-01",
+      productName: "LK Tronics Lithium Iron Phosphate (LiFePO4) Battery Pack",
+      modelDescription: "LK-BAT-51.2V-100AH",
+      serialNumbers: "BAT202611-00812",
+      quantity: "1 Unit",
+      collectorName: "Eng. Kasun Bandara",
+      collectorDesignation: "Quality Control & Hardware Engineer",
+      handoverDate: "2026-11-17",
+      contactNumber: "+94 76 357 31 31",
+    };
+
+    const doc = await generateHandoverLetterPdf(handoverData);
+    assert.ok(doc);
+    assert.equal(doc.getNumberOfPages(), 1);
+
+    const pageStream = (doc as any).internal.pages[1].join("\n");
+    assert.ok(pageStream.includes("LK TRONICS"));
+    assert.ok(pageStream.includes("Product Handover Letter"));
+    assert.ok(pageStream.includes("We hereby confirm that the following"));
+    assert.ok(pageStream.includes("1. Product Details"));
+    assert.ok(pageStream.includes("2. LK TRONICS Collector"));
+    assert.ok(pageStream.includes("4. Handover Confirmation"));
+    assert.ok(pageStream.includes("Signature of Collector"));
+    assert.ok(pageStream.includes("Date"));
+    assert.ok(pageStream.includes("Reg No -WF19731"));
+    assert.ok(pageStream.includes("+94 76 357 31 31"));
+    assert.ok(pageStream.includes("LK-BAT-51.2V-100AH"));
+    assert.ok(pageStream.includes("BAT202611-00812"));
+    assert.ok(pageStream.includes("Eng. Kasun Bandara"));
+  });
+
+  it("generates blank Product Handover Letter template for manual writing and field intake", async () => {
+    const blankData: ProductHandoverData = {
+      productName: "",
+      modelDescription: "",
+      serialNumbers: "",
+      quantity: "",
+      collectorName: "",
+      collectorDesignation: "",
+      handoverDate: "",
+      contactNumber: "",
+    };
+
+    const doc = await generateHandoverLetterPdf(blankData);
+    assert.ok(doc);
+    assert.equal(doc.getNumberOfPages(), 1);
+
+    const pageStream = (doc as any).internal.pages[1].join("\n");
+    assert.ok(pageStream.includes("Product Handover Letter"));
+    assert.ok(pageStream.includes("1. Product Details"));
+    assert.ok(pageStream.includes("4. Handover Confirmation"));
+    assert.ok(pageStream.includes("Signature of Collector"));
   });
 });

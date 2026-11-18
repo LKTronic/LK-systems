@@ -39,6 +39,16 @@ export async function getNextRdQuotationNo(
         },
         select: { quotationNo: true },
       });
+    } else if (tx?.$queryRawUnsafe) {
+      try {
+        const rows: any = await tx.$queryRawUnsafe(
+          "SELECT quotationNo FROM `RdQuotation` WHERE quotationNo LIKE ?",
+          `${basePattern}%`
+        );
+        existingList = Array.isArray(rows) ? rows : [];
+      } catch {
+        existingList = [];
+      }
     }
 
     if (!existingList || existingList.length === 0) {

@@ -18,7 +18,7 @@ export async function GET(request: NextRequest) {
     const type = (searchParams.get("type") || "THREE_D_PRINT") as any;
 
     const nextNo = await getNextRdQuotationNo(prisma, type);
-    return NextResponse.json({ nextQuotationNo: nextNo });
+    return NextResponse.json({ nextQuotationNo: nextNo, quotationNo: nextNo });
   } catch (error) {
     console.error("Error generating next R&D quotation number:", error);
     return NextResponse.json(

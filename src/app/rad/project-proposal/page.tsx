@@ -9,7 +9,8 @@ export default function ProjectProposalsPage() {
       type="PROJECT_PROPOSAL"
       title="Project Proposals"
       subtitle="Client engineering solutions, hardware bills of materials, and service investments"
-      createLabel="Create Project Proposal"
+      createLabel="New Project Proposal"
+      savedLabel="Saved Proposals"
       createHref="/rad/create?type=PROJECT_PROPOSAL"
       icon={Lightbulb}
       badgeText="PQV Series"

@@ -926,6 +926,62 @@ describe("Quotation Access Control & Permission Boundaries", () => {
     assert.equal(canEditQuotation("SHOP", "DRAFT"), false);
     assert.equal(canDeleteQuotation("SHOP", "DRAFT"), false);
   });
+
+  it("parses slide tokens supporting bold, underline, highlight, and colors ([red], [orange], [teal])", async () => {
+    const { parseSlideTokens } = await import("../src/lib/rdQuotationPdfGenerator");
+
+    const content = "**Warranty Exclusion:** The [red]machine room environment[/red] is ==unsuitable== for [teal]electronic equipment[/teal].";
+    const tokens = parseSlideTokens(content);
+
+    const boldWord = tokens.find((t) => t.word === "Warranty");
+    assert.ok(boldWord, "Should find bold token");
+    assert.strictEqual(boldWord.bold, true);
+
+    const redWord = tokens.find((t) => t.word === "machine");
+    assert.ok(redWord, "Should find red color token");
+    assert.deepStrictEqual(redWord.color, [220, 38, 38]);
+
+    const hlWord = tokens.find((t) => t.word === "unsuitable");
+    assert.ok(hlWord, "Should find highlighted token");
+    assert.strictEqual(hlWord.highlight, true);
+
+    const tealWord = tokens.find((t) => t.word === "electronic");
+    assert.ok(tealWord, "Should find teal color token");
+    assert.deepStrictEqual(tealWord.color, [0, 122, 135]);
+  });
+
+  it("dynamically adjusts design image card size and positions according to image count", async () => {
+    const { getDesignImageLayout } = await import("../src/lib/rdQuotationPdfGenerator");
+
+    // 1 image: hero size
+    const layout1 = getDesignImageLayout(1, 0);
+    assert.strictEqual(layout1.cardW, 380.0);
+    assert.strictEqual(layout1.cardH, 175.0);
+
+    // 2 images: large comparative size (210mm wide)
+    const layout2_0 = getDesignImageLayout(2, 0);
+    const layout2_1 = getDesignImageLayout(2, 1);
+    assert.strictEqual(layout2_0.cardW, 210.0);
+    assert.strictEqual(layout2_0.cardH, 165.0);
+    assert.ok(layout2_1.x > layout2_0.x, "Second image should be positioned horizontally after first");
+
+    // 4 images: single row of 4
+    const layout4 = getDesignImageLayout(4, 0);
+    assert.strictEqual(layout4.cardW, 104.0);
+    assert.strictEqual(layout4.cardH, 125.0);
+
+    // 6 images: 2 rows of 3
+    const layout6_row0 = getDesignImageLayout(6, 0);
+    const layout6_row1 = getDesignImageLayout(6, 3);
+    assert.strictEqual(layout6_row0.cardW, 136.0);
+    assert.strictEqual(layout6_row0.cardH, 84.0);
+    assert.ok(layout6_row1.y > layout6_row0.y, "Fourth image should be in second row");
+
+    // 8 images: 2 compact rows of 4
+    const layout8 = getDesignImageLayout(8, 0);
+    assert.strictEqual(layout8.cardW, 100.0);
+    assert.strictEqual(layout8.cardH, 82.0);
+  });
 });
 
 

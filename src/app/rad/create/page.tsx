@@ -22,6 +22,9 @@ import {
   DEFAULT_PROJECT_PROPOSAL_SERVICES,
   getProjectProposalTerms,
   LK_TRONICS_BANK_DETAILS,
+  calculate3DPrintPrice,
+  MATERIAL_DENSITIES,
+  getMaterialDensity,
 } from "@/lib/rdQuotationDefaults";
 import {
   FlaskConical,
@@ -55,10 +58,17 @@ import {
   ImageIcon,
   Bold,
   Underline,
+  Highlighter,
   List,
   ListOrdered,
   Type,
+  AlertTriangle,
+  Landmark,
+  Calculator,
+  Edit3,
 } from "lucide-react";
+import { BankAccountsModal } from "@/components/rad/BankAccountsModal";
+import { BankAccount } from "@/lib/bankAccounts";
 
 interface ItemRow {
   id: string;
@@ -67,6 +77,11 @@ interface ItemRow {
   quantity: number;
   unitPrice: number;
   notes?: string;
+  calcMode?: "MANUAL" | "AUTO";
+  material?: string;
+  filamentLengthM?: number | string;
+  printTimeMinutes?: number | string;
+  printTimeHours?: number | string;
 }
 
 interface ProductSearchResult {
@@ -86,9 +101,25 @@ function CreateRadQuotationContent() {
   const initialType = (searchParams.get("type") as RdQuotationType) || "PROJECT_PROPOSAL";
   const [quotationType, setQuotationType] = useState<RdQuotationType>(initialType);
 
+  useEffect(() => {
+    const t = searchParams.get("type") as RdQuotationType | null;
+    if (t && (t === "PROJECT_PROPOSAL" || t === "THREE_D_PRINT" || t === "PCB") && t !== quotationType) {
+      setQuotationType(t);
+    }
+  }, [searchParams, quotationType]);
+
+  const getInitialQuotationNo = (type: RdQuotationType) => {
+    const now = new Date();
+    const yyyy = now.getFullYear();
+    const mm = String(now.getMonth() + 1).padStart(2, "0");
+    const dd = String(now.getDate()).padStart(2, "0");
+    const pfx = type === "PROJECT_PROPOSAL" ? "PQV" : type === "PCB" ? "PCB" : "3DQ";
+    return `${yyyy}${mm}${dd}${pfx}1`;
+  };
+
   // Common Header Fields
   const [registrationNo, setRegistrationNo] = useState("P-V 00336036");
-  const [quotationNo, setQuotationNo] = useState("");
+  const [quotationNo, setQuotationNo] = useState<string>(() => getInitialQuotationNo(initialType));
   const [preparedDate, setPreparedDate] = useState("");
   const [expireDate, setExpireDate] = useState("");
   const [validityDays, setValidityDays] = useState<number | string>(4);
@@ -98,18 +129,25 @@ function CreateRadQuotationContent() {
   const [quotationTo, setQuotationTo] = useState("");
 
   // Project Proposal Specific Fields
-  const [projectTitle, setProjectTitle] = useState("PETROL PUMP AUTOMATION SYSTEMS");
-  const [overview, setOverview] = useState(DEFAULT_PROJECT_PROPOSAL_INTRO);
+  const [projectTitle, setProjectTitle] = useState("");
+  const [overview, setOverview] = useState("");
   const [overviewTab, setOverviewTab] = useState<"write" | "preview">("write");
-  const [overviewFontSize, setOverviewFontSize] = useState<string>("16.5");
-  const [termsFontSize, setTermsFontSize] = useState<string>("14.0");
+  const [overviewFontSize, setOverviewFontSize] = useState<string>("24.0");
+  const [termsFontSize, setTermsFontSize] = useState<string>("22.0");
   const [termsTab, setTermsTab] = useState<"write" | "preview">("write");
+  const [commercialNote, setCommercialNote] = useState<string>("");
+  const [commercialNoteTab, setCommercialNoteTab] = useState<"write" | "preview">("write");
   const [leadTime, setLeadTime] = useState("10 Working Days");
   const [warranty, setWarranty] = useState("1 Year");
   const [systemDesignImages, setSystemDesignImages] = useState<string[]>([]);
   const [isUploadingDesignImages, setIsUploadingDesignImages] = useState(false);
-  const [customHardwareTotal, setCustomHardwareTotal] = useState<string>("286440.00");
-  const [customServicesTotal, setCustomServicesTotal] = useState<string>("65160.00");
+  const [customHardwareTotal, setCustomHardwareTotal] = useState<string>("");
+  const [customServicesTotal, setCustomServicesTotal] = useState<string>("");
+
+  // Bank Accounts Management & Selection
+  const [bankAccounts, setBankAccounts] = useState<BankAccount[]>([]);
+  const [selectedBankAccountId, setSelectedBankAccountId] = useState<string>("");
+  const [showBankModal, setShowBankModal] = useState<boolean>(false);
 
   // Technical Specs for 3D Print
   const [printSpecs, setPrintSpecs] = useState({ ...DEFAULT_THREE_D_PRINT_SPECS });
@@ -139,6 +177,98 @@ function CreateRadQuotationContent() {
     }, 15);
   };
 
+  const insertCommercialNoteFormat = (prefix: string, suffix: string = "", defaultText: string = "") => {
+    const el = document.getElementById("slide4-note-textarea") as HTMLTextAreaElement | null;
+    if (!el) {
+      setCommercialNote((prev) => (prev ? prev + "\n" + prefix + defaultText + suffix : prefix + defaultText + suffix));
+      return;
+    }
+    const start = el.selectionStart;
+    const end = el.selectionEnd;
+    const selected = commercialNote.substring(start, end) || defaultText;
+    const updated = commercialNote.substring(0, start) + prefix + selected + suffix + commercialNote.substring(end);
+    setCommercialNote(updated);
+    setTimeout(() => {
+      el.focus();
+      el.setSelectionRange(start + prefix.length, start + prefix.length + selected.length);
+    }, 15);
+  };
+
+  const renderTokensWithFormatting = (raw: string) => {
+    const tokens = raw.split(
+      /(\*\*|<b>|<\/b>|<u>|<\/u>|==|<mark>|<\/mark>|\[\/?(?:red|danger|orange|warning|amber|teal|blue|slate|color(?:=[^\]]+)?)\])/gi
+    );
+    let isBold = false;
+    let isUnderline = false;
+    let isHighlight = false;
+    let activeColorClass = "";
+    const res: React.ReactNode[] = [];
+
+    tokens.forEach((t, i) => {
+      if (!t) return;
+      const lower = t.toLowerCase();
+      if (t === "**" || lower === "<b>" || lower === "</b>") {
+        isBold = t === "**" ? !isBold : lower === "<b>";
+      } else if (lower === "<u>" || lower === "</u>") {
+        isUnderline = lower === "<u>";
+      } else if (t === "==" || lower === "<mark>" || lower === "</mark>") {
+        isHighlight = t === "==" ? !isHighlight : lower === "<mark>";
+      } else if (lower.startsWith("[color=")) {
+        const col = lower.substring(7, lower.length - 1);
+        if (col === "red" || col === "#dc2626") activeColorClass = "text-red-400";
+        else if (col === "orange" || col === "#f28e2b") activeColorClass = "text-orange-400";
+        else if (col === "teal" || col === "#007a87") activeColorClass = "text-teal-400";
+        else if (col === "amber" || col === "#d97706") activeColorClass = "text-amber-400";
+        else if (col === "blue") activeColorClass = "text-blue-400";
+        else activeColorClass = "";
+      } else if (
+        lower.startsWith("[/color]") ||
+        lower === "[/red]" ||
+        lower === "[/danger]" ||
+        lower === "[/orange]" ||
+        lower === "[/warning]" ||
+        lower === "[/amber]" ||
+        lower === "[/teal]" ||
+        lower === "[/blue]" ||
+        lower === "[/slate]"
+      ) {
+        activeColorClass = "";
+      } else if (lower === "[red]" || lower === "[danger]") {
+        activeColorClass = "text-red-400";
+      } else if (lower === "[orange]" || lower === "[warning]") {
+        activeColorClass = "text-orange-400";
+      } else if (lower === "[amber]") {
+        activeColorClass = "text-amber-400";
+      } else if (lower === "[teal]") {
+        activeColorClass = "text-teal-400";
+      } else if (lower === "[blue]") {
+        activeColorClass = "text-blue-400";
+      } else if (lower === "[slate]") {
+        activeColorClass = "text-slate-400";
+      } else {
+        let el: React.ReactNode = t;
+        if (isHighlight) {
+          el = (
+            <mark key={i} className="bg-yellow-300 text-slate-950 px-1 py-0.5 rounded font-medium">
+              {el}
+            </mark>
+          );
+        }
+        res.push(
+          <span
+            key={i}
+            className={`${activeColorClass || (isBold ? "font-bold text-teal-300" : "")} ${
+              isUnderline ? "underline decoration-orange-400 decoration-1 underline-offset-2" : ""
+            }`}
+          >
+            {el}
+          </span>
+        );
+      }
+    });
+    return res;
+  };
+
   const renderOverviewPreview = (text: string) => {
     if (!text || !text.trim()) {
       return <span className="text-slate-500 italic">No introduction or feature text entered yet.</span>;
@@ -159,33 +289,6 @@ function CreateRadQuotationContent() {
             bodyPart = cleanLine.substring(colonIdx + 1);
           }
 
-          const renderLineTokens = (raw: string) => {
-            const tokens = raw.split(/(\*\*|<b>|<\/b>|<u>|<\/u>)/);
-            let isBold = false;
-            let isUnderline = false;
-            const res: React.ReactNode[] = [];
-            tokens.forEach((t, i) => {
-              if (!t) return;
-              if (t === "**" || t === "<b>" || t === "</b>") {
-                isBold = t === "**" ? !isBold : t === "<b>";
-              } else if (t === "<u>" || t === "</u>") {
-                isUnderline = t === "<u>";
-              } else {
-                res.push(
-                  <span
-                    key={i}
-                    className={`${isBold ? "font-bold text-teal-300" : ""} ${
-                      isUnderline ? "underline decoration-orange-400 decoration-1 underline-offset-2" : ""
-                    }`}
-                  >
-                    {t}
-                  </span>
-                );
-              }
-            });
-            return res;
-          };
-
           if (isBullet) {
             return (
               <div key={idx} className="flex items-start gap-2 pl-2">
@@ -193,16 +296,16 @@ function CreateRadQuotationContent() {
                 <div className="flex-1">
                   {titlePart && (
                     <span className="font-bold text-teal-300 mr-1.5">
-                      {renderLineTokens(titlePart)}
+                      {renderTokensWithFormatting(titlePart)}
                     </span>
                   )}
-                  <span className="text-slate-300">{renderLineTokens(bodyPart)}</span>
+                  <span className="text-slate-300">{renderTokensWithFormatting(bodyPart)}</span>
                 </div>
               </div>
             );
           }
 
-          return <p key={idx} className="text-slate-300">{renderLineTokens(cleanLine)}</p>;
+          return <p key={idx} className="text-slate-300">{renderTokensWithFormatting(cleanLine)}</p>;
         })}
       </div>
     );
@@ -315,43 +418,16 @@ function CreateRadQuotationContent() {
         bodyPart = cleanLine.substring(colonIdx + 1);
       }
 
-      const renderTokens = (raw: string) => {
-        const tokens = raw.split(/(\*\*|<b>|<\/b>|<u>|<\/u>)/);
-        let isBold = false;
-        let isUnderline = false;
-        const res: React.ReactNode[] = [];
-        tokens.forEach((t, i) => {
-          if (!t) return;
-          if (t === "**" || t === "<b>" || t === "</b>") {
-            isBold = t === "**" ? !isBold : t === "<b>";
-          } else if (t === "<u>" || t === "</u>") {
-            isUnderline = t === "<u>";
-          } else {
-            res.push(
-              <span
-                key={i}
-                className={`${isBold ? "font-bold text-teal-300" : ""} ${
-                  isUnderline ? "underline decoration-orange-400 decoration-1 underline-offset-2" : ""
-                }`}
-              >
-                {t}
-              </span>
-            );
-          }
-        });
-        return res;
-      };
-
       return (
         <div className="flex items-start gap-2">
           <span className="text-orange-400 font-bold shrink-0">•</span>
           <div className="flex-1">
             {titlePart && (
               <span className="font-bold text-teal-300 mr-1.5">
-                {renderTokens(titlePart)}
+                {renderTokensWithFormatting(titlePart)}
               </span>
             )}
-            <span className="text-slate-300">{renderTokens(bodyPart)}</span>
+            <span className="text-slate-300">{renderTokensWithFormatting(bodyPart)}</span>
           </div>
         </div>
       );
@@ -524,6 +600,7 @@ function CreateRadQuotationContent() {
   ]);
 
   // UI state
+  const [savedQuotationId, setSavedQuotationId] = useState<number | string | null>(null);
   const [isLoadingNumber, setIsLoadingNumber] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
@@ -574,8 +651,9 @@ function CreateRadQuotationContent() {
         const res = await fetch(`/api/rad/next-number?type=${quotationType}`);
         if (res.ok) {
           const data = await res.json();
-          if (data.quotationNo) {
-            setQuotationNo(data.quotationNo);
+          const next = data.quotationNo || data.nextQuotationNo;
+          if (next) {
+            setQuotationNo(next);
           }
         }
       } catch (err) {
@@ -595,6 +673,10 @@ function CreateRadQuotationContent() {
         quantity: 1,
         unitPrice: 0,
         notes: "",
+        calcMode: quotationType === "THREE_D_PRINT" ? (printSpecs.pricingMode || "AUTO") : undefined,
+        filamentLengthM: "",
+        printTimeMinutes: "",
+        printTimeHours: "",
       },
     ];
 
@@ -606,27 +688,27 @@ function CreateRadQuotationContent() {
       setPaymentMethod("ADVANCE_PAYMENT");
       setAdvancePercent(60);
       setValidityDays(4);
-      setProjectTitle("PETROL PUMP AUTOMATION SYSTEMS");
-      setOverview(DEFAULT_PROJECT_PROPOSAL_INTRO);
-      setCustomHardwareTotal("286440.00");
-      setCustomServicesTotal("65160.00");
+      setProjectTitle("");
+      setOverview("");
+      setCustomHardwareTotal("");
+      setCustomServicesTotal("");
       setItems([
-        ...DEFAULT_PROJECT_PROPOSAL_HARDWARE.map((hw, idx) => ({
-          id: `item-hw-${idx + 1}`,
+        {
+          id: "item-hw-1",
           itemType: "HARDWARE" as const,
-          productOrService: hw.productOrService,
-          quantity: hw.quantity,
+          productOrService: "",
+          quantity: 1,
           unitPrice: 0,
           notes: "",
-        })),
-        ...DEFAULT_PROJECT_PROPOSAL_SERVICES.map((srv, idx) => ({
-          id: `item-srv-${idx + 1}`,
+        },
+        {
+          id: "item-srv-1",
           itemType: "SERVICE" as const,
-          productOrService: srv.productOrService,
-          quantity: srv.quantity,
+          productOrService: "",
+          quantity: 1,
           unitPrice: 0,
           notes: "",
-        })),
+        },
       ]);
     } else if (quotationType === "THREE_D_PRINT") {
       setTerms(DEFAULT_THREE_D_PRINT_TERMS.join("\n\n"));
@@ -650,8 +732,9 @@ function CreateRadQuotationContent() {
       const res = await fetch(`/api/rad/next-number?type=${quotationType}`);
       if (res.ok) {
         const data = await res.json();
-        if (data.quotationNo) {
-          setQuotationNo(data.quotationNo);
+        const next = data.quotationNo || data.nextQuotationNo;
+        if (next) {
+          setQuotationNo(next);
         }
       }
     } catch (err) {
@@ -660,6 +743,86 @@ function CreateRadQuotationContent() {
       setIsLoadingNumber(false);
     }
   };
+
+  // Load configured settlement bank accounts from system settings
+  useEffect(() => {
+    const fetchBankAccounts = async () => {
+      try {
+        const res = await fetch("/api/rad/bank-accounts");
+        if (res.ok) {
+          const d = await res.json();
+          const accs: BankAccount[] = d.bankAccounts || [];
+          setBankAccounts(accs);
+          if (!selectedBankAccountId && accs.length > 0) {
+            const def = accs.find((a) => a.isDefault) || accs[0];
+            setSelectedBankAccountId(def.id);
+          }
+        }
+      } catch (err) {
+        console.error("Failed to fetch bank accounts:", err);
+      }
+    };
+    fetchBankAccounts();
+  }, []);
+
+  // Load configured 3D print pricing defaults from system settings
+  useEffect(() => {
+    if (quotationType === "THREE_D_PRINT") {
+      fetch("/api/rad/3d-pricing")
+        .then((res) => (res.ok ? res.json() : null))
+        .then((data) => {
+          if (data?.pricing) {
+            const p = data.pricing;
+            const price = Number(p.filamentPricePerKg) >= 0
+              ? Number(p.filamentPricePerKg)
+              : (Number(p.filamentPricePerSpool) >= 0 ? Number(p.filamentPricePerSpool) : 10000);
+            const hourlyRate = Number(p.costPerHour) >= 0 ? Number(p.costPerHour) : 200;
+            const markup = Number(p.markupPercent) >= 0 ? Number(p.markupPercent) : 35;
+            const density = Number(p.materialDensity) > 0 ? Number(p.materialDensity) : 1.05;
+            const diameter = Number(p.filamentDiameterMm) > 0 ? Number(p.filamentDiameterMm) : 1.75;
+            const mat = p.materialType || "ABS";
+
+            setPrintSpecs((prev) => ({
+              ...prev,
+              material: mat,
+              materialDensity: density,
+              filamentDiameterMm: diameter,
+              filamentPricePerKg: price,
+              filamentPricePerSpool: price,
+              spoolLengthMeters: Number(p.spoolLengthMeters) || 330,
+              costPerHour: hourlyRate,
+              markupPercent: markup,
+            }));
+
+            // Recalculate auto items with new Omni Calculator pricing
+            setItems((prevItems) =>
+              prevItems.map((it) => {
+                const mode = it.calcMode || "AUTO";
+                const mins = it.printTimeMinutes !== undefined && it.printTimeMinutes !== ""
+                  ? it.printTimeMinutes
+                  : (Number(it.printTimeHours) || 0) * 60;
+                if (mode === "AUTO" && (it.filamentLengthM || mins)) {
+                  const c = calculate3DPrintPrice(
+                    it.filamentLengthM || 0,
+                    mins || 0,
+                    price,
+                    hourlyRate,
+                    markup,
+                    density,
+                    diameter
+                  );
+                  return { ...it, unitPrice: c.unitPrice };
+                }
+                return it;
+              })
+            );
+          }
+        })
+        .catch((err) => {
+          console.error("Failed to fetch 3D pricing defaults:", err);
+        });
+    }
+  }, [quotationType]);
 
   // Product Search Effect for Modal
   useEffect(() => {
@@ -722,6 +885,16 @@ function CreateRadQuotationContent() {
 
   // Add Item
   const handleAddItem = (type: "HARDWARE" | "SERVICE" = "HARDWARE") => {
+    if (quotationType === "PROJECT_PROPOSAL") {
+      if (type === "HARDWARE" && hardwareItems.length >= 8) {
+        alert("Maximum 8 Hardware Components (BOM) items allowed for Slide 4 presentation.");
+        return;
+      }
+      if (type === "SERVICE" && serviceItems.length >= 4) {
+        alert("Maximum 4 Engineering Services items allowed for Slide 4 presentation.");
+        return;
+      }
+    }
     setItems((prev) => [
       ...prev,
       {
@@ -731,8 +904,51 @@ function CreateRadQuotationContent() {
         quantity: 1,
         unitPrice: 0,
         notes: "",
+        calcMode: quotationType === "THREE_D_PRINT" ? (printSpecs.pricingMode || "AUTO") : undefined,
+        material: quotationType === "THREE_D_PRINT" ? (printSpecs.material || "ABS") : undefined,
+        filamentLengthM: "",
+        printTimeMinutes: "",
+        printTimeHours: "",
       },
     ]);
+  };
+
+  const updatePrintSpecParam = (
+    key: "spoolLengthMeters" | "filamentPricePerSpool" | "costPerHour" | "markupPercent" | "filamentPricePerKg" | "materialDensity" | "filamentDiameterMm",
+    val: number
+  ) => {
+    const updatedSpecs = { ...printSpecs, [key]: val };
+    setPrintSpecs(updatedSpecs);
+    if (quotationType === "THREE_D_PRINT") {
+      setItems((prev) =>
+        prev.map((it) => {
+          const mode = it.calcMode || updatedSpecs.pricingMode || "AUTO";
+          const mins = it.printTimeMinutes !== undefined && it.printTimeMinutes !== ""
+            ? it.printTimeMinutes
+            : (Number(it.printTimeHours) || 0) * 60;
+          if (mode === "AUTO" && (it.filamentLengthM || mins)) {
+            const price = updatedSpecs.filamentPricePerKg ?? updatedSpecs.filamentPricePerSpool ?? 10000;
+            const itemMat = it.material || updatedSpecs.material || "ABS";
+            const density = updatedSpecs.materialDensity ?? (MATERIAL_DENSITIES[itemMat] || 1.05);
+            const diameter = updatedSpecs.filamentDiameterMm ?? 1.75;
+            const calc = calculate3DPrintPrice(
+              it.filamentLengthM || 0,
+              mins || 0,
+              price,
+              updatedSpecs.costPerHour ?? 200,
+              updatedSpecs.markupPercent ?? 35,
+              density,
+              diameter
+            );
+            return {
+              ...it,
+              unitPrice: calc.unitPrice,
+            };
+          }
+          return it;
+        })
+      );
+    }
   };
 
   // Remove Item
@@ -783,16 +999,36 @@ function CreateRadQuotationContent() {
 
   // Prepare Payload
   const preparePayload = () => {
+    const activeBank =
+      bankAccounts.find((b) => b.id === selectedBankAccountId) ||
+      bankAccounts.find((b) => b.isDefault) ||
+      bankAccounts[0] ||
+      null;
+
     const technicalSpecs =
       quotationType === "THREE_D_PRINT"
-        ? printSpecs
+        ? {
+            ...printSpecs,
+            itemCalcDetails: items.map((it) => ({
+              calcMode: it.calcMode || printSpecs.pricingMode || "AUTO",
+              material: it.material || printSpecs.material || "ABS",
+              filamentLengthM: it.filamentLengthM ?? "",
+              printTimeMinutes: it.printTimeMinutes ?? (it.printTimeHours ? Number(it.printTimeHours) * 60 : ""),
+              printTimeHours: it.printTimeHours ?? "",
+            })),
+            bankDetails: activeBank,
+            bankAccountId: activeBank?.id,
+          }
         : quotationType === "PCB"
-        ? { ...pcbSpecs, images: pcbImages, leadTime: pcbLeadTime || "12 - 21 Days" }
+        ? { ...pcbSpecs, images: pcbImages, leadTime: pcbLeadTime || "12 - 21 Days", bankDetails: activeBank, bankAccountId: activeBank?.id }
         : {
             systemDesignImages,
             advancePercent: Number(advancePercent) || 60,
-            overviewFontSize: Number(overviewFontSize) || 16.5,
-            termsFontSize: Number(termsFontSize) || 14.0,
+            overviewFontSize: Number(overviewFontSize) || 24.0,
+            termsFontSize: Number(termsFontSize) || 22.0,
+            commercialNote: commercialNote.trim() || null,
+            bankDetails: activeBank,
+            bankAccountId: activeBank?.id,
           };
 
     return {
@@ -832,7 +1068,15 @@ function CreateRadQuotationContent() {
         unitPrice: Number(it.unitPrice) || 0,
         totalPrice:
           (Number(it.quantity) || 1) * (Number(it.unitPrice) || 0),
-        notes: it.notes || null,
+        notes:
+          quotationType === "THREE_D_PRINT"
+            ? `3D_CALC:${JSON.stringify({
+                material: it.material || printSpecs.material || "ABS",
+                filamentLengthM: it.filamentLengthM !== undefined && it.filamentLengthM !== "" ? Number(it.filamentLengthM) : "",
+                printTimeMinutes: it.printTimeMinutes !== undefined && it.printTimeMinutes !== "" ? Number(it.printTimeMinutes) : (it.printTimeHours ? Number(it.printTimeHours) * 60 : ""),
+                calcMode: it.calcMode || printSpecs.pricingMode || "AUTO",
+              })}`
+            : (it.notes || null),
       })),
     };
   };
@@ -954,8 +1198,13 @@ function CreateRadQuotationContent() {
 
     try {
       const payload = preparePayload();
-      const res = await fetch("/api/rad/quotations", {
-        method: "POST",
+      const endpoint = savedQuotationId
+        ? `/api/rad/quotations/${savedQuotationId}`
+        : "/api/rad/quotations";
+      const method = savedQuotationId ? "PUT" : "POST";
+
+      const res = await fetch(endpoint, {
+        method,
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
@@ -966,18 +1215,22 @@ function CreateRadQuotationContent() {
       }
 
       const data = await res.json();
+      const newId = data?.quotation?.id || savedQuotationId;
+      if (newId) {
+        setSavedQuotationId(newId);
+        try {
+          window.history.replaceState(null, "", `/rad/${newId}/edit`);
+        } catch {}
+      }
+
       setMessage({
         type: "success",
-        text: `Quotation ${quotationNo} created successfully!`,
+        text: `Quotation ${quotationNo} saved successfully!`,
       });
 
       if (andDownload) {
         await handleDownloadDirect();
       }
-
-      setTimeout(() => {
-        router.push("/rad");
-      }, 1200);
     } catch (err: any) {
       console.error("Save failed:", err);
       setMessage({
@@ -1014,11 +1267,17 @@ function CreateRadQuotationContent() {
         servicesTotal: payload.servicesTotal,
         totalAmount: payload.totalAmount,
         overview: payload.overview,
-        overviewFontSize: Number(overviewFontSize) || 16.5,
-        termsFontSize: Number(termsFontSize) || 14.0,
+        overviewFontSize: Number(overviewFontSize) || 24.0,
+        termsFontSize: Number(termsFontSize) || 22.0,
+        commercialNote: commercialNote.trim() || null,
         technicalSpecs: payload.technicalSpecs,
         systemDesignImages,
         termsAndConditions: payload.termsAndConditions,
+        bankDetails:
+          bankAccounts.find((b) => b.id === selectedBankAccountId) ||
+          bankAccounts.find((b) => b.isDefault) ||
+          bankAccounts[0] ||
+          null,
         items: payload.items.map((it) => ({
           itemIndex: it.itemIndex,
           itemType: it.itemType,
@@ -1057,6 +1316,9 @@ function CreateRadQuotationContent() {
       subtitle: "Hardware BOM, engineering services, milestones & total investment (PQV Series)",
       icon: Lightbulb,
       color: "text-teal-400",
+      activeTabClass: "bg-teal-600 text-white",
+      savedLabel: "Saved Proposals",
+      formLabel: "New Project Proposal",
       backHref: "/rad/project-proposal",
     },
     THREE_D_PRINT: {
@@ -1064,6 +1326,9 @@ function CreateRadQuotationContent() {
       subtitle: "3D printing parameters, materials, layer precision & turnaround (3DQ Series)",
       icon: Printer,
       color: "text-amber-400",
+      activeTabClass: "bg-amber-600 text-white",
+      savedLabel: "Saved Quotations",
+      formLabel: "New 3D Print Quote",
       backHref: "/rad/3d-print",
     },
     PCB: {
@@ -1071,13 +1336,16 @@ function CreateRadQuotationContent() {
       subtitle: "PCB fabrication specifications, copper weight, layers & lead time (PCB Series)",
       icon: Cpu,
       color: "text-emerald-400",
+      activeTabClass: "bg-emerald-600 text-white",
+      savedLabel: "Saved Plans",
+      formLabel: "New PCB Plan",
       backHref: "/rad/pcb",
     },
   }[quotationType];
   const TypeIcon = typeConfig.icon;
 
   return (
-    <div className="space-y-6 max-w-7xl mx-auto pb-20">
+    <div className="space-y-6 w-full pb-20">
         {/* Top Bar */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-slate-900/60 p-4 rounded-xl border border-slate-800">
           <div className="flex items-center gap-3">
@@ -1099,8 +1367,26 @@ function CreateRadQuotationContent() {
             </div>
           </div>
 
-          {/* Action Buttons */}
-          <div className="flex items-center gap-2 flex-wrap">
+          {/* Navigation Pill Tabs & Action Buttons */}
+          <div className="flex items-center gap-2.5 flex-wrap">
+            {/* Pill Tabs matching Inspection / Handover */}
+            <div className="flex items-center gap-1.5 bg-slate-950 p-1 rounded-xl border border-slate-800">
+              <Link
+                href={typeConfig.backHref}
+                className="px-3.5 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 text-slate-400 hover:text-white hover:bg-slate-900 transition-all"
+                title={`View ${typeConfig.savedLabel}`}
+              >
+                <Search className="w-3.5 h-3.5" />
+                <span>{typeConfig.savedLabel}</span>
+              </Link>
+              <div
+                className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 shadow-sm ${typeConfig.activeTabClass}`}
+              >
+                <Edit3 className="w-3.5 h-3.5" />
+                <span>{typeConfig.formLabel}</span>
+              </div>
+            </div>
+
             <button
               onClick={handleDownloadDirect}
               disabled={isGeneratingPdf}
@@ -1153,9 +1439,9 @@ function CreateRadQuotationContent() {
       )}
 
       {/* Main Form Body */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Left 2 Cols: Quotation Details & Items */}
-        <div className="lg:col-span-2 space-y-6">
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+        {/* Left Form Column (2/3 width) */}
+        <div className="lg:col-span-8 space-y-6 min-w-0">
           {/* Section: General Quotation Metadata */}
           <div className="bg-slate-900/80 border border-slate-800 rounded-xl p-5 shadow-sm space-y-4">
             <h2 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2">
@@ -1184,7 +1470,13 @@ function CreateRadQuotationContent() {
                     type="text"
                     value={quotationNo}
                     onChange={(e) => setQuotationNo(e.target.value)}
-                    placeholder="e.g. 20261028PQV3 or click Auto Generate"
+                    placeholder={
+                      quotationType === "PROJECT_PROPOSAL"
+                        ? "e.g. 20261117PQV1"
+                        : quotationType === "PCB"
+                        ? "e.g. 20261117PCB1"
+                        : "e.g. 202611173DQ1"
+                    }
                     className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white font-mono focus:outline-none focus:border-teal-500"
                   />
                   {isLoadingNumber && (
@@ -1254,6 +1546,44 @@ function CreateRadQuotationContent() {
                   onChange={(e) => setExpireDate(e.target.value)}
                   className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-teal-500"
                 />
+              </div>
+
+              {/* Settlement Bank Account Selector */}
+              <div className="sm:col-span-2 lg:col-span-5 bg-slate-950/80 border border-slate-800 rounded-xl p-3.5 space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-semibold text-slate-300 flex items-center gap-1.5">
+                    <Landmark className="w-4 h-4 text-teal-400" />
+                    <span>Settlement Bank Account * (Printed on Document &amp; Bank Details)</span>
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => setShowBankModal(true)}
+                    className="text-xs text-teal-400 hover:text-teal-300 font-medium flex items-center gap-1 transition-colors"
+                  >
+                    <span>+ Manage / Add Bank Account</span>
+                  </button>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3 items-center">
+                  <div className="md:col-span-2">
+                    <select
+                      value={selectedBankAccountId}
+                      onChange={(e) => setSelectedBankAccountId(e.target.value)}
+                      className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-teal-500 cursor-pointer font-medium"
+                    >
+                      {bankAccounts.map((acc) => (
+                        <option key={acc.id} value={acc.id} className="bg-slate-900 text-white">
+                          {acc.bankName} - {acc.accountNumber} ({acc.branch}){acc.isDefault ? " [DEFAULT]" : ""}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  {bankAccounts.find((b) => b.id === selectedBankAccountId) && (
+                    <div className="text-[11px] text-slate-400 bg-slate-900/60 p-2 rounded-lg border border-slate-800/80 leading-snug">
+                      <span className="text-slate-300 font-medium">Beneficiary:</span>{" "}
+                      {bankAccounts.find((b) => b.id === selectedBankAccountId)?.accountName}
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
 
@@ -1347,6 +1677,15 @@ function CreateRadQuotationContent() {
                         </button>
                         <button
                           type="button"
+                          onClick={() => insertOverviewFormat("==", "==", "Highlighted Text")}
+                          title="Highlight (==text==)"
+                          className="px-2 py-1 rounded bg-amber-950/60 hover:bg-amber-900/80 text-amber-300 hover:text-amber-200 border border-amber-700/60 text-xs font-semibold flex items-center gap-1 transition-colors"
+                        >
+                          <Highlighter className="w-3.5 h-3.5" />
+                          <span>Highlight</span>
+                        </button>
+                        <button
+                          type="button"
                           onClick={() => insertOverviewFormat("\n• ", "", "Key Engineering Feature")}
                           title="Bullet Point (• Feature)"
                           className="px-2 py-1 rounded bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-white border border-slate-700/80 text-xs flex items-center gap-1 transition-colors"
@@ -1372,11 +1711,11 @@ function CreateRadQuotationContent() {
                             title="Slide 2 Font Size"
                             className="bg-transparent text-slate-200 text-xs focus:outline-none cursor-pointer"
                           >
-                            <option value="14.0" className="bg-slate-900 text-white">14pt (Compact)</option>
-                            <option value="16.5" className="bg-slate-900 text-white">16.5pt (Standard)</option>
-                            <option value="18.5" className="bg-slate-900 text-white">18.5pt (Medium)</option>
-                            <option value="21.0" className="bg-slate-900 text-white">21pt (Large)</option>
-                            <option value="24.0" className="bg-slate-900 text-white">24pt (X-Large)</option>
+                            <option value="18.0" className="bg-slate-900 text-white">18pt (Compact)</option>
+                            <option value="20.5" className="bg-slate-900 text-white">20.5pt (Standard)</option>
+                            <option value="24.0" className="bg-slate-900 text-white">24pt (Recommended)</option>
+                            <option value="26.0" className="bg-slate-900 text-white">26pt (Large)</option>
+                            <option value="28.0" className="bg-slate-900 text-white">28pt (X-Large)</option>
                           </select>
                         </div>
                         <button
@@ -1402,15 +1741,23 @@ function CreateRadQuotationContent() {
                         value={overview}
                         onChange={(e) => setOverview(e.target.value)}
                         onKeyDown={(e) => handleAutoBulletKeyDown(e, overview, setOverview)}
-                        placeholder="Enter system overview, objectives, and key features for Slide 2... Use toolbar above for Bold (**text**), Underline (<u>text</u>), and Bullet Lists (•). Press Enter to auto-continue bullets."
+                        placeholder="Enter system overview, objectives, and key features for Slide 2... Use toolbar above for Bold (**text**), Highlight (==text==), Underline (<u>text</u>), and Bullet Lists (•). Press Enter to auto-continue bullets."
                         className="w-full bg-slate-950 border border-slate-700 border-t-0 rounded-b-lg px-3 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-teal-500 font-mono leading-relaxed"
                       />
-                      <p className="text-[11px] text-slate-400 flex items-center gap-1.5">
-                        <span className="text-teal-400 font-bold">Tip:</span> Highlight text and click{" "}
-                        <strong className="text-white">Bold</strong> or{" "}
-                        <strong className="text-white">Underline</strong>, or click{" "}
-                        <strong className="text-white">Bullet List</strong> to insert features. Formatted live into Slide 2 of the presentation PDF.
-                      </p>
+                      <div className="flex flex-wrap items-center justify-between text-[11px] text-slate-400 px-1 pt-1">
+                        <span>
+                          <span className="text-teal-400 font-semibold">Slide 2 Boundary:</span> Max ~700 characters | Max 8–10 lines recommended for optimal 16:9 widescreen presentation fit.
+                        </span>
+                        <span
+                          className={`font-mono font-semibold ${
+                            overview.length > 700 || overview.split("\n").filter((l) => l.trim()).length > 10
+                              ? "text-amber-400"
+                              : "text-slate-400"
+                          }`}
+                        >
+                          {overview.length}/700 chars | {overview.split("\n").filter((l) => l.trim()).length}/10 lines
+                        </span>
+                      </div>
                     </div>
                   ) : (
                     <div className="bg-slate-950 border border-slate-700 rounded-lg p-3.5 text-xs text-slate-200 min-h-[140px] space-y-2">
@@ -1647,13 +1994,16 @@ function CreateRadQuotationContent() {
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold text-slate-400 mb-1">
-                    Material
+                  <label className="block text-xs font-semibold text-slate-400 mb-1 flex items-center justify-between">
+                    <span>Material</span>
+                    <span className="text-[11px] text-amber-300 font-mono font-medium">
+                      {printSpecs.materialDensity ?? getMaterialDensity(printSpecs.material)} g/cm³
+                    </span>
                   </label>
                   <div className="space-y-1.5">
                     <select
                       value={
-                        ["PLA", "TPU (Flexible)", "PETG", "ABS", "Standard Resin", "Tough Resin", "Nylon"].includes(
+                        ["PLA", "ABS", "TPU (Flexible)", "PETG", "PETT", "HIPS", "Standard Resin", "Tough Resin", "Nylon"].includes(
                           printSpecs.material
                         )
                           ? printSpecs.material
@@ -1661,32 +2011,67 @@ function CreateRadQuotationContent() {
                       }
                       onChange={(e) => {
                         const val = e.target.value;
-                        if (val === "CUSTOM") {
-                          setPrintSpecs({ ...printSpecs, material: "Custom Material" });
-                        } else {
-                          setPrintSpecs({ ...printSpecs, material: val });
-                        }
+                        const mat = val === "CUSTOM" ? "Custom Material" : val;
+                        const density = getMaterialDensity(mat);
+                        const updated = {
+                          ...printSpecs,
+                          material: mat,
+                          materialDensity: density,
+                        };
+                        setPrintSpecs(updated);
+                        // Automatically recalculate all auto line items with this material & density
+                        setItems((prev) =>
+                          prev.map((it) => {
+                            const mode = it.calcMode || updated.pricingMode || "AUTO";
+                            const mins = it.printTimeMinutes !== undefined && it.printTimeMinutes !== ""
+                              ? Number(it.printTimeMinutes)
+                              : (Number(it.printTimeHours) || 0) * 60;
+                            if (mode === "AUTO" && (it.filamentLengthM || mins)) {
+                              const price = updated.filamentPricePerKg ?? updated.filamentPricePerSpool ?? 10000;
+                              const diameter = updated.filamentDiameterMm ?? 1.75;
+                              const calc = calculate3DPrintPrice(
+                                it.filamentLengthM || 0,
+                                mins || 0,
+                                price,
+                                updated.costPerHour ?? 200,
+                                updated.markupPercent ?? 35,
+                                density,
+                                diameter
+                              );
+                              return {
+                                ...it,
+                                unitPrice: calc.unitPrice,
+                              };
+                            }
+                            return it;
+                          })
+                        );
                       }}
-                      className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-amber-500"
+                      className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-amber-500 font-medium"
                     >
-                      <option value="PLA">PLA</option>
-                      <option value="TPU (Flexible)">TPU (Flexible)</option>
-                      <option value="PETG">PETG</option>
-                      <option value="ABS">ABS</option>
-                      <option value="Standard Resin">Standard Resin</option>
-                      <option value="Tough Resin">Tough Resin</option>
-                      <option value="Nylon">Nylon</option>
+                      <option value="PLA">PLA (Polylactic Acid - 1.27 g/cm³)</option>
+                      <option value="ABS">ABS (Acrylonitrile Butadiene Styrene - 1.05 g/cm³)</option>
+                      <option value="TPU (Flexible)">TPU / Flexible (1.30 g/cm³)</option>
+                      <option value="PETG">PETG (Polyethylene Terephthalate - 1.25 g/cm³)</option>
+                      <option value="PETT">PETT (T-Glase - 1.45 g/cm³)</option>
+                      <option value="HIPS">HIPS (High Impact Polystyrene - 1.04 g/cm³)</option>
+                      <option value="Standard Resin">Standard Resin (1.15 g/cm³)</option>
+                      <option value="Tough Resin">Tough Resin (1.15 g/cm³)</option>
+                      <option value="Nylon">Nylon (1.14 g/cm³)</option>
                       <option value="CUSTOM">Custom / Other Material...</option>
                     </select>
-                    {!["PLA", "TPU (Flexible)", "PETG", "ABS", "Standard Resin", "Tough Resin", "Nylon"].includes(
+                    {!["PLA", "ABS", "TPU (Flexible)", "PETG", "PETT", "HIPS", "Standard Resin", "Tough Resin", "Nylon"].includes(
                       printSpecs.material
                     ) && (
                       <input
                         type="text"
                         value={printSpecs.material}
-                        onChange={(e) =>
-                          setPrintSpecs({ ...printSpecs, material: e.target.value })
-                        }
+                        onChange={(e) => {
+                          const mat = e.target.value;
+                          const density = getMaterialDensity(mat);
+                          const updated = { ...printSpecs, material: mat, materialDensity: density };
+                          setPrintSpecs(updated);
+                        }}
                         placeholder="Enter custom material name (e.g. Carbon Fiber PLA)"
                         className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none focus:border-amber-500"
                       />
@@ -1937,19 +2322,38 @@ function CreateRadQuotationContent() {
                     <h2 className="text-sm font-bold text-teal-400 uppercase tracking-wider flex items-center gap-2">
                       <Package className="w-4 h-4 text-teal-400" />
                       1. Hardware Components (BOM)
+                      <span
+                        className={`text-[11px] font-semibold px-2 py-0.5 rounded border ${
+                          hardwareItems.length >= 8
+                            ? "bg-amber-950/70 text-amber-300 border-amber-700/60"
+                            : "bg-teal-950/70 text-teal-300 border-teal-800/60"
+                        }`}
+                      >
+                        {hardwareItems.length}/8 (Max 8)
+                      </span>
                     </h2>
                     <p className="text-xs text-slate-400">
-                      Physical components and modules. Individual unit rates &amp; row totals are omitted per PPTX design.
+                      Physical components and modules (Max 8 items across 2 columns on Slide 4).
                     </p>
                   </div>
 
                   <button
                     type="button"
+                    disabled={hardwareItems.length >= 8}
                     onClick={() => handleAddItem("HARDWARE")}
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-teal-950/70 border border-teal-800/80 hover:bg-teal-900/60 text-teal-300 rounded-lg text-xs font-semibold transition-colors self-start sm:self-auto"
+                    title={
+                      hardwareItems.length >= 8
+                        ? "Maximum 8 hardware items reached for Slide 4"
+                        : "Add Hardware Component"
+                    }
+                    className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors self-start sm:self-auto ${
+                      hardwareItems.length >= 8
+                        ? "bg-slate-800 text-slate-500 border border-slate-700 cursor-not-allowed opacity-60"
+                        : "bg-teal-950/70 border border-teal-800/80 hover:bg-teal-900/60 text-teal-300"
+                    }`}
                   >
                     <Plus className="w-3.5 h-3.5" />
-                    + Add Hardware
+                    + Add Hardware {hardwareItems.length >= 8 ? "(Limit Reached)" : ""}
                   </button>
                 </div>
 
@@ -2065,19 +2469,38 @@ function CreateRadQuotationContent() {
                     <h2 className="text-sm font-bold text-indigo-400 uppercase tracking-wider flex items-center gap-2">
                       <Wrench className="w-4 h-4 text-indigo-400" />
                       2. Engineering &amp; Professional Services
+                      <span
+                        className={`text-[11px] font-semibold px-2 py-0.5 rounded border ${
+                          serviceItems.length >= 4
+                            ? "bg-amber-950/70 text-amber-300 border-amber-700/60"
+                            : "bg-indigo-950/70 text-indigo-300 border-indigo-800/60"
+                        }`}
+                      >
+                        {serviceItems.length}/4 (Max 4)
+                      </span>
                     </h2>
                     <p className="text-xs text-slate-400">
-                      Engineering charges, installation, programming, testing &amp; calibration services
+                      Engineering charges, installation, programming, testing &amp; calibration services (Max 4 services on Slide 4).
                     </p>
                   </div>
 
                   <button
                     type="button"
+                    disabled={serviceItems.length >= 4}
                     onClick={() => handleAddItem("SERVICE")}
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-indigo-950/70 border border-indigo-800/80 hover:bg-indigo-900/60 text-indigo-300 rounded-lg text-xs font-semibold transition-colors self-start sm:self-auto"
+                    title={
+                      serviceItems.length >= 4
+                        ? "Maximum 4 services reached for Slide 4"
+                        : "Add Engineering Service"
+                    }
+                    className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors self-start sm:self-auto ${
+                      serviceItems.length >= 4
+                        ? "bg-slate-800 text-slate-500 border border-slate-700 cursor-not-allowed opacity-60"
+                        : "bg-indigo-950/70 border border-indigo-800/80 hover:bg-indigo-900/60 text-indigo-300"
+                    }`}
                   >
                     <Plus className="w-3.5 h-3.5" />
-                    + Add Service
+                    + Add Service {serviceItems.length >= 4 ? "(Limit Reached)" : ""}
                   </button>
                 </div>
 
@@ -2108,24 +2531,6 @@ function CreateRadQuotationContent() {
                               }
                               placeholder="Service description (e.g. Testing / Engineering Charges, IoT Installation...)"
                               className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-indigo-500"
-                            />
-                          </div>
-
-                          {/* Quantity / Scope */}
-                          <div className="w-28 shrink-0 flex items-center gap-1.5">
-                            <span className="text-[11px] text-slate-400">Qty:</span>
-                            <input
-                              type="number"
-                              min="1"
-                              value={item.quantity}
-                              onChange={(e) =>
-                                handleItemChange(
-                                  item.id,
-                                  "quantity",
-                                  parseFloat(e.target.value) || 0
-                                )
-                              }
-                              className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-2 text-xs text-indigo-300 font-bold font-mono focus:outline-none focus:border-indigo-500 text-center"
                             />
                           </div>
 
@@ -2173,6 +2578,162 @@ function CreateRadQuotationContent() {
                 </div>
               </div>
 
+              {/* Slide 4: Special Operational Note / Warranty Exclusion (Optional) */}
+              <div className="bg-slate-900/80 border border-slate-800 rounded-xl p-5 shadow-sm space-y-4">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-800 pb-3">
+                  <div>
+                    <h2 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2">
+                      <AlertTriangle className="w-4 h-4 text-amber-400" />
+                      Slide 4: Special Note / Warranty Exclusion (Optional)
+                    </h2>
+                    <p className="text-xs text-slate-400 mt-0.5">
+                      Renders an alert box on Slide 4. Leave blank to omit the box entirely.
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-1 bg-slate-950 p-0.5 rounded-lg border border-slate-800 text-[11px] self-start sm:self-auto">
+                    <button
+                      type="button"
+                      onClick={() => setCommercialNoteTab("write")}
+                      className={`px-2 py-0.5 rounded font-medium transition-colors ${
+                        commercialNoteTab === "write"
+                          ? "bg-amber-600 text-white"
+                          : "text-slate-400 hover:text-slate-200"
+                      }`}
+                    >
+                      Write
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setCommercialNoteTab("preview")}
+                      className={`px-2 py-0.5 rounded font-medium transition-colors ${
+                        commercialNoteTab === "preview"
+                          ? "bg-amber-600 text-white"
+                          : "text-slate-400 hover:text-slate-200"
+                      }`}
+                    >
+                      Formatted Preview
+                    </button>
+                  </div>
+                </div>
+
+                {commercialNoteTab === "write" ? (
+                  <div className="space-y-1.5">
+                    {/* Formatting Toolbar */}
+                    <div className="flex flex-wrap items-center gap-1.5 p-1.5 bg-slate-950/80 border border-slate-800 rounded-t-lg">
+                      <button
+                        type="button"
+                        onClick={() => insertCommercialNoteFormat("**", "**", "Important Note:")}
+                        title="Bold (**text**)"
+                        className="px-2 py-1 rounded bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-white border border-slate-700/80 text-xs font-bold flex items-center gap-1 transition-colors"
+                      >
+                        <Bold className="w-3.5 h-3.5" />
+                        <span>Bold</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => insertCommercialNoteFormat("<u>", "</u>", "Underlined Note")}
+                        title="Underline (<u>text</u>)"
+                        className="px-2 py-1 rounded bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-white border border-slate-700/80 text-xs underline flex items-center gap-1 transition-colors"
+                      >
+                        <Underline className="w-3.5 h-3.5" />
+                        <span>Underline</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => insertCommercialNoteFormat("==", "==", "highlighted note")}
+                        title="Highlight (==text==)"
+                        className="px-2 py-1 rounded bg-yellow-950/70 hover:bg-yellow-900/80 text-yellow-300 border border-yellow-800/80 text-xs font-semibold flex items-center gap-1 transition-colors"
+                      >
+                        <Highlighter className="w-3.5 h-3.5" />
+                        <span>Highlight</span>
+                      </button>
+                      {/* Color buttons */}
+                      <button
+                        type="button"
+                        onClick={() => insertCommercialNoteFormat("[red]", "[/red]", "Warranty Void Condition")}
+                        title="Red Text ([red]text[/red])"
+                        className="px-2 py-1 rounded bg-red-950/60 hover:bg-red-900/80 text-red-300 border border-red-800/80 text-xs font-semibold flex items-center gap-1 transition-colors"
+                      >
+                        <span className="w-2 h-2 rounded-full bg-red-500 inline-block"></span>
+                        <span>Red</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => insertCommercialNoteFormat("[orange]", "[/orange]", "Operating Requirement")}
+                        title="Orange Text ([orange]text[/orange])"
+                        className="px-2 py-1 rounded bg-orange-950/60 hover:bg-orange-900/80 text-orange-300 border border-orange-800/80 text-xs font-semibold flex items-center gap-1 transition-colors"
+                      >
+                        <span className="w-2 h-2 rounded-full bg-orange-500 inline-block"></span>
+                        <span>Orange</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => insertCommercialNoteFormat("[teal]", "[/teal]", "Standard Condition")}
+                        title="Teal Text ([teal]text[/teal])"
+                        className="px-2 py-1 rounded bg-teal-950/60 hover:bg-teal-900/80 text-teal-300 border border-teal-800/80 text-xs font-semibold flex items-center gap-1 transition-colors"
+                      >
+                        <span className="w-2 h-2 rounded-full bg-teal-500 inline-block"></span>
+                        <span>Teal</span>
+                      </button>
+
+                      {/* Template Insert */}
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setCommercialNote(
+                            "**Warranty Exclusion:** The machine room environment is currently unsuitable for electronic equipment. The [red]warranty will remain void[/red] until the environmental conditions are corrected to meet the required operating standards."
+                          )
+                        }
+                        title="Insert standard warranty exclusion note"
+                        className="ml-auto px-2 py-1 rounded bg-amber-950/60 hover:bg-amber-900/80 text-amber-300 border border-amber-800/80 text-xs font-medium flex items-center gap-1 transition-colors"
+                      >
+                        <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+                        <span>Insert Warranty Exclusion Template</span>
+                      </button>
+                    </div>
+
+                    <textarea
+                      id="slide4-note-textarea"
+                      rows={3}
+                      value={commercialNote}
+                      onChange={(e) => setCommercialNote(e.target.value)}
+                      placeholder="e.g. Warranty Exclusion: The machine room environment is currently unsuitable for electronic equipment. The warranty will remain void until the environmental conditions are corrected to meet the required operating standards..."
+                      className="w-full bg-slate-950 border border-slate-700 border-t-0 rounded-b-lg px-3 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-amber-500 font-mono leading-relaxed"
+                    />
+
+                    {/* Limits counter */}
+                    <div className="flex flex-wrap items-center justify-between text-[11px] text-slate-400 px-1 pt-1">
+                      <span>
+                        <span className="text-amber-400 font-semibold">Slide 4 Boundary:</span> Max ~350 characters | Max 4–5 lines recommended for optimal presentation fit.
+                      </span>
+                      <span
+                        className={`font-mono font-semibold ${
+                          commercialNote.length > 350 || commercialNote.split("\n").filter((l) => l.trim()).length > 5
+                            ? "text-amber-400"
+                            : "text-slate-400"
+                        }`}
+                      >
+                        {commercialNote.length}/350 chars | {commercialNote.split("\n").filter((l) => l.trim()).length}/5 lines
+                      </span>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="bg-slate-950 border border-slate-700 rounded-lg p-3.5 text-xs text-slate-200 min-h-[90px] space-y-2">
+                    <div className="text-[11px] font-bold text-amber-400 uppercase tracking-wider mb-2 pb-1.5 border-b border-slate-800 flex items-center gap-1.5">
+                      <AlertTriangle className="w-3.5 h-3.5 text-amber-400" />
+                      Live Slide 4 Note Preview (Warranty Exclusion)
+                    </div>
+                    {commercialNote.trim() ? (
+                      <div className="p-3 bg-amber-950/20 border border-amber-800/40 rounded-lg">
+                        {renderTokensWithFormatting(commercialNote)}
+                      </div>
+                    ) : (
+                      <span className="text-slate-500 italic">No special note entered. The box will be omitted on Slide 4.</span>
+                    )}
+                  </div>
+                )}
+              </div>
+
               {/* Slide 5: Terms & Conditions Box (Below Bill of Materials) */}
               <div className="bg-slate-900/80 border border-slate-800 rounded-xl p-5 shadow-sm space-y-4">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-800 pb-3">
@@ -2181,22 +2742,7 @@ function CreateRadQuotationContent() {
                     Slide 5: Terms &amp; Conditions
                   </h2>
                   <span className="text-xs text-teal-400/90 bg-teal-500/10 px-2.5 py-1 rounded border border-teal-500/20 self-start sm:self-auto font-medium">
-                    7 Standard LK Tronics Terms Auto-Appended
-                  </span>
-                </div>
-
-                <div className="flex items-center gap-2">
-                  <span className="text-xs font-semibold text-slate-300 shrink-0">Validity Period:</span>
-                  <input
-                    type="number"
-                    min="1"
-                    max="90"
-                    value={validityDays}
-                    onChange={(e) => setValidityDays(e.target.value)}
-                    className="w-20 bg-slate-950 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-white font-mono font-semibold focus:outline-none focus:border-teal-500"
-                  />
-                  <span className="text-xs text-slate-400">
-                    Days (Term 1: valid for {validityDays || 4} days from date of issue)
+                    6 Standard LK Tronics Terms Auto-Appended
                   </span>
                 </div>
 
@@ -2255,6 +2801,15 @@ function CreateRadQuotationContent() {
                         </button>
                         <button
                           type="button"
+                          onClick={() => insertTermsFormat("==", "==", "Highlighted Term")}
+                          title="Highlight (==text==)"
+                          className="px-2 py-1 rounded bg-amber-950/60 hover:bg-amber-900/80 text-amber-300 hover:text-amber-200 border border-amber-700/60 text-xs font-semibold flex items-center gap-1 transition-colors"
+                        >
+                          <Highlighter className="w-3.5 h-3.5" />
+                          <span>Highlight</span>
+                        </button>
+                        <button
+                          type="button"
                           onClick={() => insertTermsFormat("\n• ", "", "Client Requirement Term")}
                           title="Bullet Point (• Term)"
                           className="px-2 py-1 rounded bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-white border border-slate-700/80 text-xs flex items-center gap-1 transition-colors"
@@ -2271,11 +2826,11 @@ function CreateRadQuotationContent() {
                             title="Terms Slide Font Size"
                             className="bg-transparent text-slate-200 text-xs focus:outline-none cursor-pointer"
                           >
-                            <option value="12.0" className="bg-slate-900 text-white">12pt (Small)</option>
-                            <option value="13.0" className="bg-slate-900 text-white">13pt (Compact)</option>
-                            <option value="14.0" className="bg-slate-900 text-white">14pt (Standard)</option>
-                            <option value="15.5" className="bg-slate-900 text-white">15.5pt (Medium)</option>
-                            <option value="17.0" className="bg-slate-900 text-white">17pt (Large)</option>
+                            <option value="17.0" className="bg-slate-900 text-white">17pt (Compact)</option>
+                            <option value="19.5" className="bg-slate-900 text-white">19.5pt (Standard)</option>
+                            <option value="22.0" className="bg-slate-900 text-white">22pt (Recommended)</option>
+                            <option value="24.0" className="bg-slate-900 text-white">24pt (Large)</option>
+                            <option value="26.0" className="bg-slate-900 text-white">26pt (X-Large)</option>
                           </select>
                         </div>
                         <button
@@ -2301,11 +2856,25 @@ function CreateRadQuotationContent() {
                         value={terms}
                         onChange={(e) => setTerms(e.target.value)}
                         onKeyDown={(e) => handleAutoBulletKeyDown(e, terms, setTerms)}
-                        placeholder="Enter optional extra terms here (1 per line). Use toolbar above for Bold (**text**), Underline (<u>text</u>), and Bullet Lists (•). Press Enter to auto-continue bullets."
+                        placeholder="Enter optional extra terms here (1 per line). Use toolbar above for Bold (**text**), Highlight (==text==), Underline (<u>text</u>), and Bullet Lists (•). Press Enter to auto-continue bullets."
                         className="w-full bg-slate-950 border border-slate-700 border-t-0 rounded-b-lg px-3 py-2.5 text-xs text-slate-200 font-mono focus:outline-none focus:border-teal-500 leading-relaxed"
                       />
+                      <div className="flex flex-wrap items-center justify-between text-[11px] text-slate-400 px-1 pt-1">
+                        <span>
+                          <span className="text-teal-400 font-semibold">Slide 5/6 Boundary:</span> Max ~1,200 characters | Max 8–10 clauses recommended (auto-continues to Slide 6 if exceeded).
+                        </span>
+                        <span
+                          className={`font-mono font-semibold ${
+                            terms.length > 1200
+                              ? "text-amber-400"
+                              : "text-slate-400"
+                          }`}
+                        >
+                          {terms.length}/1200 chars | {terms.split("\n").filter((l) => l.trim()).length} clauses
+                        </span>
+                      </div>
                       <p className="text-[11px] text-slate-400 mt-1">
-                        Standard LK Tronics engineering terms (Quotation Validity, Supervision, Hardware Warranty, Source Code, Delivery, Scope, and Environmental Conditions) are permanently included at the bottom of the proposal. Any custom terms entered above will be placed on top.
+                        Standard LK Tronics engineering terms (Supervision, Warranty, Source Code, Delivery, Scope, and Environmental Conditions) are permanently included at the bottom of the proposal. Any custom terms entered above will be placed on top.
                       </p>
                     </div>
                   ) : (
@@ -2330,129 +2899,454 @@ function CreateRadQuotationContent() {
                     Quotation Line Items
                   </h2>
                   <p className="text-xs text-slate-400">
-                    Add quoted items with quantity and unit rates
+                    {quotationType === "THREE_D_PRINT"
+                      ? "Add printed parts with auto-costing from length & time or manual rates"
+                      : "Add quoted items with quantity and unit rates"}
                   </p>
                 </div>
 
-                <button
-                  type="button"
-                  onClick={() => handleAddItem("HARDWARE")}
-                  className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-teal-600 hover:bg-teal-500 text-white rounded-lg text-xs font-semibold transition-colors"
-                >
-                  <Plus className="w-3.5 h-3.5" />
-                  Add Line Item
-                </button>
+                <div className="flex flex-wrap items-center gap-2">
+                  {quotationType === "THREE_D_PRINT" && (
+                    <div className="flex items-center gap-1 bg-slate-950 p-1 rounded-lg border border-slate-800 text-xs">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const newMode = "AUTO";
+                          setPrintSpecs((prev) => ({ ...prev, pricingMode: newMode }));
+                          setItems((prev) =>
+                            prev.map((it) => {
+                              const calc = calculate3DPrintPrice(
+                                it.filamentLengthM || 0,
+                                it.printTimeHours || 0,
+                                printSpecs.spoolLengthMeters ?? 330,
+                                printSpecs.filamentPricePerSpool ?? 6500,
+                                printSpecs.costPerHour ?? 200,
+                                printSpecs.markupPercent ?? 25
+                              );
+                              return {
+                                ...it,
+                                calcMode: newMode,
+                                unitPrice:
+                                  it.filamentLengthM || it.printTimeHours
+                                    ? calc.unitPrice
+                                    : it.unitPrice,
+                              };
+                            })
+                          );
+                        }}
+                        className={`px-3 py-1.5 rounded-md font-semibold transition-all flex items-center gap-1.5 ${
+                          (printSpecs.pricingMode || "AUTO") === "AUTO"
+                            ? "bg-amber-500 text-slate-950 shadow-sm"
+                            : "text-slate-400 hover:text-white"
+                        }`}
+                        title="Auto-calculate Unit Rate from filament length & printing time"
+                      >
+                        <Sparkles className="w-3.5 h-3.5" />
+                        Auto-Calculate (Length &amp; Time)
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const newMode = "MANUAL";
+                          setPrintSpecs((prev) => ({ ...prev, pricingMode: newMode }));
+                          setItems((prev) =>
+                            prev.map((it) => ({
+                              ...it,
+                              calcMode: newMode,
+                            }))
+                          );
+                        }}
+                        className={`px-3 py-1.5 rounded-md font-semibold transition-all flex items-center gap-1.5 ${
+                          (printSpecs.pricingMode || "AUTO") === "MANUAL"
+                            ? "bg-amber-500 text-slate-950 shadow-sm"
+                            : "text-slate-400 hover:text-white"
+                        }`}
+                        title="Manually type Unit Rate (LKR)"
+                      >
+                        Manual Unit Rate (LKR)
+                      </button>
+                    </div>
+                  )}
+
+                  <button
+                    type="button"
+                    onClick={() => handleAddItem("HARDWARE")}
+                    className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-teal-600 hover:bg-teal-500 text-white rounded-lg text-xs font-semibold transition-colors"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    Add Line Item
+                  </button>
+                </div>
               </div>
 
-              {/* Standard Line Items Table */}
+              {/* Line Items List */}
               <div className="space-y-3">
-                {items.map((item, idx) => (
-                  <div
-                    key={item.id}
-                    className="p-3.5 rounded-xl border bg-slate-950/60 border-slate-800 space-y-3"
-                  >
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="w-5 h-5 rounded-full bg-slate-800 text-slate-300 text-[11px] font-bold flex items-center justify-center">
-                        {idx + 1}
-                      </span>
-                      <div className="flex items-center gap-1.5">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setTargetItemIndex(idx);
-                            setIsProductModalOpen(true);
-                          }}
-                          className="px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs flex items-center gap-1 transition-colors"
-                          title="Import from PMS inventory"
-                        >
-                          <Search className="w-3 h-3 text-teal-400" />
-                          <span>PMS Item</span>
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => handleRemoveItem(item.id)}
-                          className="p-1 rounded text-slate-500 hover:text-red-400 hover:bg-slate-800 transition-colors"
-                          title="Delete item"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </div>
-                    </div>
+                {items.map((item, idx) => {
+                  const is3D = quotationType === "THREE_D_PRINT";
+                  const itemMode = is3D
+                    ? item.calcMode || printSpecs.pricingMode || "AUTO"
+                    : "MANUAL";
+                  const isAuto = is3D && itemMode === "AUTO";
 
-                    <div className="grid grid-cols-1 md:grid-cols-12 gap-3">
-                      <div className="md:col-span-6">
-                        <label className="block text-[11px] font-medium text-slate-400 mb-1">
-                          Product / Item Description
-                        </label>
-                        <input
-                          type="text"
-                          value={item.productOrService}
-                          onChange={(e) =>
-                            handleItemChange(item.id, "productOrService", e.target.value)
-                          }
-                          className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none focus:border-teal-500"
-                        />
-                      </div>
+                  const calc = isAuto
+                    ? calculate3DPrintPrice(
+                        item.filamentLengthM || 0,
+                        item.printTimeHours || 0,
+                        printSpecs.spoolLengthMeters ?? 330,
+                        printSpecs.filamentPricePerSpool ?? 6500,
+                        printSpecs.costPerHour ?? 200,
+                        printSpecs.markupPercent ?? 25
+                      )
+                    : null;
 
-                      <div className="md:col-span-2">
-                        <label className="block text-[11px] font-medium text-slate-400 mb-1">
-                          Quantity
-                        </label>
-                        <input
-                          type="number"
-                          min="1"
-                          value={item.quantity}
-                          onChange={(e) =>
-                            handleItemChange(
-                              item.id,
-                              "quantity",
-                              parseFloat(e.target.value) || 0
-                            )
-                          }
-                          className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none focus:border-teal-500 font-mono"
-                        />
-                      </div>
-
-                      <div className="md:col-span-2">
-                        <label className="block text-[11px] font-medium text-slate-400 mb-1">
-                          Unit Rate (LKR)
-                        </label>
-                        <input
-                          type="number"
-                          min="0"
-                          value={item.unitPrice}
-                          onChange={(e) =>
-                            handleItemChange(
-                              item.id,
-                              "unitPrice",
-                              parseFloat(e.target.value) || 0
-                            )
-                          }
-                          className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none focus:border-teal-500 font-mono"
-                        />
-                      </div>
-
-                      <div className="md:col-span-2">
-                        <label className="block text-[11px] font-medium text-slate-400 mb-1">
-                          Total (LKR)
-                        </label>
-                        <div className="w-full bg-slate-900/50 border border-slate-800 rounded-lg px-3 py-1.5 text-xs text-emerald-400 font-mono font-semibold text-right">
-                          {formatLKR(
-                            (Number(item.quantity) || 0) *
-                              (Number(item.unitPrice) || 0)
+                  return (
+                    <div
+                      key={item.id}
+                      className="p-3.5 rounded-xl border bg-slate-950/60 border-slate-800 space-y-3"
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-2">
+                          <span className="w-5 h-5 rounded-full bg-slate-800 text-slate-300 text-[11px] font-bold flex items-center justify-center">
+                            {idx + 1}
+                          </span>
+                          {is3D && (
+                            <div className="flex items-center gap-1 bg-slate-900 px-2 py-0.5 rounded border border-slate-800 text-[11px]">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const newMode = "AUTO";
+                                  handleItemChange(item.id, "calcMode", newMode);
+                                  if (item.filamentLengthM || item.printTimeHours) {
+                                    const c = calculate3DPrintPrice(
+                                      item.filamentLengthM || 0,
+                                      item.printTimeHours || 0,
+                                      printSpecs.spoolLengthMeters ?? 330,
+                                      printSpecs.filamentPricePerSpool ?? 6500,
+                                      printSpecs.costPerHour ?? 200,
+                                      printSpecs.markupPercent ?? 25
+                                    );
+                                    handleItemChange(item.id, "unitPrice", c.unitPrice);
+                                  }
+                                }}
+                                className={`px-1.5 py-0.5 rounded text-[10px] font-medium transition-colors ${
+                                  isAuto
+                                    ? "bg-amber-500/20 text-amber-300 font-bold"
+                                    : "text-slate-400 hover:text-slate-200"
+                                }`}
+                              >
+                                Auto (L&amp;T)
+                              </button>
+                              <span className="text-slate-600">|</span>
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  handleItemChange(item.id, "calcMode", "MANUAL")
+                                }
+                                className={`px-1.5 py-0.5 rounded text-[10px] font-medium transition-colors ${
+                                  !isAuto
+                                    ? "bg-amber-500/20 text-amber-300 font-bold"
+                                    : "text-slate-400 hover:text-slate-200"
+                                }`}
+                              >
+                                Manual Rate
+                              </button>
+                            </div>
                           )}
                         </div>
+
+                        <div className="flex items-center gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setTargetItemIndex(idx);
+                              setIsProductModalOpen(true);
+                            }}
+                            className="px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs flex items-center gap-1 transition-colors"
+                            title="Import from PMS inventory"
+                          >
+                            <Search className="w-3 h-3 text-teal-400" />
+                            <span>PMS Item</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveItem(item.id)}
+                            className="p-1 rounded text-slate-500 hover:text-red-400 hover:bg-slate-800 transition-colors"
+                            title="Delete item"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
                       </div>
+
+                      {isAuto ? (
+                        /* Auto-Calculated 3D Print Layout (2 Clean Lines) */
+                        <div className="space-y-3">
+                          {/* Line 1: Description, Filament Length, Print Time (min), Unit Rate */}
+                          <div className="grid grid-cols-1 md:grid-cols-12 gap-3">
+                            <div className="md:col-span-5">
+                              <label className="block text-[11px] font-medium text-slate-400 mb-1">
+                                Product / Item Description
+                              </label>
+                              <input
+                                type="text"
+                                value={item.productOrService}
+                                onChange={(e) =>
+                                  handleItemChange(
+                                    item.id,
+                                    "productOrService",
+                                    e.target.value
+                                  )
+                                }
+                                placeholder="e.g. Enclosure Top Lid"
+                                className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none focus:border-amber-500"
+                              />
+                            </div>
+
+                            <div className="md:col-span-2">
+                              <label className="block text-[11px] font-medium text-amber-300 mb-1 flex items-center justify-between">
+                                <span>Filament Length</span>
+                                <span className="text-[10px] text-slate-400">meters (m)</span>
+                              </label>
+                              <input
+                                type="number"
+                                min="0"
+                                step="0.1"
+                                value={item.filamentLengthM ?? ""}
+                                onChange={(e) => {
+                                  const val =
+                                    e.target.value === ""
+                                      ? ""
+                                      : parseFloat(e.target.value) || 0;
+                                  const currentMins = item.printTimeMinutes !== undefined && item.printTimeMinutes !== ""
+                                    ? item.printTimeMinutes
+                                    : (Number(item.printTimeHours) || 0) * 60;
+                                  const price = printSpecs.filamentPricePerKg ?? printSpecs.filamentPricePerSpool ?? 10000;
+                                  const density = printSpecs.materialDensity ?? getMaterialDensity(printSpecs.material);
+                                  const diameter = printSpecs.filamentDiameterMm ?? 1.75;
+                                  const c = calculate3DPrintPrice(
+                                    val || 0,
+                                    currentMins || 0,
+                                    price,
+                                    printSpecs.costPerHour ?? 200,
+                                    printSpecs.markupPercent ?? 35,
+                                    density,
+                                    diameter
+                                  );
+                                  setItems((prev) =>
+                                    prev.map((i) =>
+                                      i.id === item.id
+                                        ? {
+                                            ...i,
+                                            filamentLengthM: val,
+                                            unitPrice: c.unitPrice,
+                                          }
+                                        : i
+                                    )
+                                  );
+                                }}
+                                placeholder="e.g. 9.2"
+                                className="w-full bg-slate-900 border border-amber-500/50 rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none focus:border-amber-500 font-mono"
+                              />
+                            </div>
+
+                            <div className="md:col-span-2">
+                              <label className="block text-[11px] font-medium text-amber-300 mb-1 flex items-center justify-between">
+                                <span>Print Time</span>
+                                <span className="text-[10px] text-slate-400">minutes (min)</span>
+                              </label>
+                              <input
+                                type="number"
+                                min="0"
+                                step="1"
+                                value={item.printTimeMinutes ?? (item.printTimeHours ? Number(item.printTimeHours) * 60 : "")}
+                                onChange={(e) => {
+                                  const val =
+                                    e.target.value === ""
+                                      ? ""
+                                      : parseFloat(e.target.value) || 0;
+                                  const price = printSpecs.filamentPricePerKg ?? printSpecs.filamentPricePerSpool ?? 10000;
+                                  const density = printSpecs.materialDensity ?? getMaterialDensity(printSpecs.material);
+                                  const diameter = printSpecs.filamentDiameterMm ?? 1.75;
+                                  const c = calculate3DPrintPrice(
+                                    item.filamentLengthM || 0,
+                                    val || 0,
+                                    price,
+                                    printSpecs.costPerHour ?? 200,
+                                    printSpecs.markupPercent ?? 35,
+                                    density,
+                                    diameter
+                                  );
+                                  setItems((prev) =>
+                                    prev.map((i) =>
+                                      i.id === item.id
+                                        ? {
+                                            ...i,
+                                            printTimeMinutes: val,
+                                            printTimeHours: typeof val === "number" ? Math.round((val / 60) * 100) / 100 : "",
+                                            unitPrice: c.unitPrice,
+                                          }
+                                        : i
+                                    )
+                                  );
+                                }}
+                                placeholder="e.g. 60"
+                                className="w-full bg-slate-900 border border-amber-500/50 rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none focus:border-amber-500 font-mono"
+                              />
+                            </div>
+
+                            <div className="md:col-span-3">
+                              <label className="block text-[11px] font-medium text-slate-400 mb-1 flex items-center justify-between">
+                                <span>Unit Rate (LKR)</span>
+                                <span className="text-[10px] text-amber-400/90 font-mono">Rounded to 10</span>
+                              </label>
+                              <div
+                                className="w-full bg-slate-900/90 border border-amber-500/40 rounded-lg px-3 py-1.5 text-xs text-amber-300 font-mono font-bold text-right flex items-center justify-between"
+                                title={`Rs. ${(Number(item.unitPrice) || 0).toLocaleString()} (Rounded up to 10)`}
+                              >
+                                <span className="text-[10px] text-slate-400 font-medium font-sans truncate max-w-[90px]">
+                                  {printSpecs.material || "ABS"}
+                                </span>
+                                <span>
+                                  {(Number(item.unitPrice) || 0).toLocaleString(
+                                    undefined,
+                                    {
+                                      minimumFractionDigits: 2,
+                                      maximumFractionDigits: 2,
+                                    }
+                                  )}
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Line 2: Qty, Total (LKR), Summary */}
+                          <div className="grid grid-cols-1 md:grid-cols-12 gap-3 pt-2 border-t border-slate-800/80 items-center">
+                            <div className="md:col-span-3">
+                              <label className="block text-[11px] font-medium text-slate-400 mb-1">
+                                Qty
+                              </label>
+                              <input
+                                type="number"
+                                min="1"
+                                value={item.quantity}
+                                onChange={(e) =>
+                                  handleItemChange(
+                                    item.id,
+                                    "quantity",
+                                    parseFloat(e.target.value) || 0
+                                  )
+                                }
+                                className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none focus:border-amber-500 font-mono text-center"
+                              />
+                            </div>
+
+                            <div className="md:col-span-4">
+                              <label className="block text-[11px] font-medium text-slate-400 mb-1">
+                                Total (LKR)
+                              </label>
+                              <div className="w-full bg-slate-900/70 border border-emerald-500/40 rounded-lg px-3 py-1.5 text-xs text-emerald-400 font-mono font-bold text-right">
+                                {formatLKR(
+                                  (Number(item.quantity) || 0) *
+                                    (Number(item.unitPrice) || 0)
+                                )}
+                              </div>
+                            </div>
+
+                            <div className="md:col-span-5 text-[11px] text-slate-400 flex items-center justify-end pr-1 pt-3.5">
+                              <span>
+                                Item Total:{" "}
+                                <strong className="text-white font-mono">
+                                  {formatLKR(
+                                    (Number(item.quantity) || 0) *
+                                      (Number(item.unitPrice) || 0)
+                                  )}
+                                </strong>
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                      ) : (
+                        /* Manual Unit Rate Layout (Standard or PCB) */
+                        <div className="grid grid-cols-1 md:grid-cols-12 gap-3">
+                          <div className="md:col-span-6">
+                            <label className="block text-[11px] font-medium text-slate-400 mb-1">
+                              Product / Item Description
+                            </label>
+                            <input
+                              type="text"
+                              value={item.productOrService}
+                              onChange={(e) =>
+                                handleItemChange(
+                                  item.id,
+                                  "productOrService",
+                                  e.target.value
+                                )
+                              }
+                              className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none focus:border-teal-500"
+                            />
+                          </div>
+
+                          <div className="md:col-span-2">
+                            <label className="block text-[11px] font-medium text-slate-400 mb-1">
+                              Quantity
+                            </label>
+                            <input
+                              type="number"
+                              min="1"
+                              value={item.quantity}
+                              onChange={(e) =>
+                                handleItemChange(
+                                  item.id,
+                                  "quantity",
+                                  parseFloat(e.target.value) || 0
+                                )
+                              }
+                              className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none focus:border-teal-500 font-mono"
+                            />
+                          </div>
+
+                          <div className="md:col-span-2">
+                            <label className="block text-[11px] font-medium text-slate-400 mb-1">
+                              Unit Rate (LKR)
+                            </label>
+                            <input
+                              type="number"
+                              min="0"
+                              value={item.unitPrice}
+                              onChange={(e) =>
+                                handleItemChange(
+                                  item.id,
+                                  "unitPrice",
+                                  parseFloat(e.target.value) || 0
+                                )
+                              }
+                              className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none focus:border-teal-500 font-mono"
+                            />
+                          </div>
+
+                          <div className="md:col-span-2">
+                            <label className="block text-[11px] font-medium text-slate-400 mb-1">
+                              Total (LKR)
+                            </label>
+                            <div className="w-full bg-slate-900/50 border border-slate-800 rounded-lg px-3 py-1.5 text-xs text-emerald-400 font-mono font-semibold text-right">
+                              {formatLKR(
+                                (Number(item.quantity) || 0) *
+                                  (Number(item.unitPrice) || 0)
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      )}
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
           )}
         </div>
 
-        {/* Right 1 Col: Pinned Sticky Sidebar (No Inner Scroll, Immediate Access to Save & Summary) */}
-        <div className="self-start lg:sticky lg:top-6">
+        {/* Right Column: Pinned Sticky Investment Summary (Locked with scroll, never scrolls off) */}
+        <div className="lg:col-span-4 self-start lg:sticky lg:top-20 z-10 max-h-[calc(100vh-5.5rem)] overflow-y-auto pr-1">
           <div className="space-y-4">
             {/* Investment Summary Card */}
             <div className="bg-slate-900/90 border border-slate-800 rounded-xl p-5 shadow-sm space-y-4">
@@ -2712,6 +3606,19 @@ function CreateRadQuotationContent() {
           </div>
         </div>
       )}
+
+      {/* Bank Accounts Management Modal */}
+      <BankAccountsModal
+        isOpen={showBankModal}
+        onClose={() => setShowBankModal(false)}
+        onUpdated={(updated) => {
+          setBankAccounts(updated);
+          if (!updated.some((a) => a.id === selectedBankAccountId)) {
+            const def = updated.find((a) => a.isDefault) || updated[0];
+            if (def) setSelectedBankAccountId(def.id);
+          }
+        }}
+      />
     </div>
   );
 }
