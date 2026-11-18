@@ -394,17 +394,11 @@ def make_slide8():
     draw_slide_header(draw, "TECHNOLOGY & BRAND PARTNERS", "GLOBAL OEM ECOSYSTEM & AUTHORIZED CHANNELS")
     draw_slide_footer(img, draw, page_num=8)
 
-    # Main Content Container Frame
-    draw_chamfered_card(draw, 140, 160, W - 140, H - 170, chamfer=24, fill=CARD_BG, stroke=LK_TEAL, width=3)
-
-    # Paste the 24 genuine brand partner logos (clean LK Teal brackets)
-    pw, ph = partner_crop.size
-    target_ph = 960
-    target_pw = int(pw * (target_ph / ph))
-    resized_partners = partner_crop.resize((target_pw, target_ph), Image.Resampling.LANCZOS)
-    px = (W - target_pw) // 2
-    py = 200
-    img.paste(resized_partners, (px, py), resized_partners)
+    # Main Content Container: Partner logos card fits container directly, eliminating double box & dead whitespace
+    target_w = W - 280  # 2280 px (from 140 to 2420, matching all slide container cards)
+    target_h = H - 330  # 1110 px (from 160 to 1270, matching all slide container cards)
+    resized_partners = partner_crop.resize((target_w, target_h), Image.Resampling.LANCZOS)
+    img.paste(resized_partners, (140, 160), resized_partners)
 
     out_path = os.path.join(OUT_DIR, "brand_slide8_partners.png")
     img.save(out_path, "PNG")

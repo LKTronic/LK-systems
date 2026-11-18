@@ -715,13 +715,15 @@ function CreateRadQuotationContent() {
       setLeadTime(printSpecs.leadTime || "2 - 4 Working Days");
       setWarranty("");
       setPaymentMethod("FULL_PAYMENT");
+      setValidityDays(14);
       setItems(emptyRow);
     } else if (quotationType === "PCB") {
-      setTerms("");
+      setTerms(DEFAULT_PCB_TERMS.join("\n\n"));
       setLeadTime("12 - 21 Days");
       setPcbLeadTime("12 - 21 Days");
       setWarranty("");
       setPaymentMethod("FULL_PAYMENT");
+      setValidityDays(5);
       setItems(emptyRow);
     }
   }, [quotationType]);

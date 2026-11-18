@@ -109,7 +109,7 @@ export const DEFAULT_PCB_SPECS: PcbSpecs = {
 };
 
 export const DEFAULT_THREE_D_PRINT_TERMS = [
-  "Validity of Quotation: This quotation is valid for a period of fourteen (14) days from the date of issue. Upon expiry of this period, the prices, availability, and terms specified herein shall be subject to change.",
+  "Validity of Quotation: This quotation is valid for a period of fourteen (14) days from the date of issue. Upon expiry of this period, the prices, availability, and terms specified herein shall be subject to change and may be adjusted based on market conditions, supplier revisions, or other applicable factors.",
   "Printing Job Scheduling & Availability: All 3D printing jobs are scheduled subject to the availability of printers at the LK TRONICS R&D facility. Customers are requested to confirm machine availability with the relevant officer in the LK TRONICS R&D Department prior to order placement.",
   "Design Responsibility & Warranty: Printing will be performed strictly according to the STL file provided by the customer. LK TRONICS shall not be liable for any design inaccuracies or dimensional errors arising from customer-supplied files. No warranty is applicable to 3D-printed parts, as they are custom-produced based on client specifications.",
   "Delivery Terms: If delivery charges are not specified in the quotation table, the client shall be responsible for either collecting the goods from our store or bearing the applicable delivery cost if delivery is required. LK TRONICS will not be held liable for any damages that may occur during transportation or delivery.",
@@ -127,22 +127,53 @@ export const DEFAULT_PCB_TERMS = [
 export const DEFAULT_PROJECT_PROPOSAL_INTRO =
   "Develop an IoT-based system to collect operational data from petrol pumps and transmit it securely to a cloud platform for real-time monitoring, data logging, and analysis. The system will enable remote access to pump operating parameters, fuel dispensing data, and equipment status, subject to the availability of compatible communication interfaces. This solution will improve operational visibility, support performance monitoring, and facilitate efficient data management.";
 
+const VALIDITY_ONES = [
+  "zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine",
+  "ten", "eleven", "twelve", "thirteen", "fourteen", "fifteen", "sixteen",
+  "seventeen", "eighteen", "nineteen",
+];
+const VALIDITY_TENS = [
+  "", "", "twenty", "thirty", "forty", "fifty", "sixty", "seventy", "eighty", "ninety",
+];
+
+export function numberToWordsValidity(num: number): string {
+  const n = Math.abs(Math.round(num));
+  if (n < 20) return VALIDITY_ONES[n] || String(n);
+  if (n < 100) {
+    const tens = VALIDITY_TENS[Math.floor(n / 10)];
+    const remainder = n % 10;
+    return remainder > 0 ? `${tens}-${VALIDITY_ONES[remainder]}` : tens;
+  }
+  if (n < 1000) {
+    const hundreds = VALIDITY_ONES[Math.floor(n / 100)] + " hundred";
+    const remainder = n % 100;
+    return remainder > 0 ? `${hundreds} ${numberToWordsValidity(remainder)}` : hundreds;
+  }
+  return String(n);
+}
+
 export function formatValidityDaysText(days: number | string): string {
-  const num = Number(days) || 4;
-  const wordMap: Record<number, string> = {
-    1: "one (01) day",
-    2: "two (02) days",
-    3: "three (03) days",
-    4: "four (04) days",
-    5: "five (05) days",
-    6: "six (06) days",
-    7: "seven (07) days",
-    10: "ten (10) days",
-    14: "fourteen (14) days",
-    21: "twenty-one (21) days",
-    30: "thirty (30) days",
-  };
-  return wordMap[num] || `${num} days`;
+  const num = Math.max(1, Math.round(Number(days) || 14));
+  const word = numberToWordsValidity(num);
+  const padded = num < 10 ? `0${num}` : String(num);
+  const unit = num === 1 ? "day" : "days";
+  return `${word} (${padded}) ${unit}`;
+}
+
+export function getThreeDPrintTerms(validityDays: number | string = 14): string[] {
+  const daysText = formatValidityDaysText(validityDays);
+  return [
+    `Validity of Quotation: This quotation is valid for a period of ${daysText} from the date of issue. Upon expiry of this period, the prices, availability, and terms specified herein shall be subject to change and may be adjusted based on market conditions, supplier revisions, or other applicable factors.`,
+    ...DEFAULT_THREE_D_PRINT_TERMS.slice(1),
+  ];
+}
+
+export function getPcbTerms(validityDays: number | string = 5): string[] {
+  const daysText = formatValidityDaysText(validityDays);
+  return [
+    `Validity of Quotation: This quotation is valid for a period of ${daysText} from the date of issue. Upon expiry of this period, the prices, availability, and terms specified herein shall be subject to change and may be adjusted based on market conditions, supplier revisions, or other applicable factors.`,
+    ...DEFAULT_PCB_TERMS.slice(1),
+  ];
 }
 
 export function getProjectProposalTerms(validityDays: number | string = 4): string[] {
