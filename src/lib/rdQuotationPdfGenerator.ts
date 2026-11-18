@@ -12,6 +12,7 @@ import {
   getProjectProposalTerms,
   getProjectProposalCombinedTerms,
   LK_TRONICS_BANK_DETAILS,
+  formatValidityDaysText,
 } from "@/lib/rdQuotationDefaults";
 import { WARRANTY_BADGE_BASE64 } from "@/lib/rdQuotationAssets";
 
@@ -220,10 +221,10 @@ async function generateHardwareOrPcbPdf(
 
   // --- METADATA BOX (Top Right) ---
   // Positioned below the center circular logo and watermark (Y=32-62mm)
-  // Left: 107mm, Right: 187mm (aligned with table right), Top: 65.5mm, Bottom: 90.0mm
-  const metaBoxX = 107.0;
+  // Right aligned with table right border (184.6mm), width 70mm, left 114.6mm
+  const metaBoxW = 70.0;
+  const metaBoxX = 184.6 - metaBoxW; // 114.6mm
   const metaBoxY = 65.5;
-  const metaBoxW = 80.0;
   const metaBoxH = 24.5;
 
   doc.setDrawColor(0, 0, 0);
@@ -253,8 +254,7 @@ async function generateHardwareOrPcbPdf(
     doc.setFont("times", "normal");
     doc.setFontSize(9.5);
     doc.setTextColor(0, 0, 0);
-    doc.text(r.label, metaBoxX + 2.5, currentMetaY);
-    doc.text(r.val, metaBoxX + metaBoxW - 2.5, currentMetaY, { align: "right" });
+    doc.text(`${r.label}  ${r.val}`, metaBoxX + 2.5, currentMetaY);
     currentMetaY += 4.8;
   });
 
@@ -421,8 +421,22 @@ async function generateHardwareOrPcbPdf(
     const validityBodyY = validityHeadingY + 4.5;
     doc.setFont("times", "normal");
     doc.setFontSize(9.0);
-    const validityDays = data.validityDays || "14";
-    const validityText = `This quotation is valid for a period of fourteen (${validityDays}) days from the date of issue. Upon expiry of this period, the prices, availability, and terms specified herein shall be subject to change and may be adjusted based on market conditions, supplier revisions, or other applicable factors.`;
+    let resolved3dValidity = Number(data.validityDays);
+    if (!resolved3dValidity || isNaN(resolved3dValidity) || resolved3dValidity <= 0) {
+      if (data.preparedDate && data.expireDate) {
+        try {
+          const p = new Date(data.preparedDate).getTime();
+          const e = new Date(data.expireDate).getTime();
+          const diff = Math.round((e - p) / (1000 * 60 * 60 * 24));
+          if (diff > 0) resolved3dValidity = diff;
+        } catch {}
+      }
+    }
+    if (!resolved3dValidity || isNaN(resolved3dValidity) || resolved3dValidity <= 0) {
+      resolved3dValidity = 14;
+    }
+    const validityDaysText = formatValidityDaysText(resolved3dValidity);
+    const validityText = `This quotation is valid for a period of ${validityDaysText} from the date of issue. Upon expiry of this period, the prices, availability, and terms specified herein shall be subject to change and may be adjusted based on market conditions, supplier revisions, or other applicable factors.`;
 
     const wrappedValidity = doc.splitTextToSize(validityText, 159.2);
     doc.text(wrappedValidity, 25.4, validityBodyY);
@@ -560,11 +574,28 @@ async function generateHardwareOrPcbPdf(
       p2Y += wrapped.length * 4.2 + 5.0;
     });
   } else {
+    // Resolve PCB validity matching PMS web enter Validity Period
+    let resolvedPcbValidity = Number(data.validityDays);
+    if (!resolvedPcbValidity || isNaN(resolvedPcbValidity) || resolvedPcbValidity <= 0) {
+      if (data.preparedDate && data.expireDate) {
+        try {
+          const p = new Date(data.preparedDate).getTime();
+          const e = new Date(data.expireDate).getTime();
+          const diff = Math.round((e - p) / (1000 * 60 * 60 * 24));
+          if (diff > 0) resolvedPcbValidity = diff;
+        } catch {}
+      }
+    }
+    if (!resolvedPcbValidity || isNaN(resolvedPcbValidity) || resolvedPcbValidity <= 0) {
+      resolvedPcbValidity = 5;
+    }
+    const pcbValidityDaysText = formatValidityDaysText(resolvedPcbValidity);
+
     // Exact 5 PCB Terms matching Doc/PCB.docx
     const pcbTerms = [
       {
         heading: "Validity of Quotation",
-        body: `This quotation is valid for a period of five (${data.validityDays || "05"}) days from the date of issue. Upon expiry of this period, the prices, availability, and terms specified herein shall be subject to change and may be adjusted based on market conditions, supplier revisions, or other applicable factors.`,
+        body: `This quotation is valid for a period of ${pcbValidityDaysText} from the date of issue. Upon expiry of this period, the prices, availability, and terms specified herein shall be subject to change and may be adjusted based on market conditions, supplier revisions, or other applicable factors.`,
       },
       {
         heading: "PCB Printing Job Scheduling & Availability",
@@ -606,13 +637,13 @@ async function generateHardwareOrPcbPdf(
 
   // --- BANK DETAILS SECTION & SIGNATURE ---
   const bankBoxY = Math.min(Math.max(p2Y + 6.0, 184.0), 195.0);
-  const bankBoxW = 108;
-  const bankBoxH = 30;
+  const bankBoxW = 118;
+  const bankBoxH = 36;
 
   doc.setFont("times", "bold");
-  doc.setFontSize(11.5);
+  doc.setFontSize(13);
   doc.setTextColor(0, 0, 0);
-  doc.text("Bank Details", 25.4, bankBoxY - 2.5);
+  doc.text("Bank Details", 25.4, bankBoxY - 2.8);
 
   // Bank Details Box
   doc.setDrawColor(0, 0, 0);
@@ -653,14 +684,14 @@ async function generateHardwareOrPcbPdf(
     { label: "Bank Branch", val: activeBank.branch },
   ];
 
-  let bankRowY = bankBoxY + 6.2;
+  let bankRowY = bankBoxY + 7.2;
   bankRows.forEach((row) => {
     doc.setFont("times", "normal");
-    doc.setFontSize(10.5);
+    doc.setFontSize(12);
     doc.setTextColor(0, 0, 0);
-    doc.text(row.label, 28, bankRowY);
-    doc.text(row.val, 60, bankRowY);
-    bankRowY += 6.5;
+    doc.text(row.label, 28.5, bankRowY);
+    doc.text(row.val, 64, bankRowY);
+    bankRowY += 7.5;
   });
 
   // --- FOOTER APPRECIATION NOTE ---
