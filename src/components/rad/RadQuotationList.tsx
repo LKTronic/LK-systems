@@ -135,7 +135,7 @@ export function RadQuotationList({
     if (q.status === "DRAFT") {
       setMessage({
         type: "error",
-        text: `Draft quotation "${q.quotationNo}" cannot be downloaded. Please edit and finalize it first.`,
+        text: `Draft quotation "${q.quotationNo}" is partially filled and cannot be downloaded. Please click Edit to complete the required fields.`,
       });
       return;
     }
@@ -563,7 +563,7 @@ export function RadQuotationList({
                                 if (q.status === "DRAFT") {
                                   setMessage({
                                     type: "error",
-                                    text: `Draft quotation "${q.quotationNo}" cannot be downloaded. Please edit and finalize it first.`,
+                                    text: `Draft quotation "${q.quotationNo}" is partially filled and cannot be downloaded. Please click Edit to complete the required fields.`,
                                   });
                                   return;
                                 }

@@ -337,8 +337,17 @@ export default function ChecklistPage() {
     };
   };
 
-  // Save Checklist to API
-  const handleSave = async (targetStatus: "DRAFT" | "COMPLETED" = "COMPLETED") => {
+  // Save Checklist to API: auto-draft if half-filled, certified if complete
+  const handleSave = async (explicitStatus?: "DRAFT" | "COMPLETED") => {
+    const modelStr = checklistType === "BATTERY" ? batteryInfo.modelNumber : inverterInfo.modelNumber;
+    const isComplete = Boolean(
+      checklistNo.trim() &&
+      modelStr?.trim() &&
+      checkedByName?.trim() &&
+      checkedDate
+    );
+    const targetStatus = explicitStatus || (isComplete ? "COMPLETED" : "DRAFT");
+
     setIsSubmitting(true);
     try {
       const payload = buildCurrentChecklistData(targetStatus);
@@ -354,7 +363,7 @@ export default function ChecklistPage() {
         showNotification(
           "success",
           targetStatus === "DRAFT"
-            ? `Inspection ${d.checklist?.checklistNo || checklistNo} saved as DRAFT!`
+            ? `Inspection ${d.checklist?.checklistNo || checklistNo} saved as DRAFT (partially filled)!`
             : `Checklist ${d.checklist?.checklistNo || checklistNo} saved and certified!`
         );
         if (!editingId && d.checklist?.id) {
@@ -1186,27 +1195,17 @@ export default function ChecklistPage() {
               <div className="flex items-center gap-3 w-full sm:w-auto">
                 <button
                   type="button"
-                  onClick={() => handleSave("DRAFT")}
-                  disabled={isSubmitting}
-                  className="flex-1 sm:flex-initial px-4 py-2.5 bg-amber-950/70 hover:bg-amber-900/80 text-amber-300 border border-amber-800/80 rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition-all disabled:opacity-50 shadow-sm"
-                  title="Save partial checklist as draft without full details"
-                >
-                  <Edit3 className="w-4 h-4 text-amber-400" />
-                  <span>Save as Draft</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => handleSave("COMPLETED")}
+                  onClick={() => handleSave()}
                   disabled={isSubmitting}
                   className="flex-1 sm:flex-initial px-5 py-2.5 bg-slate-800 hover:bg-slate-700 text-teal-300 border border-teal-800/80 rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition-all disabled:opacity-50 shadow-sm"
+                  title="Save checklist (auto-draft if partially filled, certified if complete)"
                 >
                   {isSubmitting ? (
                     <Loader2 className="w-4 h-4 animate-spin text-teal-400" />
                   ) : (
                     <Save className="w-4 h-4 text-teal-400" />
                   )}
-                  <span>Save &amp; Certify</span>
+                  <span>Save Inspection</span>
                 </button>
 
                 <button
