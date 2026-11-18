@@ -82,9 +82,10 @@ export async function generateHandoverLetterPdf(
     }
   }
 
-  // Ensure header banner area (Y: 0 to 23.3mm) is completely clean white with NO "QUOTATION" text
+  // Ensure the upper half of the letterhead (Y: 0 to 65mm) is completely clean white
+  // with NO background centered logo and NO repeating "QUOTATION" watermark text
   doc.setFillColor(255, 255, 255);
-  doc.rect(0, 0, 210, 23.3, "F");
+  doc.rect(0, 0, 210, 65, "F");
 
   // ================= 2. HEADER: LOGO TO LEFT & QUOTATION ADDRESS =================
   // LK Tronics circular logo positioned on the LEFT
