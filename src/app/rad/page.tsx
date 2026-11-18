@@ -585,7 +585,7 @@ export default function RadDashboardPage() {
                   href="/rad/3d-print"
                   className="text-amber-400 font-medium hover:underline flex items-center gap-1"
                 >
-                  Table <ArrowRight className="w-2.5 h-2.5" />
+                  Open Hub <ArrowRight className="w-2.5 h-2.5" />
                 </Link>
                 <Link
                   href="/rad/create?type=THREE_D_PRINT"
@@ -620,7 +620,7 @@ export default function RadDashboardPage() {
                   href="/rad/pcb"
                   className="text-emerald-400 font-medium hover:underline flex items-center gap-1"
                 >
-                  Table <ArrowRight className="w-2.5 h-2.5" />
+                  Open Hub <ArrowRight className="w-2.5 h-2.5" />
                 </Link>
                 <Link
                   href="/rad/create?type=PCB"
@@ -655,7 +655,7 @@ export default function RadDashboardPage() {
                   href="/rad/project-proposal"
                   className="text-teal-400 font-medium hover:underline flex items-center gap-1"
                 >
-                  Table <ArrowRight className="w-2.5 h-2.5" />
+                  Open Hub <ArrowRight className="w-2.5 h-2.5" />
                 </Link>
                 <Link
                   href="/rad/create?type=PROJECT_PROPOSAL"
