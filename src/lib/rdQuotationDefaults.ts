@@ -1,4 +1,4 @@
-export type RdQuotationType = "PROJECT_PROPOSAL" | "THREE_D_PRINT" | "PCB";
+export type RdQuotationType = "PROJECT_PROPOSAL" | "THREE_D_PRINT" | "PCB" | "UNI_QUOTATION";
 
 export const MATERIAL_DENSITIES: Record<string, number> = {
   ABS: 1.05,
@@ -64,6 +64,17 @@ export interface PcbSpecs {
   leadTime?: string;
 }
 
+export interface UniQuotationSpecs {
+  completionTime?: string;
+  componentsTotal?: number;
+  engineeringCharges?: number;
+  discount?: number;
+  validityDays?: number;
+  warrantyText?: string;
+  paymentTermsText?: string;
+  itemImages?: Array<string | null>;
+}
+
 export interface RdQuotationItemInput {
   id?: string | number;
   itemIndex: number;
@@ -73,6 +84,7 @@ export interface RdQuotationItemInput {
   unitPrice: number;
   totalPrice: number;
   notes?: string;
+  image?: string;
   calcMode?: "MANUAL" | "AUTO";
   filamentLengthM?: number | string;
   printTimeMinutes?: number | string;
@@ -174,6 +186,74 @@ export function getPcbTerms(validityDays: number | string = 5): string[] {
     `Validity of Quotation: This quotation is valid for a period of ${daysText} from the date of issue. Upon expiry of this period, the prices, availability, and terms specified herein shall be subject to change and may be adjusted based on market conditions, supplier revisions, or other applicable factors.`,
     ...DEFAULT_PCB_TERMS.slice(1),
   ];
+}
+
+export const DEFAULT_UNI_QUOTATION_SPECS: UniQuotationSpecs = {
+  completionTime: "10 business working days",
+  componentsTotal: 33350,
+  engineeringCharges: 37580,
+  discount: 4580,
+  validityDays: 5,
+  warrantyText: "Warranty terms apply as per manufacturer specifications for components utilized.",
+  paymentTermsText: "80% advance payment",
+};
+
+export const DEFAULT_UNI_QUOTATION_ITEMS = [
+  {
+    productOrService: "ESP32 Development Board 2.4GHz WIFI Bluetooth 38 Pin",
+    quantity: 1,
+    unitPrice: 2850,
+    totalPrice: 2850,
+    image: "/template_assets/uni_samples/component1.png",
+  },
+  {
+    productOrService: "ESP32 Expansion Board Compatible with ESP32 WIFI Bluetooth Development Board (For 38 pins)",
+    quantity: 1,
+    unitPrice: 1950,
+    totalPrice: 1950,
+    image: "/template_assets/uni_samples/component2.png",
+  },
+  {
+    productOrService: "WS2812B Smart Pixel RGBIC Led Strip Light DC5V",
+    quantity: 192,
+    unitPrice: 125,
+    totalPrice: 24000,
+    image: "/template_assets/uni_samples/component3.png",
+  },
+  {
+    productOrService: "5V Power Supply 25W 10A",
+    quantity: 1,
+    unitPrice: 4550,
+    totalPrice: 4550,
+    image: "/template_assets/uni_samples/component4.png",
+  },
+];
+
+export const DEFAULT_UNI_QUOTATION_GENERAL_TERMS = [
+  "Ownership of project shall remain with LK TRONICS until full payment is settled.",
+  "Orders once confirmed cannot be cancelled. In the event of cancellation, any advance paid will be non-refundable.",
+  "The company shall not be held liable for delays or failures due to events beyond reasonable control, including natural disasters, riots, pandemics, or supply chain disruptions.",
+  "This quotation and its pricing are confidential and intended solely for the client. Sharing or distributing it without consent is prohibited.",
+  "Any additional work or modifications requested beyond the defined scope will be treated as a variation and may incur extra charges.",
+  "Testing and demonstration will be carried out jointly to confirm successful operation.",
+];
+
+export function getUniQuotationTerms(
+  validityDays: number | string = 5,
+  completionTime: string = "10 business working days",
+  paymentMethod: string = "80% advance payment",
+  warrantyText?: string
+) {
+  const daysText = formatValidityDaysText(validityDays);
+  return {
+    generalTerms: [...DEFAULT_UNI_QUOTATION_GENERAL_TERMS],
+    validityTerm: `This quotation is valid for a period of ${daysText} from the date of issue. Upon expiry of this period, the prices, availability, and terms specified herein shall be subject to change and may be adjusted based on market conditions, supplier revisions, or other applicable factors.`,
+    durationTerm: `The estimated project completion period is ${completionTime} from the date of official confirmation and/or advance payment. Unforeseen delays due to third-party dependencies, import lead times, or component availability will be communicated in advance.`,
+    warrantyTerm: warrantyText || "Warranty terms apply as per manufacturer specifications for components utilized. Joint testing confirms functional operation.",
+    deliveryTerm: "If delivery charges are not specified in the quotation table, the client shall be responsible for either arranging collection of the goods from our store or bearing the applicable delivery cost, should delivery be required.",
+    confidentialityTerm: "Both parties agree to maintain confidentiality regarding all proprietary and technical information shared during the project. No data or concept shall be disclosed to third parties without written consent.",
+    paymentTerm: `Payment shall be affected based on the agreed payment method (${paymentMethod}) selected by the client and confirmed at the time of order. No processing or delivery will commence until the agreed payment terms are fulfilled.`,
+  };
 }
 
 export function getProjectProposalTerms(validityDays: number | string = 5): string[] {

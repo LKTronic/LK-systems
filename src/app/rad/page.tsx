@@ -25,6 +25,7 @@ import {
   CheckCircle2,
   AlertCircle,
   ShieldCheck,
+  GraduationCap,
 } from "lucide-react";
 import { BankAccountsModal } from "@/components/rad/BankAccountsModal";
 import { ThreeDPrintPricingModal } from "@/components/rad/ThreeDPrintPricingModal";
@@ -35,7 +36,7 @@ import {
 
 interface RdQuotation {
   id: number;
-  type: "PROJECT_PROPOSAL" | "THREE_D_PRINT" | "PCB";
+  type: "PROJECT_PROPOSAL" | "THREE_D_PRINT" | "PCB" | "UNI_QUOTATION";
   quotationNo: string;
   totalAmount: number | string;
 }
@@ -134,6 +135,7 @@ export default function RadDashboardPage() {
     let propCount = 0;
     let threeDCount = 0;
     let pcbCount = 0;
+    let uniCount = 0;
 
     for (const q of quotations) {
       if (q.type === "PROJECT_PROPOSAL") {
@@ -142,6 +144,8 @@ export default function RadDashboardPage() {
         threeDCount++;
       } else if (q.type === "PCB") {
         pcbCount++;
+      } else if (q.type === "UNI_QUOTATION") {
+        uniCount++;
       }
     }
 
@@ -150,6 +154,7 @@ export default function RadDashboardPage() {
       propCount,
       threeDCount,
       pcbCount,
+      uniCount,
     };
   }, [quotations]);
 
@@ -276,6 +281,24 @@ export default function RadDashboardPage() {
                         </div>
                         <div className="text-[11px] text-slate-400">
                           Hardware BOM, engineering services, milestones &amp; warranty
+                        </div>
+                      </div>
+                    </Link>
+
+                    <Link
+                      href="/rad/create?type=UNI_QUOTATION"
+                      onClick={() => setShowCreateMenu(false)}
+                      className="flex items-start gap-2.5 px-3.5 py-2.5 hover:bg-slate-800/80 transition-colors group"
+                    >
+                      <div className="p-1.5 rounded-lg bg-blue-950/80 border border-blue-800/60 text-blue-400 mt-0.5">
+                        <GraduationCap className="w-3.5 h-3.5" />
+                      </div>
+                      <div>
+                        <div className="text-xs font-semibold text-white group-hover:text-blue-300">
+                          Uni Quotation
+                        </div>
+                        <div className="text-[11px] text-slate-400">
+                          University proposals, components table, images &amp; engineering charges
                         </div>
                       </div>
                     </Link>
@@ -560,7 +583,7 @@ export default function RadDashboardPage() {
             <span className="text-[11px] text-slate-500">5 Specialized Operational Tools</span>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3">
             {/* Module 1: 3D Print */}
             <div className="group bg-slate-900/70 border border-slate-800 hover:border-amber-700/60 rounded-xl p-3.5 transition-all hover:shadow-lg hover:shadow-amber-950/20 flex flex-col justify-between">
               <div>
@@ -662,6 +685,41 @@ export default function RadDashboardPage() {
                   className="px-2 py-0.5 bg-teal-600/20 hover:bg-teal-600/30 text-teal-300 rounded font-medium transition-colors"
                 >
                   + New Proposal
+                </Link>
+              </div>
+            </div>
+
+            {/* Module 4: Uni Quotation */}
+            <div className="group bg-slate-900/70 border border-slate-800 hover:border-blue-700/60 rounded-xl p-3.5 transition-all hover:shadow-lg hover:shadow-blue-950/20 flex flex-col justify-between">
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <span className="p-1.5 rounded-lg bg-blue-950/80 border border-blue-800/60 text-blue-400">
+                    <GraduationCap className="w-4 h-4" />
+                  </span>
+                  <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-blue-950/60 text-blue-300 border border-blue-800/50">
+                    PQV Series
+                  </span>
+                </div>
+                <h3 className="text-xs font-semibold text-white group-hover:text-blue-300 transition-colors">
+                  Uni Quotations
+                </h3>
+                <p className="text-[11px] text-slate-400 mt-1 line-clamp-2 leading-relaxed">
+                  Components table, item images, engineering charges &amp; academic discount breakdown.
+                </p>
+              </div>
+
+              <div className="mt-3 pt-2.5 border-t border-slate-800/80 flex items-center justify-between text-[11px]">
+                <Link
+                  href="/rad/uni-quotation"
+                  className="text-blue-400 font-medium hover:underline flex items-center gap-1"
+                >
+                  Open Hub <ArrowRight className="w-2.5 h-2.5" />
+                </Link>
+                <Link
+                  href="/rad/create?type=UNI_QUOTATION"
+                  className="px-2 py-0.5 bg-blue-600/20 hover:bg-blue-600/30 text-blue-300 rounded font-medium transition-colors"
+                >
+                  + New Uni Quote
                 </Link>
               </div>
             </div>

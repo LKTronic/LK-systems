@@ -2,12 +2,12 @@ import { PrismaClient } from "@prisma/client";
 
 /**
  * Generate sequential R&D quotation numbers based on type:
- * - PROJECT_PROPOSAL: YYYYMMDDPQV1, YYYYMMDDPQV2, ...
+ * - PROJECT_PROPOSAL & UNI_QUOTATION: YYYYMMDDPQV1, YYYYMMDDPQV2, ... (Doc/20161014PQV1.docx)
  * - THREE_D_PRINT & PCB: YYYYMMDDQV1, YYYYMMDDQV2, ... (shared sequence for both 3D & PCB)
  */
 export async function getNextRdQuotationNo(
   tx: any,
-  type: "PROJECT_PROPOSAL" | "THREE_D_PRINT" | "PCB" = "THREE_D_PRINT",
+  type: "PROJECT_PROPOSAL" | "THREE_D_PRINT" | "PCB" | "UNI_QUOTATION" = "THREE_D_PRINT",
   dateOverride?: Date
 ): Promise<string> {
   const now = dateOverride || new Date();
@@ -17,8 +17,9 @@ export async function getNextRdQuotationNo(
   const datePrefix = `${yyyy}${mm}${dd}`;
 
   // Both THREE_D_PRINT and PCB share the "QV" prefix and sequential counter
+  // UNI_QUOTATION and PROJECT_PROPOSAL use "PQV"
   let codePrefix = "QV";
-  if (type === "PROJECT_PROPOSAL") codePrefix = "PQV";
+  if (type === "PROJECT_PROPOSAL" || type === "UNI_QUOTATION") codePrefix = "PQV";
   else codePrefix = "QV";
 
   const basePattern = `${datePrefix}${codePrefix}`;
