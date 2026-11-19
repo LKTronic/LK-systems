@@ -1618,87 +1618,68 @@ async function generateProjectProposalPdf(
     }
   }
 
+  // Render note input text directly (no box frame, no header banner, no heading title)
   if (commercialNoteText) {
-    const boxX = 266.0;
-    const boxY = 96.0;
-    const boxW = 208.0;
-    const boxH = 90.0;
+    const noteStartX = 266.0;
+    const maxW = 208.0;
+    const fontSize = 14.0;
+    const lineSpacing = 7.0;
+    const maxNoteY = 188.0;
 
-    // Outer Card Frame with clean subtle accent border
-    doc.setFillColor(255, 255, 255);
-    doc.setDrawColor(245, 158, 11); // Amber accent border
-    doc.setLineWidth(0.6);
-    doc.roundedRect(boxX, boxY, boxW, boxH, 3.5, 3.5, "FD");
+    const noteLines = commercialNoteText.split(/\r?\n/);
+    let curY = 100.0;
 
-    // Card Header Banner
-    doc.setFillColor(254, 243, 199); // Amber-100 soft background
-    doc.roundedRect(boxX, boxY, boxW, 13.0, 3.5, 3.5, "F");
-    doc.rect(boxX, boxY + 8.0, boxW, 5.0, "F");
-    doc.setDrawColor(245, 158, 11);
-    doc.setLineWidth(0.4);
-    doc.line(boxX, boxY + 13.0, boxX + boxW, boxY + 13.0);
-
-    // Header Title
-    const isWarrantyExclusion = /warranty\s*exclusion/i.test(commercialNoteText);
-    const boxTitle = isWarrantyExclusion
-      ? "WARRANTY EXCLUSION & OPERATIONAL CONDITIONS"
-      : "SPECIAL OPERATIONAL NOTES & CONDITIONS";
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(10.5);
-    doc.setTextColor(180, 83, 9); // Amber-700
-    doc.text(boxTitle, boxX + 8.0, boxY + 9.0);
-
-    // Render tokens inside box
-    const noteTokens = parseSlideTokens(commercialNoteText);
-    let curX = boxX + 8.0;
-    let curY = boxY + 22.0;
-    const startX = boxX + 8.0;
-    const maxW = boxW - 16.0;
-    const fontSize = 12.0;
-    const lineSpacing = 6.4;
-    const maxNoteY = boxY + boxH - 5.0;
-
-    noteTokens.forEach((wObj, wIdx) => {
-      doc.setFont("helvetica", wObj.bold ? "bold" : "normal");
-      doc.setFontSize(fontSize);
-      const wordW = doc.getTextWidth(wObj.word);
-      const spaceW = doc.getTextWidth(" ");
-
-      if (curX + wordW > startX + maxW) {
-        curY += lineSpacing;
-        curX = startX;
+    noteLines.forEach((rawLine) => {
+      const lineText = rawLine.trim();
+      if (!lineText) {
+        curY += lineSpacing * 0.8;
+        return;
       }
+      const noteTokens = parseSlideTokens(lineText);
+      let curX = noteStartX;
 
-      if (curY <= maxNoteY) {
-        if (wObj.highlight) {
-          const nextWord = noteTokens[wIdx + 1];
-          const hasContinuousHl =
-            nextWord &&
-            nextWord.highlight &&
-            curX + wordW + spaceW <= startX + maxW;
-          const hlW = hasContinuousHl ? wordW + spaceW + 0.8 : wordW + 0.8;
-          doc.setFillColor(255, 255, 0); // Yellow #FFFF00
-          doc.rect(curX - 0.4, curY - fontSize * 0.28, hlW, fontSize * 0.36, "F");
+      noteTokens.forEach((wObj, wIdx) => {
+        doc.setFont("helvetica", wObj.bold ? "bold" : "normal");
+        doc.setFontSize(fontSize);
+        const wordW = doc.getTextWidth(wObj.word);
+        const spaceW = doc.getTextWidth(" ");
+
+        if (curX + wordW > noteStartX + maxW) {
+          curY += lineSpacing;
+          curX = noteStartX;
         }
 
-        if (wObj.color) {
-          doc.setTextColor(wObj.color[0], wObj.color[1], wObj.color[2]);
-        } else if (wObj.bold) {
-          doc.setTextColor(180, 83, 9); // Amber-700
-        } else {
-          doc.setTextColor(LK_SLATE[0], LK_SLATE[1], LK_SLATE[2]);
+        if (curY <= maxNoteY) {
+          if (wObj.highlight) {
+            const nextWord = noteTokens[wIdx + 1];
+            const hasContinuousHl =
+              nextWord &&
+              nextWord.highlight &&
+              curX + wordW + spaceW <= noteStartX + maxW;
+            const hlW = hasContinuousHl ? wordW + spaceW + 0.8 : wordW + 0.8;
+            doc.setFillColor(255, 255, 0); // Yellow #FFFF00
+            doc.rect(curX - 0.4, curY - fontSize * 0.28, hlW, fontSize * 0.36, "F");
+          }
+
+          if (wObj.color) {
+            doc.setTextColor(wObj.color[0], wObj.color[1], wObj.color[2]);
+          } else {
+            doc.setTextColor(0, 0, 0);
+          }
+
+          doc.text(wObj.word, curX, curY);
+
+          if (wObj.underline) {
+            doc.setDrawColor(0, 0, 0);
+            doc.setLineWidth(0.4);
+            doc.line(curX, curY + 0.8, curX + wordW, curY + 0.8);
+          }
         }
 
-        doc.text(wObj.word, curX, curY);
+        curX += wordW + spaceW;
+      });
 
-        if (wObj.underline) {
-          doc.setDrawColor(245, 158, 11);
-          doc.setLineWidth(0.4);
-          doc.line(curX, curY + 0.8, curX + wordW, curY + 0.8);
-        }
-      }
-
-      curX += wordW + spaceW;
+      curY += lineSpacing;
     });
   }
 
