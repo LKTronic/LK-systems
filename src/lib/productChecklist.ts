@@ -62,23 +62,23 @@ export interface ProductChecklist {
 export function getDefaultTestItems(type: ProductChecklistType): ChecklistTestItem[] {
   if (type === "INVERTER") {
     return [
-      { id: "test-pv", key: "pvStatus", label: "PV Status", passed: true, comment: "" },
-      { id: "test-ac", key: "acStatus", label: "AC Status", passed: true, comment: "" },
-      { id: "test-disp", key: "displayStatus", label: "Display Status", passed: true, comment: "" },
-      { id: "test-out", key: "outputStatus", label: "Output Status", passed: true, comment: "" },
-      { id: "test-chg", key: "batteryChargingStatus", label: "Battery Charging Status", passed: true, comment: "" },
-      { id: "test-ptb", key: "batteryPointBackStatus", label: "Battery Point Back Status", passed: true, comment: "" },
-      { id: "test-load", key: "loadTestStatus", label: "Load Test Status", passed: true, comment: "" },
-      { id: "test-qc", key: "qcPassedStatus", label: "QC Passed Status", passed: true, comment: "" },
+      { id: "test-pv", key: "pvStatus", label: "PV Status", passed: false, comment: "" },
+      { id: "test-ac", key: "acStatus", label: "AC Status", passed: false, comment: "" },
+      { id: "test-disp", key: "displayStatus", label: "Display Status", passed: false, comment: "" },
+      { id: "test-out", key: "outputStatus", label: "Output Status", passed: false, comment: "" },
+      { id: "test-chg", key: "batteryChargingStatus", label: "Battery Charging Status", passed: false, comment: "" },
+      { id: "test-ptb", key: "batteryPointBackStatus", label: "Battery Point Back Status", passed: false, comment: "" },
+      { id: "test-load", key: "loadTestStatus", label: "Load Test Status", passed: false, comment: "" },
+      { id: "test-qc", key: "qcPassedStatus", label: "QC Passed Status", passed: false, comment: "" },
     ];
   } else {
     return [
-      { id: "test-disp", key: "displayStatus", label: "Display Status", passed: true, comment: "" },
-      { id: "test-out", key: "outputStatus", label: "Output Status", passed: true, comment: "" },
-      { id: "test-chg", key: "batteryChargingStatus", label: "Battery Charging Status", passed: true, comment: "" },
-      { id: "test-ptb", key: "batteryPointBackStatus", label: "Battery Point Back Status", passed: true, comment: "" },
-      { id: "test-load", key: "loadTestStatus", label: "Load Test Status", passed: true, comment: "" },
-      { id: "test-qc", key: "qcPassedStatus", label: "QC Passed Status", passed: true, comment: "" },
+      { id: "test-disp", key: "displayStatus", label: "Display Status", passed: false, comment: "" },
+      { id: "test-out", key: "outputStatus", label: "Output Status", passed: false, comment: "" },
+      { id: "test-chg", key: "batteryChargingStatus", label: "Battery Charging Status", passed: false, comment: "" },
+      { id: "test-ptb", key: "batteryPointBackStatus", label: "Battery Point Back Status", passed: false, comment: "" },
+      { id: "test-load", key: "loadTestStatus", label: "Load Test Status", passed: false, comment: "" },
+      { id: "test-qc", key: "qcPassedStatus", label: "QC Passed Status", passed: false, comment: "" },
     ];
   }
 }

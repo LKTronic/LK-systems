@@ -398,30 +398,40 @@ export default function ProductHandoverPage() {
           </div>
         </div>
 
-        {/* Notifications */}
+        {/* Floating Save / Action Popup Notification (Fixed in Viewport) */}
         {notification && (
-          <div
-            className={`p-3.5 rounded-xl border text-xs font-medium flex items-center justify-between gap-3 animate-in fade-in slide-in-from-top-1 ${
-              notification.type === "success"
-                ? "bg-emerald-950/70 border-emerald-800 text-emerald-300"
-                : "bg-rose-950/70 border-rose-800 text-rose-300"
-            }`}
-          >
-            <div className="flex items-center gap-2">
-              {notification.type === "success" ? (
-                <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
-              ) : (
-                <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0" />
-              )}
-              <span>{notification.text}</span>
-            </div>
-            <button
-              type="button"
-              onClick={() => setNotification(null)}
-              className="text-xs opacity-70 hover:opacity-100"
+          <div className="fixed top-6 right-6 z-[9999] max-w-md w-full sm:w-auto min-w-[320px] shadow-2xl animate-in fade-in slide-in-from-top-4 duration-200">
+            <div
+              className={`p-4 rounded-xl border flex items-start justify-between gap-3 shadow-2xl backdrop-blur-md ${
+                notification.type === "success"
+                  ? "bg-emerald-950/95 border-emerald-500/80 text-emerald-200 shadow-emerald-950/50"
+                  : "bg-rose-950/95 border-rose-500/80 text-rose-200 shadow-rose-950/50"
+              }`}
             >
-              ✕
-            </button>
+              <div className="flex items-start gap-2.5">
+                {notification.type === "success" ? (
+                  <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0 mt-0.5" />
+                ) : (
+                  <AlertTriangle className="w-5 h-5 text-rose-400 shrink-0 mt-0.5" />
+                )}
+                <div>
+                  <div className="font-bold text-xs uppercase tracking-wider">
+                    {notification.type === "success" ? "Handover Letter Saved" : "Action Failed"}
+                  </div>
+                  <div className="text-xs text-slate-200 mt-0.5 font-medium leading-relaxed">
+                    {notification.text}
+                  </div>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setNotification(null)}
+                className="text-slate-400 hover:text-white p-1 rounded transition-colors -mr-1 -mt-1"
+                title="Dismiss"
+              >
+                ✕
+              </button>
+            </div>
           </div>
         )}
 

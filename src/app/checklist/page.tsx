@@ -78,7 +78,20 @@ export default function ChecklistPage() {
   // Section 2: QC Tests & Dates
   const [checkedDate, setCheckedDate] = useState<string>(() => new Date().toISOString().split("T")[0]);
   const [tests, setTests] = useState<ChecklistTestItem[]>(() => getDefaultTestItems("BATTERY"));
-  const [overallQcPassed, setOverallQcPassed] = useState<boolean>(true);
+  const [overallQcPassed, setOverallQcPassed] = useState<boolean>(false);
+
+  // Serial Number Mismatch Detection
+  const hasBatterySerialMismatch = Boolean(
+    batteryInfo.serialNumberBattery?.trim() &&
+    batteryInfo.serialNumberBox?.trim() &&
+    batteryInfo.serialNumberBattery.trim() !== batteryInfo.serialNumberBox.trim()
+  );
+
+  const hasInverterSerialMismatch = Boolean(
+    inverterInfo.serialNumberInverter?.trim() &&
+    inverterInfo.serialNumberBox?.trim() &&
+    inverterInfo.serialNumberInverter.trim() !== inverterInfo.serialNumberBox.trim()
+  );
 
   // Section 3: Inspector
   const [checkedByName, setCheckedByName] = useState<string>("");
@@ -264,7 +277,7 @@ export default function ChecklistPage() {
     setBatteryInfo(getDefaultBatteryInfo());
     setInverterInfo(getDefaultInverterInfo());
     setTests(getDefaultTestItems("BATTERY"));
-    setOverallQcPassed(true);
+    setOverallQcPassed(false);
     setNotes([]);
     setBoxSerialManuallyDiverged(false);
     setIsNumberAutoLocked(true);
@@ -480,30 +493,40 @@ export default function ChecklistPage() {
           </div>
         </div>
 
-        {/* Alerts / Notifications */}
+        {/* Floating Save / Action Popup Notification (Fixed in Viewport) */}
         {notification && (
-          <div
-            className={`p-3.5 rounded-xl border text-xs font-medium flex items-center justify-between gap-3 animate-in fade-in slide-in-from-top-1 ${
-              notification.type === "success"
-                ? "bg-emerald-950/70 border-emerald-800 text-emerald-300"
-                : "bg-rose-950/70 border-rose-800 text-rose-300"
-            }`}
-          >
-            <div className="flex items-center gap-2">
-              {notification.type === "success" ? (
-                <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
-              ) : (
-                <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0" />
-              )}
-              <span>{notification.text}</span>
-            </div>
-            <button
-              type="button"
-              onClick={() => setNotification(null)}
-              className="text-xs opacity-70 hover:opacity-100"
+          <div className="fixed top-6 right-6 z-[9999] max-w-md w-full sm:w-auto min-w-[320px] shadow-2xl animate-in fade-in slide-in-from-top-4 duration-200">
+            <div
+              className={`p-4 rounded-xl border flex items-start justify-between gap-3 shadow-2xl backdrop-blur-md ${
+                notification.type === "success"
+                  ? "bg-emerald-950/95 border-emerald-500/80 text-emerald-200 shadow-emerald-950/50"
+                  : "bg-rose-950/95 border-rose-500/80 text-rose-200 shadow-rose-950/50"
+              }`}
             >
-              ✕
-            </button>
+              <div className="flex items-start gap-2.5">
+                {notification.type === "success" ? (
+                  <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0 mt-0.5" />
+                ) : (
+                  <AlertTriangle className="w-5 h-5 text-rose-400 shrink-0 mt-0.5" />
+                )}
+                <div>
+                  <div className="font-bold text-xs uppercase tracking-wider">
+                    {notification.type === "success" ? "Inspection Saved" : "Action Failed"}
+                  </div>
+                  <div className="text-xs text-slate-200 mt-0.5 font-medium leading-relaxed">
+                    {notification.text}
+                  </div>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setNotification(null)}
+                className="text-slate-400 hover:text-white p-1 rounded transition-colors -mr-1 -mt-1"
+                title="Dismiss"
+              >
+                ✕
+              </button>
+            </div>
           </div>
         )}
 
@@ -720,7 +743,11 @@ export default function ChecklistPage() {
                       value={batteryInfo.serialNumberBattery}
                       onChange={(e) => handleBatterySerialChange(e.target.value)}
                       placeholder="e.g. BAT202611-00842"
-                      className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-teal-500 font-mono"
+                      className={`w-full bg-slate-950 rounded-lg px-3 py-2 text-xs text-white focus:outline-none font-mono transition-colors ${
+                        hasBatterySerialMismatch
+                          ? "border-2 border-amber-500 bg-amber-950/20 text-amber-200 focus:border-amber-400"
+                          : "border border-slate-700 focus:border-teal-500"
+                      }`}
                     />
                   </div>
 
@@ -741,9 +768,28 @@ export default function ChecklistPage() {
                       value={batteryInfo.serialNumberBox}
                       onChange={(e) => handleBoxSerialChange(e.target.value)}
                       placeholder="e.g. BX202611-00842"
-                      className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-teal-500 font-mono"
+                      className={`w-full bg-slate-950 rounded-lg px-3 py-2 text-xs text-white focus:outline-none font-mono transition-colors ${
+                        hasBatterySerialMismatch
+                          ? "border-2 border-amber-500 bg-amber-950/20 text-amber-200 focus:border-amber-400"
+                          : "border border-slate-700 focus:border-teal-500"
+                      }`}
                     />
                   </div>
+
+                  {hasBatterySerialMismatch && (
+                    <div className="md:col-span-2 lg:col-span-3 p-3 rounded-xl bg-amber-950/50 border-2 border-amber-500/80 text-amber-200 text-xs flex items-start gap-2.5 animate-in fade-in">
+                      <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+                      <div>
+                        <div className="font-bold text-amber-300 flex items-center gap-1.5">
+                          <span>Serial Number Mismatch Detected</span>
+                          <span className="px-1.5 py-0.2 rounded text-[10px] bg-amber-500/20 text-amber-300 border border-amber-500/40">MISMATCH</span>
+                        </div>
+                        <div className="text-[11px] text-amber-200/90 mt-0.5">
+                          Battery Serial (&ldquo;{batteryInfo.serialNumberBattery}&rdquo;) and Box Serial (&ldquo;{batteryInfo.serialNumberBox}&rdquo;) do not match.
+                        </div>
+                      </div>
+                    </div>
+                  )}
 
                   {/* Battery Input */}
                   <div>
@@ -807,7 +853,7 @@ export default function ChecklistPage() {
                   <div>
                     <div className="flex items-center justify-between mb-1">
                       <label className="text-xs font-semibold text-slate-400">
-                        Serial Number (Inveter) *
+                        Serial Number (Inverter) *
                       </label>
                       <button
                         type="button"
@@ -824,7 +870,11 @@ export default function ChecklistPage() {
                       value={inverterInfo.serialNumberInverter}
                       onChange={(e) => handleInverterSerialChange(e.target.value)}
                       placeholder="e.g. INV2410-983021"
-                      className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-teal-500 font-mono"
+                      className={`w-full bg-slate-950 rounded-lg px-3 py-2 text-xs text-white focus:outline-none font-mono transition-colors ${
+                        hasInverterSerialMismatch
+                          ? "border-2 border-amber-500 bg-amber-950/20 text-amber-200 focus:border-amber-400"
+                          : "border border-slate-700 focus:border-teal-500"
+                      }`}
                     />
                   </div>
 
@@ -838,9 +888,28 @@ export default function ChecklistPage() {
                       value={inverterInfo.serialNumberBox}
                       onChange={(e) => handleInverterBoxSerialChange(e.target.value)}
                       placeholder="e.g. BX-INV2410-983021"
-                      className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-teal-500 font-mono"
+                      className={`w-full bg-slate-950 rounded-lg px-3 py-2 text-xs text-white focus:outline-none font-mono transition-colors ${
+                        hasInverterSerialMismatch
+                          ? "border-2 border-amber-500 bg-amber-950/20 text-amber-200 focus:border-amber-400"
+                          : "border border-slate-700 focus:border-teal-500"
+                      }`}
                     />
                   </div>
+
+                  {hasInverterSerialMismatch && (
+                    <div className="md:col-span-2 lg:col-span-3 p-3 rounded-xl bg-amber-950/50 border-2 border-amber-500/80 text-amber-200 text-xs flex items-start gap-2.5 animate-in fade-in">
+                      <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+                      <div>
+                        <div className="font-bold text-amber-300 flex items-center gap-1.5">
+                          <span>Serial Number Mismatch Detected</span>
+                          <span className="px-1.5 py-0.2 rounded text-[10px] bg-amber-500/20 text-amber-300 border border-amber-500/40">MISMATCH</span>
+                        </div>
+                        <div className="text-[11px] text-amber-200/90 mt-0.5">
+                          Inverter Serial (&ldquo;{inverterInfo.serialNumberInverter}&rdquo;) and Box Serial (&ldquo;{inverterInfo.serialNumberBox}&rdquo;) do not match.
+                        </div>
+                      </div>
+                    </div>
+                  )}
 
                   {/* Battery System */}
                   <div>

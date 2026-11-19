@@ -216,6 +216,22 @@ export async function generateChecklistPdf(checklist: ProductChecklist): Promise
 
   if (checklist.type === "BATTERY") {
     const b = checklist.batteryInfo;
+    const hasBatteryMismatch = Boolean(
+      b?.serialNumberBattery &&
+      b?.serialNumberBox &&
+      b.serialNumberBattery.trim() !== b.serialNumberBox.trim()
+    );
+    const batSerialDisplay = b?.serialNumberBattery
+      ? hasBatteryMismatch
+        ? `${b.serialNumberBattery} [MISMATCH]`
+        : b.serialNumberBattery
+      : "N/A";
+    const boxSerialDisplay = b?.serialNumberBox
+      ? hasBatteryMismatch
+        ? `${b.serialNumberBox} [MISMATCH]`
+        : b.serialNumberBox
+      : "N/A";
+
     infoRows.push([
       "Product Category:",
       "Rechargeable Energy Storage (Battery)",
@@ -230,9 +246,9 @@ export async function generateChecklistPdf(checklist: ProductChecklist): Promise
     ]);
     infoRows.push([
       "Serial Number (Battery):",
-      b?.serialNumberBattery || b?.serialNumberBox || "N/A",
+      batSerialDisplay,
       "Serial Number (Box):",
-      b?.serialNumberBox || "N/A",
+      boxSerialDisplay,
     ]);
     infoRows.push([
       "Battery Input:",
@@ -242,6 +258,24 @@ export async function generateChecklistPdf(checklist: ProductChecklist): Promise
     ]);
   } else {
     const inv = checklist.inverterInfo;
+    const invSerial = inv?.serialNumberInverter || inv?.serialNumber || "";
+    const boxSerial = inv?.serialNumberBox || "";
+    const hasInverterMismatch = Boolean(
+      invSerial &&
+      boxSerial &&
+      invSerial.trim() !== boxSerial.trim()
+    );
+    const invSerialDisplay = invSerial
+      ? hasInverterMismatch
+        ? `${invSerial} [MISMATCH]`
+        : invSerial
+      : "N/A";
+    const boxSerialDisplay = boxSerial
+      ? hasInverterMismatch
+        ? `${boxSerial} [MISMATCH]`
+        : boxSerial
+      : "N/A";
+
     infoRows.push([
       "Product Category:",
       "Power Inverter / Hybrid Controller",
@@ -256,9 +290,9 @@ export async function generateChecklistPdf(checklist: ProductChecklist): Promise
     ]);
     infoRows.push([
       "Serial Number (Inveter):",
-      inv?.serialNumberInverter || inv?.serialNumber || "N/A",
+      invSerialDisplay,
       "Serial Number (Box):",
-      inv?.serialNumberBox || "N/A",
+      boxSerialDisplay,
     ]);
     infoRows.push([
       "Physical Damage Assessment:",
@@ -284,6 +318,13 @@ export async function generateChecklistPdf(checklist: ProductChecklist): Promise
       1: { cellWidth: 53 },
       2: { fontStyle: "bold", cellWidth: 42, fillColor: [LK_BG_LIGHT[0], LK_BG_LIGHT[1], LK_BG_LIGHT[2]], textColor: [LK_MUTED[0], LK_MUTED[1], LK_MUTED[2]] },
       3: { cellWidth: 53 },
+    },
+    didParseCell: (dataHook) => {
+      const text = String(dataHook.cell.raw || "");
+      if (text.includes("[MISMATCH]")) {
+        dataHook.cell.styles.textColor = [220, 38, 38];
+        dataHook.cell.styles.fontStyle = "bold";
+      }
     },
     body: infoRows.map((row) => {
       if (!row[2] && !row[3]) {
