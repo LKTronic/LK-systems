@@ -2108,7 +2108,10 @@ async function generateUniQuotationPdf(
     prefix: string,
     highlight: string,
     suffix: string,
-    startY: number
+    startY: number,
+    options?: {
+      mode?: "bold" | "yellow";
+    }
   ): number => {
     let y = startY;
     doc.setFont("times", "bold");
@@ -2119,55 +2122,89 @@ async function generateUniQuotationPdf(
 
     const leftX = 25.4;
     const maxW = 159.2;
-    const lineHeight = 4.0;
+    const lineHeight = 4.2;
     doc.setFontSize(9.2);
+
+    const mode = options?.mode || "bold";
+    const isYellowMode = mode === "yellow";
 
     const fullText = prefix + highlight + suffix;
     const hStart = prefix.length;
     const hEnd = prefix.length + highlight.length;
 
-    type Word = { text: string; isBold: boolean };
-    const words: Word[] = [];
-    const regex = /\S+/g;
+    type Token = { text: string; isTarget: boolean };
+    const tokens: Token[] = [];
+    const regex = isYellowMode ? /[()"]|[^\s()"]+/g : /\S+/g;
     let match;
     while ((match = regex.exec(fullText)) !== null) {
-      const wordStart = match.index;
-      const wordEnd = match.index + match[0].length;
-      const overlaps = Math.max(wordStart, hStart) < Math.min(wordEnd, hEnd);
-      words.push({ text: match[0], isBold: overlaps });
+      const wStart = match.index;
+      const wEnd = match.index + match[0].length;
+      const overlaps = Math.max(wStart, hStart) < Math.min(wEnd, hEnd);
+      tokens.push({ text: match[0], isTarget: overlaps });
     }
 
-    let lineWords: Word[] = [];
+    let lineTokens: Token[] = [];
     let lineW = 0;
 
+    const getSpaceBefore = (curr: Token, prev: Token | null): number => {
+      if (!prev) return 0;
+      if (isYellowMode) {
+        if (prev.text === "(") return 0;
+        if (curr.text === ")") return 0;
+      }
+      doc.setFont("times", "normal");
+      return doc.getTextWidth(" ");
+    };
+
     const flush = () => {
-      if (lineWords.length === 0) return;
+      if (lineTokens.length === 0) return;
       let curX = leftX;
-      lineWords.forEach((w, idx) => {
-        doc.setFont("times", w.isBold ? "bold" : "normal");
-        doc.text(w.text, curX, y);
-        curX += doc.getTextWidth(w.text);
-        if (idx < lineWords.length - 1) {
-          doc.setFont("times", "normal");
-          curX += doc.getTextWidth(" ");
+
+      lineTokens.forEach((tok, idx) => {
+        const prevTok = idx > 0 ? lineTokens[idx - 1] : null;
+        const spBefore = getSpaceBefore(tok, prevTok);
+        curX += spBefore;
+
+        const isBold = tok.isTarget && !isYellowMode;
+        const isYellow = tok.isTarget && isYellowMode;
+
+        doc.setFont("times", isBold ? "bold" : "normal");
+        const tokW = doc.getTextWidth(tok.text);
+
+        if (isYellow) {
+          const nextTok = idx < lineTokens.length - 1 ? lineTokens[idx + 1] : null;
+          const nextIsYellow = nextTok ? nextTok.isTarget : false;
+          const spAfter = nextIsYellow && nextTok ? getSpaceBefore(nextTok, tok) : 0;
+          doc.saveGraphicsState();
+          doc.setFillColor(255, 255, 0); // Yellow highlighter (#FFFF00)
+          doc.rect(curX - 0.2, y - 2.9, tokW + spAfter + 0.4, 3.8, "F");
+          doc.restoreGraphicsState();
         }
+
+        doc.setTextColor(0, 0, 0);
+        doc.text(tok.text, curX, y);
+        curX += tokW;
       });
+
       y += lineHeight;
-      lineWords = [];
+      lineTokens = [];
       lineW = 0;
     };
 
-    words.forEach((w) => {
-      doc.setFont("times", w.isBold ? "bold" : "normal");
-      const wWidth = doc.getTextWidth(w.text);
-      const spaceWidth = lineWords.length > 0 ? doc.getTextWidth(" ") : 0;
-      if (lineW + spaceWidth + wWidth > maxW && lineWords.length > 0) {
+    tokens.forEach((tok) => {
+      const isBold = tok.isTarget && !isYellowMode;
+      doc.setFont("times", isBold ? "bold" : "normal");
+      const tokW = doc.getTextWidth(tok.text);
+      const prevTok = lineTokens.length > 0 ? lineTokens[lineTokens.length - 1] : null;
+      const spBefore = getSpaceBefore(tok, prevTok);
+
+      if (lineW + spBefore + tokW > maxW && lineTokens.length > 0) {
         flush();
-        lineWords.push(w);
-        lineW = wWidth;
+        lineTokens.push(tok);
+        lineW = tokW;
       } else {
-        lineWords.push(w);
-        lineW += spaceWidth + wWidth;
+        lineTokens.push(tok);
+        lineW += spBefore + tokW;
       }
     });
 
@@ -2649,22 +2686,35 @@ async function generateUniQuotationPdf(
   doc.text(wrappedConf, 25.4, curY);
   curY += wrappedConf.length * 4.0 + 3.0;
 
-  // --- PAGE 3: PAYMENT TERMS, BANK DETAILS & AUTHORIZED BY ---
+  // --- PAGE 3: PAYMENT TERMS & BANK DETAILS ---
   doc.addPage("a4", "portrait");
   doc.setFont("times", "normal");
   drawLetterheadBackground();
   curY = 66.0;
 
+  let paymentHighlight = "80% Advance";
+  if (data.paymentMethod) {
+    const raw = data.paymentMethod.trim();
+    if (raw === "ADVANCE_PAYMENT" || raw.toLowerCase().includes("advance")) {
+      const pctMatch = raw.match(/\d+/);
+      const pct = pctMatch ? pctMatch[0] : (data.advancePercent || 80);
+      paymentHighlight = `${pct}% Advance`;
+    } else {
+      paymentHighlight = raw;
+    }
+  }
+
   curY = renderInlineHighlightedParagraph(
     "Payment Terms",
     "Payment shall be affected based on the agreed payment method (",
-    paymentMethodDisplay,
+    paymentHighlight,
     ") selected by the client and confirmed at the time of order. No processing or delivery will commence until the agreed payment terms are fulfilled.",
-    curY
+    curY,
+    { mode: "yellow" }
   );
   curY += 7.0;
 
-  // --- BANK DETAILS & AUTHORIZED BY STAMP SECTION ---
+  // --- BANK DETAILS ---
   doc.setFont("times", "bold");
   doc.setFontSize(11.5);
   doc.setTextColor(0, 0, 0);
@@ -2672,7 +2722,7 @@ async function generateUniQuotationPdf(
   curY += 5.0;
 
   const bankBoxY = curY;
-  const bankBoxW = 112.0;
+  const bankBoxW = 159.2;
   const bankBoxH = 32.0;
 
   doc.setDrawColor(0, 0, 0);
@@ -2716,37 +2766,14 @@ async function generateUniQuotationPdf(
     doc.setFont("times", "normal");
     doc.setFontSize(10.5);
     doc.setTextColor(0, 0, 0);
-    doc.text(r.label, 28.0, bRowY);
-    doc.text(r.val, 62.0, bRowY);
+    doc.text(r.label, 30.0, bRowY);
+    doc.text(r.val, 70.0, bRowY);
     bRowY += 6.5;
   });
 
-  // Stamp & Signature Line (Right side of Bank Box)
-  const stampX = 145.0;
-  if (assets.stamp) {
-    try {
-      doc.addImage(
-        assets.stamp,
-        "PNG",
-        stampX,
-        bankBoxY - 2.0,
-        36.0,
-        17.5,
-        undefined,
-        "FAST"
-      );
-    } catch {}
-  }
-
-  doc.setFont("times", "normal");
-  doc.setFontSize(10);
-  doc.setTextColor(0, 0, 0);
-  doc.text("…………………………………", stampX, bankBoxY + 22.0);
-  doc.text("Authorized by", stampX + 4.0, bankBoxY + 27.0);
-
-  // Appreciation Note
-  const appY = Math.min(bankBoxY + bankBoxH + 12.0, 268.0);
-  doc.setFont("times", "bold");
+  // Appreciation Note (moved to 3rd page bottom, right above letterhead footer)
+  const appY = 268.0;
+  doc.setFont("times", "bolditalic");
   doc.setFontSize(10.5);
   doc.setTextColor(0, 0, 0);
   doc.text(
