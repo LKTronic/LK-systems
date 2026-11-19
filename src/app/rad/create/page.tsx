@@ -1537,33 +1537,50 @@ function CreateRadQuotationContent() {
           </div>
         </div>
 
-        {/* Feedback Messages */}
-      {message && (
-        <div
-          className={`flex items-center gap-3 p-3.5 rounded-xl text-sm ${
-            message.type === "success"
-              ? "bg-emerald-950/40 border border-emerald-800 text-emerald-300"
-              : message.type === "info"
-              ? "bg-amber-950/50 border border-amber-800 text-amber-300"
-              : "bg-red-950/50 border border-red-800 text-red-300"
-          }`}
-        >
-          {message.type === "success" ? (
-            <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-400" />
-          ) : message.type === "info" ? (
-            <AlertCircle className="w-4 h-4 shrink-0 text-amber-400" />
-          ) : (
-            <AlertCircle className="w-4 h-4 shrink-0 text-red-400" />
-          )}
-          <span className="flex-1">{message.text}</span>
-          <button
-            onClick={() => setMessage(null)}
-            className="text-slate-400 hover:text-white"
-          >
-            ✕
-          </button>
-        </div>
-      )}
+        {/* Floating Save / Action Popup Notification (Fixed in Viewport) */}
+        {message && (
+          <div className="fixed top-6 right-6 z-[9999] max-w-md w-full sm:w-auto min-w-[340px] shadow-2xl animate-in fade-in slide-in-from-top-4 duration-200">
+            <div
+              className={`p-4 rounded-xl border flex items-start justify-between gap-3 shadow-2xl backdrop-blur-md ${
+                message.type === "success"
+                  ? "bg-emerald-950/95 border-emerald-500/80 text-emerald-200 shadow-emerald-950/50"
+                  : message.type === "info"
+                  ? "bg-amber-950/95 border-amber-500/80 text-amber-200 shadow-amber-950/50"
+                  : "bg-rose-950/95 border-rose-500/80 text-rose-200 shadow-rose-950/50"
+              }`}
+            >
+              <div className="flex items-start gap-2.5">
+                {message.type === "success" ? (
+                  <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0 mt-0.5" />
+                ) : message.type === "info" ? (
+                  <AlertCircle className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
+                ) : (
+                  <AlertCircle className="w-5 h-5 text-rose-400 shrink-0 mt-0.5" />
+                )}
+                <div>
+                  <div className="font-bold text-xs uppercase tracking-wider">
+                    {message.type === "success"
+                      ? "Quotation Saved"
+                      : message.type === "info"
+                      ? "Quotation Notice"
+                      : "Action Required"}
+                  </div>
+                  <div className="text-xs text-slate-200 mt-0.5 font-medium leading-relaxed">
+                    {message.text}
+                  </div>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setMessage(null)}
+                className="text-slate-400 hover:text-white p-1 rounded transition-colors -mr-1 -mt-1"
+                title="Dismiss"
+              >
+                ✕
+              </button>
+            </div>
+          </div>
+        )}
 
       {/* Main Form Body */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">

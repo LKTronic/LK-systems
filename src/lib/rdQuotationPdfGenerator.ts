@@ -2244,7 +2244,7 @@ async function generateUniQuotationPdf(
     completionY
   );
 
-  // --- TABLE 1: COMPONENTS UTILIZED IN THIS PROJECT (Max 4 items) ---
+  // --- TABLE 1: COMPONENTS UTILIZED IN THIS PROJECT ---
   const t1IntroY = completionY + 6.0;
   doc.setFont("times", "normal");
   doc.setFontSize(10.5);
