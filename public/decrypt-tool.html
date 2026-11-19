@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>LK Tronics PMS — Offline Backup Decryption Tool</title>
+  <style>
+    :root {
+      --bg: #090d16;
+      --card: #0f172a;
+      --border: #1e293b;
+      --text: #f8fafc;
+      --muted: #94a3b8;
+      --teal: #0d9488;
+      --teal-hover: #0f766e;
+      --amber: #f59e0b;
+      --danger: #ef4444;
+      --success: #10b981;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+    body {
+      background-color: var(--bg);
+      color: var(--text);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      padding: 24px;
+    }
+    .container {
+      background-color: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      max-width: 600px;
+      width: 100%;
+      padding: 32px;
+      box-shadow: 0 20px 40px rgba(0,0,0,0.5);
+    }
+    .header {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      margin-bottom: 24px;
+      padding-bottom: 20px;
+      border-bottom: 1px solid var(--border);
+    }
+    .logo-badge {
+      width: 48px;
+      height: 48px;
+      border-radius: 12px;
+      background: linear-gradient(135deg, #0d9488, #0f766e);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 24px;
+      font-weight: bold;
+      color: #fff;
+    }
+    h1 { font-size: 20px; font-weight: 700; color: #fff; }
+    p.subtitle { font-size: 13px; color: var(--muted); margin-top: 4px; }
+    .badge {
+      display: inline-block;
+      padding: 3px 8px;
+      border-radius: 6px;
+      font-size: 11px;
+      font-weight: 600;
+      background: rgba(245, 158, 11, 0.15);
+      color: var(--amber);
+      border: 1px solid rgba(245, 158, 11, 0.3);
+      margin-top: 8px;
+    }
+    .form-group { margin-bottom: 20px; }
+    label { display: block; font-size: 13px; font-weight: 600; color: #e2e8f0; margin-bottom: 8px; }
+    .file-drop {
+      border: 2px dashed var(--border);
+      border-radius: 12px;
+      padding: 24px;
+      text-align: center;
+      cursor: pointer;
+      transition: all 0.2s;
+      background: rgba(15, 23, 42, 0.5);
+    }
+    .file-drop:hover { border-color: var(--teal); background: rgba(13, 148, 136, 0.05); }
+    .file-drop input { display: none; }
+    .file-icon { font-size: 32px; margin-bottom: 8px; }
+    .file-name { font-size: 13px; font-weight: 600; color: var(--teal); margin-top: 6px; word-break: break-all; }
+    input[type="text"], input[type="password"] {
+      width: 100%;
+      padding: 12px 14px;
+      background-color: #090d16;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      color: #fff;
+      font-size: 14px;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+    input[type="text"]:focus, input[type="password"]:focus { border-color: var(--teal); }
+    .btn {
+      width: 100%;
+      padding: 14px;
+      border: none;
+      border-radius: 10px;
+      background: linear-gradient(135deg, var(--teal), var(--teal-hover));
+      color: #fff;
+      font-size: 15px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: opacity 0.2s;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+    }
+    .btn:hover { opacity: 0.9; }
+    .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+    .notice {
+      background: rgba(13, 148, 136, 0.1);
+      border: 1px solid rgba(13, 148, 136, 0.25);
+      border-radius: 8px;
+      padding: 12px 16px;
+      font-size: 12px;
+      color: #cbd5e1;
+      margin-top: 20px;
+      line-height: 1.5;
+    }
+    .status {
+      margin-top: 16px;
+      padding: 12px;
+      border-radius: 8px;
+      font-size: 13px;
+      display: none;
+      word-break: break-word;
+    }
+    .status.error { display: block; background: rgba(239, 68, 68, 0.15); border: 1px solid var(--danger); color: #fca5a5; }
+    .status.success { display: block; background: rgba(16, 185, 129, 0.15); border: 1px solid var(--success); color: #6ee7b7; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <div class="logo-badge">LK</div>
+      <div>
+        <h1>PMS Offline Decrypt Tool</h1>
+        <p class="subtitle">Emergency Database Recovery — Works 100% Offline</p>
+        <span class="badge">AES-256-GCM Military Grade</span>
+      </div>
+    </div>
+
+    <div class="form-group">
+      <label>1. Select Encrypted Backup (.enc file)</label>
+      <div class="file-drop" onclick="document.getElementById('fileInput').click()">
+        <div class="file-icon">&#128274;</div>
+        <div style="font-size: 13px; color: #94a3b8;">Click here to choose your <code>pms_backup_*.enc</code> file</div>
+        <div id="fileName" class="file-name"></div>
+        <input type="file" id="fileInput" accept=".enc" onchange="handleFileSelect(event)">
+      </div>
+    </div>
+
+    <div class="form-group">
+      <label>2. Enter Backup Decryption Key</label>
+      <input type="password" id="passInput" placeholder="Enter BACKUP_ENCRYPTION_KEY or AUTH_SECRET key">
+      <div style="font-size: 11px; color: #64748b; margin-top: 6px;">
+        Key from your <code>.env</code> file (or default PMS secret key).
+      </div>
+    </div>
+
+    <button id="decryptBtn" class="btn" onclick="decryptFile()">
+      <span>&#128275;</span> Decrypt &amp; Download JSON
+    </button>
+
+    <div id="statusBox" class="status"></div>
+
+    <div class="notice">
+      <strong>Offline Security Guarantee:</strong> This tool runs entirely in your local browser using the Web Crypto API. No data is sent over the internet. You can disconnect your Wi-Fi and this will still work.
+    </div>
+  </div>
+
+  <script>
+    let selectedFile = null;
+
+    function handleFileSelect(e) {
+      if (e.target.files && e.target.files[0]) {
+        selectedFile = e.target.files[0];
+        document.getElementById('fileName').innerText = 'Selected: ' + selectedFile.name + ' (' + (selectedFile.size / 1024).toFixed(1) + ' KB)';
+      }
+    }
+
+    async function decryptFile() {
+      const statusBox = document.getElementById('statusBox');
+      const pass = document.getElementById('passInput').value.trim();
+      const btn = document.getElementById('decryptBtn');
+
+      statusBox.className = 'status';
+      statusBox.style.display = 'none';
+
+      if (!selectedFile) {
+        statusBox.className = 'status error';
+        statusBox.innerText = 'Please select a .enc backup file first.';
+        return;
+      }
+      if (!pass) {
+        statusBox.className = 'status error';
+        statusBox.innerText = 'Please enter your secret decryption key.';
+        return;
+      }
+
+      btn.disabled = true;
+      btn.innerText = 'Decrypting...';
+
+      try {
+        const fileBuffer = await selectedFile.arrayBuffer();
+        const bytes = new Uint8Array(fileBuffer);
+
+        if (bytes.length < 8 + 16 + 12 + 16) {
+          throw new Error('File is too small to be a valid PMS backup.');
+        }
+
+        // Validate PMSENC01 magic header
+        const magicStr = new TextDecoder().decode(bytes.slice(0, 8));
+        if (magicStr !== 'PMSENC01') {
+          throw new Error('Invalid file format. Magic header does not match PMSENC01.');
+        }
+
+        const salt = bytes.slice(8, 24);
+        const iv = bytes.slice(24, 36);
+        const authTag = bytes.slice(36, 52);
+        const ciphertext = bytes.slice(52);
+
+        // Derive key with PBKDF2
+        const enc = new TextEncoder();
+        const baseKey = await window.crypto.subtle.importKey(
+          'raw',
+          enc.encode(pass),
+          { name: 'PBKDF2' },
+          false,
+          ['deriveKey']
+        );
+
+        const aesKey = await window.crypto.subtle.deriveKey(
+          {
+            name: 'PBKDF2',
+            salt: salt,
+            iterations: 100000,
+            hash: 'SHA-256'
+          },
+          baseKey,
+          { name: 'AES-GCM', length: 256 },
+          false,
+          ['decrypt']
+        );
+
+        // WebCrypto AES-GCM expects ciphertext + authTag combined
+        const combined = new Uint8Array(ciphertext.length + authTag.length);
+        combined.set(ciphertext);
+        combined.set(authTag, ciphertext.length);
+
+        const decryptedBuffer = await window.crypto.subtle.decrypt(
+          {
+            name: 'AES-GCM',
+            iv: iv,
+            tagLength: 128
+          },
+          aesKey,
+          combined
+        );
+
+        // Decompress GZIP
+        let decompressedText = '';
+        if (window.DecompressionStream) {
+          const ds = new DecompressionStream('gzip');
+          const writer = ds.writable.getWriter();
+          writer.write(decryptedBuffer);
+          writer.close();
+          const decompressedBuf = await new Response(ds.readable).arrayBuffer();
+          decompressedText = new TextDecoder().decode(decompressedBuf);
+        } else {
+          // Fallback if no DecompressionStream
+          decompressedText = new TextDecoder().decode(decryptedBuffer);
+        }
+
+        // Validate JSON
+        const parsed = JSON.parse(decompressedText);
+
+        // Download JSON
+        const blob = new Blob([JSON.stringify(parsed, null, 2)], { type: 'application/json' });
+        const downloadUrl = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = downloadUrl;
+        a.download = selectedFile.name.replace(/\.enc$/i, '') + '_decrypted.json';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(downloadUrl);
+
+        statusBox.className = 'status success';
+        statusBox.innerHTML = '&#10004; <strong>Success!</strong> Backup decrypted successfully and downloaded as JSON. Found ' + 
+          (parsed.meta?.counts?.products || parsed.recordCounts?.products || 'all') + ' products.';
+      } catch (err) {
+        console.error(err);
+        statusBox.className = 'status error';
+        statusBox.innerText = 'Decryption Failed: ' + (err.message || 'Incorrect passphrase or corrupted file.');
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = '<span>&#128275;</span> Decrypt &amp; Download JSON';
+      }
+    }
+  </script>
+</body>
+</html>

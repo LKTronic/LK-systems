@@ -48,6 +48,11 @@ import {
   ProductHandoverData,
 } from "../src/lib/handoverPdfGenerator";
 import { extractStorageLocation } from "../src/lib/formatters";
+import {
+  encryptBackupData,
+  decryptBackupData,
+  formatBytes,
+} from "../src/lib/backupEngine";
 import { productSchema } from "../src/lib/validations/product";
 import { createUserSchema, updateUserSchema } from "../src/lib/validations/user";
 import { scoreProductRelevance, getFuzzySuggestion } from "../src/lib/fuzzySearch";
@@ -1189,5 +1194,55 @@ describe("Unit Tests: Supply Excel Supplier Image Handling", () => {
 
     // After user modifies again: dirty
     assert.equal(modifiedAgain !== saved, true);
+  });
+
+  it("encrypts backup data with PMSENC01 header and decrypts back accurately", () => {
+    const mockData = {
+      app: "LK Tronics PMS",
+      recordCounts: { products: 1087, quotes: 19 },
+      items: [
+        { id: "p1", name: "Samkoon HMI", price: 25000 },
+        { id: "p2", name: "STM32 Development Board", price: 4500 },
+      ],
+    };
+    const jsonStr = JSON.stringify(mockData);
+    const secretKey = "Custom-LK-Secret-Key-2026-X";
+
+    const encryptedBuffer = encryptBackupData(jsonStr, secretKey);
+    assert.equal(encryptedBuffer.subarray(0, 8).toString("utf8"), "PMSENC01");
+    assert.equal(encryptedBuffer.length > 52, true);
+
+    const decrypted = decryptBackupData(encryptedBuffer, secretKey);
+    assert.deepEqual(decrypted, mockData);
+  });
+
+  it("fails backup decryption if incorrect encryption passphrase is provided", () => {
+    const jsonStr = JSON.stringify({ secret: "classified" });
+    const encryptedBuffer = encryptBackupData(jsonStr, "Correct-Key");
+
+    assert.throws(
+      () => decryptBackupData(encryptedBuffer, "Wrong-Key"),
+      /Decryption failed|Auth tag check failed/i
+    );
+  });
+
+  it("fails backup decryption if buffer is tampered or corrupted", () => {
+    const jsonStr = JSON.stringify({ secret: "data" });
+    const encryptedBuffer = encryptBackupData(jsonStr, "Key123");
+
+    // Tamper with ciphertext byte
+    encryptedBuffer[encryptedBuffer.length - 1] ^= 0xff;
+
+    assert.throws(
+      () => decryptBackupData(encryptedBuffer, "Key123"),
+      /Decryption failed|Auth tag check failed/i
+    );
+  });
+
+  it("formats storage bytes accurately for KB, MB, and GB", () => {
+    assert.equal(formatBytes(512), "0.5 KB");
+    assert.equal(formatBytes(1024), "1.0 KB");
+    assert.equal(formatBytes(5 * 1024 * 1024), "5.0 MB");
+    assert.equal(formatBytes(25 * 1024 * 1024 * 1024), "25.00 GB");
   });
 });
