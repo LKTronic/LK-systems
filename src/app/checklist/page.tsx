@@ -42,7 +42,6 @@ import {
   Sparkles,
   Lock,
   Unlock,
-  ArrowLeftRight,
 } from "lucide-react";
 
 export default function ChecklistPage() {
@@ -197,15 +196,6 @@ export default function ChecklistPage() {
     }));
   };
 
-  const handleSwapSerials = () => {
-    setBatteryInfo((prev) => ({
-      ...prev,
-      serialNumberBattery: prev.serialNumberBox,
-      serialNumberBox: prev.serialNumberBattery,
-    }));
-    showNotification("success", "Swapped Battery Serial and Box Serial numbers");
-  };
-
   const handleInverterSerialChange = (val: string) => {
     setInverterInfo((prev) => ({
       ...prev,
@@ -221,16 +211,6 @@ export default function ChecklistPage() {
       ...prev,
       serialNumberBox: val,
     }));
-  };
-
-  const handleSwapInverterSerials = () => {
-    setInverterInfo((prev) => ({
-      ...prev,
-      serialNumberInverter: prev.serialNumberBox,
-      serialNumberBox: prev.serialNumberInverter,
-      serialNumber: prev.serialNumberBox,
-    }));
-    showNotification("success", "Swapped Inverter Serial and Box Serial numbers");
   };
 
   // Toggle Test Checkbox
@@ -724,20 +704,9 @@ export default function ChecklistPage() {
 
                   {/* Serial Number (Box) - Shown first */}
                   <div>
-                    <div className="flex items-center justify-between mb-1">
-                      <label className="text-xs font-semibold text-slate-400">
-                        Serial Number (Box) *
-                      </label>
-                      <button
-                        type="button"
-                        onClick={handleSwapSerials}
-                        className="text-[10px] text-teal-400 hover:text-teal-300 flex items-center gap-1 transition-colors"
-                        title="Swap Box and Battery serial numbers"
-                      >
-                        <ArrowLeftRight className="w-3 h-3" />
-                        <span>Swap Serials</span>
-                      </button>
-                    </div>
+                    <label className="block text-xs font-semibold text-slate-400 mb-1">
+                      Serial Number (Box) *
+                    </label>
                     <input
                       type="text"
                       value={batteryInfo.serialNumberBox}
@@ -851,20 +820,9 @@ export default function ChecklistPage() {
 
                   {/* Serial Number (Box) - Shown first */}
                   <div>
-                    <div className="flex items-center justify-between mb-1">
-                      <label className="text-xs font-semibold text-slate-400">
-                        Serial Number (Box) *
-                      </label>
-                      <button
-                        type="button"
-                        onClick={handleSwapInverterSerials}
-                        className="text-[10px] text-teal-400 hover:text-teal-300 flex items-center gap-1 transition-colors"
-                        title="Swap Box and Inverter serial numbers"
-                      >
-                        <ArrowLeftRight className="w-3 h-3" />
-                        <span>Swap Serials</span>
-                      </button>
-                    </div>
+                    <label className="block text-xs font-semibold text-slate-400 mb-1">
+                      Serial Number (Box) *
+                    </label>
                     <input
                       type="text"
                       value={inverterInfo.serialNumberBox}
