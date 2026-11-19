@@ -16,6 +16,7 @@ import {
   FileText,
   FlaskConical,
   ClipboardCheck,
+  Database,
 } from "lucide-react";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { getEffectiveRole, clearOfflineAuthSession } from "@/lib/offlineAuth";
@@ -43,8 +44,14 @@ export function Sidebar() {
       : []),
   ];
 
+  const isSuperAdmin = role === "SUPERADMIN";
   const adminNavigation = isAdmin
-    ? [{ name: "User Management", href: "/users", icon: Users }]
+    ? [
+        { name: "User Management", href: "/users", icon: Users },
+        ...(isSuperAdmin
+          ? [{ name: "Storage & Backups", href: "/admin/storage", icon: Database }]
+          : []),
+      ]
     : [];
 
   return (
