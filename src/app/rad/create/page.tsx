@@ -149,7 +149,7 @@ function CreateRadQuotationContent() {
   const [expireDate, setExpireDate] = useState("");
   const [validityDays, setValidityDays] = useState<number | string>(5);
   const [paymentMethod, setPaymentMethod] = useState("ADVANCE_PAYMENT");
-  const [advancePercent, setAdvancePercent] = useState<number | string>(60);
+  const [advancePercent, setAdvancePercent] = useState<number | string>(80);
   const [preparedBy, setPreparedBy] = useState("");
   const [quotationTo, setQuotationTo] = useState("");
 
@@ -760,7 +760,7 @@ function CreateRadQuotationContent() {
       setLeadTime("10 business working days");
       setUniCompletionTime("10 business working days");
       setWarranty("Warranty terms apply as per manufacturer specifications");
-      setPaymentMethod("80% advance payment");
+      setPaymentMethod("ADVANCE_PAYMENT");
       setAdvancePercent(80);
       setValidityDays(5);
       setProjectTitle("Cartridge Lighting System");
@@ -1096,14 +1096,21 @@ function CreateRadQuotationContent() {
             discount: Number(discount) || 0,
             validityDays: Number(validityDays) || 5,
             warrantyText: warranty || null,
-            paymentTermsText: paymentMethod || "80% advance payment",
+            paymentTermsText:
+              paymentMethod === "ADVANCE_PAYMENT"
+                ? `${advancePercent || 80}% advance payment`
+                : paymentMethod === "FULL_PAYMENT"
+                ? "100% payment"
+                : "Corporate Credit",
+            advancePercent:
+              paymentMethod === "ADVANCE_PAYMENT" ? Number(advancePercent) || 80 : null,
             itemImages: items.map((it) => it.image || null),
             bankDetails: activeBank,
             bankAccountId: activeBank?.id,
           }
         : {
             systemDesignImages,
-            advancePercent: Number(advancePercent) || 60,
+            advancePercent: Number(advancePercent) || 80,
             overviewFontSize: Number(overviewFontSize) || 22.0,
             termsFontSize: Number(termsFontSize) || 22.0,
             commercialNote: commercialNote.trim() || null,
@@ -1125,7 +1132,7 @@ function CreateRadQuotationContent() {
       validityDays: Number(validityDays) || 5,
       paymentMethod,
       advancePercent:
-        paymentMethod === "ADVANCE_PAYMENT" ? Number(advancePercent) || 60 : null,
+        paymentMethod === "ADVANCE_PAYMENT" ? Number(advancePercent) || 80 : null,
       preparedBy,
       quotationTo,
       leadTime:
@@ -1204,9 +1211,34 @@ function CreateRadQuotationContent() {
     } else if (preparedDate && new Date(expireDate) < new Date(preparedDate)) {
       missing["expireDate"] = "Quotation Expire Date (must be on or after Prepared Date)";
     }
+
+    // Settlement Bank Account
+    if (!selectedBankAccountId || !selectedBankAccountId.trim()) {
+      missing["bankAccount"] = "Settlement Bank Account is required";
+    }
+
+    // Payment Method & Advance Percentage
+    if (!paymentMethod || !paymentMethod.trim()) {
+      missing["paymentMethod"] = "Payment Method is required";
+    } else if (paymentMethod === "ADVANCE_PAYMENT") {
+      const pct = Number(advancePercent);
+      if (isNaN(pct) || pct <= 0 || pct > 100) {
+        missing["advancePercent"] = "Advance Payment Percentage must be between 1% and 100%";
+      }
+    }
+
     if (quotationType === "PROJECT_PROPOSAL" || quotationType === "UNI_QUOTATION") {
       if (!projectTitle.trim()) {
         missing["projectTitle"] = "Project Proposal Title";
+      }
+    }
+
+    if (quotationType === "UNI_QUOTATION") {
+      if (!(uniCompletionTime || leadTime).trim()) {
+        missing["uniCompletionTime"] = "Estimated Project Completion Time is required";
+      }
+      if (items.length > 4) {
+        missing["items"] = "University Quotation can have at most 4 items";
       }
     }
     if (items.length === 0) {
@@ -1768,41 +1800,198 @@ function CreateRadQuotationContent() {
                 )}
               </div>
 
-              {/* Settlement Bank Account Selector */}
-              <div className="sm:col-span-2 lg:col-span-5 bg-slate-950/80 border border-slate-800 rounded-xl p-3.5 space-y-2.5">
-                <div className="flex items-center justify-between">
-                  <label className="text-xs font-semibold text-slate-300 flex items-center gap-1.5">
-                    <Landmark className="w-4 h-4 text-teal-400" />
-                    <span>Settlement Bank Account * (Printed on Document &amp; Bank Details)</span>
-                  </label>
-                  <button
-                    type="button"
-                    onClick={() => setShowBankModal(true)}
-                    className="text-xs text-teal-400 hover:text-teal-300 font-medium flex items-center gap-1 transition-colors"
-                  >
-                    <span>+ Manage / Add Bank Account</span>
-                  </button>
-                </div>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-3 items-center">
-                  <div className="md:col-span-2">
-                    <select
-                      value={selectedBankAccountId}
-                      onChange={(e) => setSelectedBankAccountId(e.target.value)}
-                      className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-teal-500 cursor-pointer font-medium"
+              {/* Settlement Bank Account & Payment Method */}
+              <div
+                id="field-settlementAndPayment"
+                className={`sm:col-span-2 lg:col-span-5 bg-slate-950/80 rounded-xl p-4 space-y-4 border transition-colors ${
+                  unfilledFields["bankAccount"] || unfilledFields["paymentMethod"] || unfilledFields["advancePercent"]
+                    ? "border-amber-500/80 bg-amber-950/10"
+                    : "border-slate-800"
+                }`}
+              >
+                {/* Settlement Bank Account */}
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-semibold text-slate-300 flex items-center gap-1.5">
+                      <Landmark className="w-4 h-4 text-teal-400" />
+                      <span>Settlement Bank Account * (Printed on Document &amp; Bank Details)</span>
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => setShowBankModal(true)}
+                      className="text-xs text-teal-400 hover:text-teal-300 font-medium flex items-center gap-1 transition-colors"
                     >
-                      {bankAccounts.map((acc) => (
-                        <option key={acc.id} value={acc.id} className="bg-slate-900 text-white">
-                          {acc.bankName} - {acc.accountNumber} ({acc.branch}){acc.isDefault ? " [DEFAULT]" : ""}
-                        </option>
-                      ))}
-                    </select>
+                      <span>+ Manage / Add Bank Account</span>
+                    </button>
                   </div>
-                  {bankAccounts.find((b) => b.id === selectedBankAccountId) && (
-                    <div className="text-[11px] text-slate-400 bg-slate-900/60 p-2 rounded-lg border border-slate-800/80 leading-snug">
-                      <span className="text-slate-300 font-medium">Beneficiary:</span>{" "}
-                      {bankAccounts.find((b) => b.id === selectedBankAccountId)?.accountName}
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3 items-center">
+                    <div className="md:col-span-2">
+                      <select
+                        id="field-bankAccount"
+                        value={selectedBankAccountId}
+                        onChange={(e) => {
+                          setSelectedBankAccountId(e.target.value);
+                          if (e.target.value) clearFieldError("bankAccount");
+                        }}
+                        className={`w-full rounded-lg px-3 py-2 text-xs font-medium focus:outline-none cursor-pointer transition-colors ${
+                          unfilledFields["bankAccount"]
+                            ? "border-2 border-red-500 bg-red-950/30 text-white"
+                            : "bg-slate-900 border border-slate-700 text-white focus:border-teal-500"
+                        }`}
+                      >
+                        <option value="" disabled className="bg-slate-900 text-slate-400">
+                          -- Select Settlement Bank Account --
+                        </option>
+                        {bankAccounts.map((acc) => (
+                          <option key={acc.id} value={acc.id} className="bg-slate-900 text-white">
+                            {acc.bankName} - {acc.accountNumber} ({acc.branch}){acc.isDefault ? " [DEFAULT]" : ""}
+                          </option>
+                        ))}
+                      </select>
+                      {unfilledFields["bankAccount"] && (
+                        <p className="text-[11px] text-red-400 font-medium mt-1 flex items-center gap-1">
+                          <AlertCircle className="w-3 h-3 text-red-400 shrink-0" />
+                          <span>{unfilledFields["bankAccount"]}</span>
+                        </p>
+                      )}
                     </div>
-                  )}
+                    {bankAccounts.find((b) => b.id === selectedBankAccountId) && (
+                      <div className="text-[11px] text-slate-400 bg-slate-900/60 p-2 rounded-lg border border-slate-800/80 leading-snug">
+                        <span className="text-slate-300 font-medium">Beneficiary:</span>{" "}
+                        {bankAccounts.find((b) => b.id === selectedBankAccountId)?.accountName}
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Payment Method & Advance Percentage */}
+                <div className="border-t border-slate-800/80 pt-3">
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-start">
+                    {/* Payment Method Selector */}
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-300 mb-1 flex items-center gap-1.5">
+                        <CreditCard className="w-3.5 h-3.5 text-teal-400" />
+                        Payment Method *
+                      </label>
+                      <select
+                        id="field-paymentMethod"
+                        value={paymentMethod}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setPaymentMethod(val);
+                          clearFieldError("paymentMethod");
+                          if (val === "ADVANCE_PAYMENT" && !advancePercent) {
+                            setAdvancePercent(80);
+                          }
+                        }}
+                        className={`w-full rounded-lg px-3 py-2 text-xs font-medium focus:outline-none transition-colors ${
+                          unfilledFields["paymentMethod"]
+                            ? "border-2 border-red-500 bg-red-950/30 text-white"
+                            : "bg-slate-900 border border-slate-700 text-white focus:border-teal-500"
+                        }`}
+                      >
+                        <option value="ADVANCE_PAYMENT">Advance Payment + Balance</option>
+                        <option value="FULL_PAYMENT">100% Full Payment</option>
+                        <option value="CREDIT">Corporate Credit</option>
+                      </select>
+                      {unfilledFields["paymentMethod"] && (
+                        <p className="text-[11px] text-red-400 font-medium mt-1 flex items-center gap-1">
+                          <AlertCircle className="w-3 h-3 text-red-400 shrink-0" />
+                          <span>{unfilledFields["paymentMethod"]}</span>
+                        </p>
+                      )}
+                    </div>
+
+                    {/* Advance Payment Percentage Input (shown when ADVANCE_PAYMENT) */}
+                    {paymentMethod === "ADVANCE_PAYMENT" ? (
+                      <div className="md:col-span-2 bg-slate-900/60 p-3 rounded-lg border border-slate-800 space-y-2">
+                        <div className="flex items-center justify-between">
+                          <label className="text-xs font-semibold text-slate-300 flex items-center gap-1.5">
+                            <Percent className="w-3.5 h-3.5 text-teal-400" />
+                            Advance Payment Percentage *
+                          </label>
+                          <div className="flex items-center gap-1.5">
+                            {[50, 60, 70, 80, 90].map((pct) => (
+                              <button
+                                key={pct}
+                                type="button"
+                                onClick={() => {
+                                  setAdvancePercent(pct);
+                                  clearFieldError("advancePercent");
+                                }}
+                                className={`px-2 py-0.5 rounded text-[10px] font-semibold transition-colors ${
+                                  Number(advancePercent) === pct
+                                    ? "bg-teal-500 text-slate-950"
+                                    : "bg-slate-800 text-slate-300 hover:bg-slate-700"
+                                }`}
+                              >
+                                {pct}%
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 items-center">
+                          <div className="relative">
+                            <input
+                              id="field-advancePercent"
+                              type="number"
+                              min="1"
+                              max="99"
+                              step="1"
+                              value={advancePercent}
+                              onChange={(e) => {
+                                const val = e.target.value;
+                                setAdvancePercent(val);
+                                if (val && Number(val) > 0 && Number(val) <= 100) {
+                                  clearFieldError("advancePercent");
+                                }
+                              }}
+                              placeholder="80"
+                              className={`w-full rounded-lg pl-3 pr-8 py-2 text-xs font-mono font-bold focus:outline-none transition-colors ${
+                                unfilledFields["advancePercent"]
+                                  ? "border-2 border-red-500 bg-red-950/30 text-white"
+                                  : "bg-slate-950 border border-slate-700 text-teal-400 focus:border-teal-500"
+                              }`}
+                            />
+                            <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-slate-400 font-bold">
+                              %
+                            </span>
+                          </div>
+
+                          <div className="text-[11px] font-mono text-slate-300 bg-slate-950/80 px-2.5 py-1.5 rounded border border-slate-800">
+                            <div>
+                              Advance:{" "}
+                              <strong className="text-teal-400 font-bold">
+                                {advancePercent || 80}%
+                              </strong>{" "}
+                              ({formatLKR((totalAmount * (Number(advancePercent) || 80)) / 100)})
+                            </div>
+                            <div className="text-slate-400 text-[10px]">
+                              Balance:{" "}
+                              <span>
+                                {100 - (Number(advancePercent) || 80)}%
+                              </span>{" "}
+                              ({formatLKR(totalAmount - (totalAmount * (Number(advancePercent) || 80)) / 100)})
+                            </div>
+                          </div>
+                        </div>
+
+                        {unfilledFields["advancePercent"] && (
+                          <p className="text-[11px] text-red-400 font-medium flex items-center gap-1">
+                            <AlertCircle className="w-3 h-3 text-red-400 shrink-0" />
+                            <span>{unfilledFields["advancePercent"]}</span>
+                          </p>
+                        )}
+                      </div>
+                    ) : (
+                      <div className="md:col-span-2 text-xs text-slate-400 flex items-center bg-slate-900/40 p-3 rounded-lg border border-slate-800/60">
+                        {paymentMethod === "FULL_PAYMENT"
+                          ? "Client settles 100% full invoice amount upon order / document sign-off."
+                          : "Official corporate credit terms apply with deferred settlement invoice."}
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
             </div>
@@ -1871,15 +2060,27 @@ function CreateRadQuotationContent() {
                       Estimated Project Completion Time *
                     </label>
                     <input
+                      id="field-uniCompletionTime"
                       type="text"
                       value={uniCompletionTime}
                       onChange={(e) => {
                         setUniCompletionTime(e.target.value);
                         setLeadTime(e.target.value);
+                        if (e.target.value.trim()) clearFieldError("uniCompletionTime");
                       }}
                       placeholder="e.g. 10 business working days"
-                      className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-blue-500"
+                      className={`w-full rounded-lg px-3 py-2 text-sm text-white focus:outline-none transition-colors ${
+                        unfilledFields["uniCompletionTime"]
+                          ? "border-2 border-red-500 ring-2 ring-red-500/50 bg-red-950/30 text-white placeholder-red-300/60"
+                          : "bg-slate-950 border border-slate-700 focus:border-blue-500"
+                      }`}
                     />
+                    {unfilledFields["uniCompletionTime"] && (
+                      <p className="text-[11px] text-red-400 font-medium mt-1 flex items-center gap-1">
+                        <AlertCircle className="w-3 h-3 text-red-400 shrink-0" />
+                        <span>Estimated Project Completion Time is required</span>
+                      </p>
+                    )}
                   </div>
                 </div>
               </div>
@@ -2072,32 +2273,15 @@ function CreateRadQuotationContent() {
             )}
           </div>
 
-          {/* Payment Method, Lead Time & Warranty (Below Slide 2, Above Slide 3) */}
+          {/* Estimated Lead Time & Warranty (Below Slide 2, Above Slide 3) */}
           {quotationType === "PROJECT_PROPOSAL" && (
             <div className="bg-slate-900/80 border border-slate-800 rounded-xl p-5 shadow-sm space-y-4">
               <h2 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2 border-b border-slate-800 pb-3">
-                <CreditCard className="w-4 h-4 text-teal-400" />
-                Payment Method, Estimated Lead Time &amp; Warranty
+                <Clock className="w-4 h-4 text-teal-400" />
+                Estimated Lead Time &amp; Warranty
               </h2>
 
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                {/* Payment Method */}
-                <div>
-                  <label className="block text-xs font-semibold text-slate-300 mb-1 flex items-center gap-1.5">
-                    <CreditCard className="w-3.5 h-3.5 text-teal-400" />
-                    Payment Method *
-                  </label>
-                  <select
-                    value={paymentMethod}
-                    onChange={(e) => setPaymentMethod(e.target.value)}
-                    className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-teal-500"
-                  >
-                    <option value="ADVANCE_PAYMENT">Advance Payment + Balance</option>
-                    <option value="FULL_PAYMENT">100% Full Payment</option>
-                    <option value="CREDIT">Corporate Credit</option>
-                  </select>
-                </div>
-
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 {/* Estimated Lead Time */}
                 <div>
                   <label className="block text-xs font-semibold text-slate-300 mb-1 flex items-center gap-1.5">
@@ -2128,40 +2312,6 @@ function CreateRadQuotationContent() {
                   />
                 </div>
               </div>
-
-              {/* Advance Payment Slider */}
-              {paymentMethod === "ADVANCE_PAYMENT" && (
-                <div className="bg-slate-950/60 p-3.5 rounded-lg border border-slate-800/80 space-y-2 mt-2">
-                  <div className="flex justify-between text-xs text-slate-400">
-                    <span>Advance Payment Split:</span>
-                    <span className="font-mono text-teal-400 font-bold">
-                      {advancePercent}% Advance / {100 - (Number(advancePercent) || 60)}% Balance
-                    </span>
-                  </div>
-                  <input
-                    type="range"
-                    min="10"
-                    max="90"
-                    step="5"
-                    value={advancePercent}
-                    onChange={(e) => setAdvancePercent(e.target.value)}
-                    className="w-full accent-teal-500 cursor-pointer"
-                  />
-                  <div className="flex justify-between text-xs font-mono text-slate-300">
-                    <span>
-                      Advance ({advancePercent}%):{" "}
-                      <strong className="text-teal-400">{formatLKR((totalAmount * (Number(advancePercent) || 60)) / 100)}</strong>
-                    </span>
-                    <span>
-                      Balance ({100 - (Number(advancePercent) || 60)}%):{" "}
-                      <strong className="text-slate-200">{formatLKR(totalAmount - (totalAmount * (Number(advancePercent) || 60)) / 100)}</strong>
-                    </span>
-                  </div>
-                  <p className="text-[10px] text-slate-500">
-                    Rendered on Slide 4 as: &ldquo;Payment Terms: {advancePercent}% Advance Payment / {100 - (Number(advancePercent) || 60)}% Upon Completion&rdquo;
-                  </p>
-                </div>
-              )}
             </div>
           )}
 
@@ -3887,13 +4037,13 @@ function CreateRadQuotationContent() {
               )}
 
               {/* Payment Split & Delivery Badges */}
-              {quotationType === "PROJECT_PROPOSAL" ? (
+              {quotationType === "PROJECT_PROPOSAL" || quotationType === "UNI_QUOTATION" ? (
                 <div className="space-y-2 bg-slate-950/40 p-3 rounded-lg border border-slate-800/60 text-xs">
                   <div className="flex justify-between items-center text-slate-400">
                     <span>Payment Terms:</span>
                     <span className="text-slate-200 font-semibold">
                       {paymentMethod === "ADVANCE_PAYMENT"
-                        ? `${advancePercent}% Advance / ${100 - (Number(advancePercent) || 60)}% Balance`
+                        ? `${advancePercent || 80}% Advance / ${100 - (Number(advancePercent) || 80)}% Balance`
                         : paymentMethod === "FULL_PAYMENT"
                         ? "100% Full Payment"
                         : "Corporate Credit"}
@@ -3902,22 +4052,22 @@ function CreateRadQuotationContent() {
                   {paymentMethod === "ADVANCE_PAYMENT" && (
                     <>
                       <div className="flex justify-between items-center text-[11px] text-teal-400/90 font-mono">
-                        <span>Advance Amount ({advancePercent}%):</span>
-                        <span className="font-bold">{formatLKR((totalAmount * (Number(advancePercent) || 60)) / 100)}</span>
+                        <span>Advance Amount ({advancePercent || 80}%):</span>
+                        <span className="font-bold">{formatLKR((totalAmount * (Number(advancePercent) || 80)) / 100)}</span>
                       </div>
                       <div className="flex justify-between items-center text-[11px] text-slate-400 font-mono">
                         <span>Balance on Completion:</span>
-                        <span className="font-bold">{formatLKR(totalAmount - (totalAmount * (Number(advancePercent) || 60)) / 100)}</span>
+                        <span className="font-bold">{formatLKR(totalAmount - (totalAmount * (Number(advancePercent) || 80)) / 100)}</span>
                       </div>
                     </>
                   )}
                   <div className="border-t border-slate-800/80 pt-2 flex justify-between items-center text-slate-400">
-                    <span>Lead Time:</span>
-                    <span className="text-slate-200 font-medium">{leadTime || "10 Working Days"}</span>
+                    <span>{quotationType === "UNI_QUOTATION" ? "Completion Time:" : "Lead Time:"}</span>
+                    <span className="text-slate-200 font-medium">{uniCompletionTime || leadTime || "10 business working days"}</span>
                   </div>
                   <div className="flex justify-between items-center text-slate-400">
                     <span>Warranty:</span>
-                    <span className="text-slate-200 font-medium">{warranty || "1 Year"}</span>
+                    <span className="text-slate-200 font-medium">{warranty || "As per manufacturer"}</span>
                   </div>
                 </div>
               ) : (

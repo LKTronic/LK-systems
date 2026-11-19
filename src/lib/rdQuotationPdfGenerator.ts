@@ -2153,8 +2153,8 @@ async function generateUniQuotationPdf(
   drawLetterheadBackground();
 
   // --- TOP RIGHT: METADATA BOX ---
-  const metaBoxW = 74.0;
-  const metaBoxX = 184.6 - metaBoxW; // 110.6mm
+  const metaBoxW = 75.0;
+  const metaBoxX = 184.6 - metaBoxW; // 109.6mm
   const metaBoxY = 62.0;
   const metaBoxH = 26.5;
 
@@ -2171,19 +2171,28 @@ async function generateUniQuotationPdf(
     paymentMethodDisplay === "100% payment"
   ) {
     paymentMethodDisplay = "100% payment";
+  } else if (paymentMethodDisplay === "CREDIT") {
+    paymentMethodDisplay = "Corporate Credit";
   }
 
+  const prepDateDisplay = data.preparedDate ? String(data.preparedDate).replace(/-/g, "/") : "";
+  const expDateDisplay = data.expireDate ? String(data.expireDate).replace(/-/g, "/") : "";
+  const preparedByClean = (data.preparedBy || "LK TRONICS").trim();
+  const preparedByDisplay =
+    preparedByClean.startsWith("[") && preparedByClean.endsWith("]")
+      ? preparedByClean
+      : `[${preparedByClean}]`;
+
   const metaRows = [
-    { label: "Quotation No", val: data.quotationNo },
-    { label: "Quotation Prepared Date", val: data.preparedDate },
-    { label: "Quotation Expire Date", val: data.expireDate },
-    { label: "Payment Method", val: paymentMethodDisplay },
-    { label: "Prepared by", val: `[${data.preparedBy || "LK TRONICS"}]` },
+    { label: "Quotation No:", val: data.quotationNo },
+    { label: "Quotation Prepared Date:", val: prepDateDisplay },
+    { label: "Quotation Expire Date:", val: expDateDisplay },
+    { label: "Payment Method:", val: paymentMethodDisplay },
+    { label: "Prepared by:", val: preparedByDisplay },
   ];
 
   const labelX = metaBoxX + 2.5;
-  const colonX = metaBoxX + 38.0;
-  const valX = colonX + 2.0;
+  const valX = metaBoxX + 41.5;
 
   let currentMetaY = metaBoxY + 4.6;
   metaRows.forEach((r) => {
@@ -2191,7 +2200,6 @@ async function generateUniQuotationPdf(
     doc.setFontSize(9.5);
     doc.setTextColor(0, 0, 0);
     doc.text(r.label, labelX, currentMetaY);
-    doc.text(":", colonX, currentMetaY);
     doc.text(String(r.val), valX, currentMetaY);
     currentMetaY += 4.5;
   });
@@ -2320,8 +2328,10 @@ async function generateUniQuotationPdf(
         }
       }
     },
-    willDrawPage: () => {
-      drawLetterheadBackground();
+    willDrawPage: (hook) => {
+      if (hook.pageNumber > 1) {
+        drawLetterheadBackground();
+      }
     },
   });
 
@@ -2452,8 +2462,10 @@ async function generateUniQuotationPdf(
         doc.line(cell.x + 3.0, lineY, cell.x + cell.width - 2.0, lineY);
       }
     },
-    willDrawPage: () => {
-      drawLetterheadBackground();
+    willDrawPage: (hook) => {
+      if (hook.pageNumber > 1) {
+        drawLetterheadBackground();
+      }
     },
   });
 

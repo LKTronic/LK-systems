@@ -148,7 +148,7 @@ export default function ChecklistPage() {
   const fetchHistory = async () => {
     setIsLoadingHistory(true);
     try {
-      const res = await fetch("/api/checklists");
+      const res = await fetch("/api/checklists", { cache: "no-store" });
       if (res.ok) {
         const d = await res.json();
         setSavedChecklists(d.checklists || []);

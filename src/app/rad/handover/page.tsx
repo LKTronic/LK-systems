@@ -93,7 +93,7 @@ export default function ProductHandoverPage() {
   const fetchHandovers = async () => {
     setIsLoadingHistory(true);
     try {
-      const res = await fetch("/api/handovers");
+      const res = await fetch("/api/handovers", { cache: "no-store" });
       if (res.ok) {
         const d = await res.json();
         setSavedHandovers(d.handovers || []);
