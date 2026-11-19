@@ -1409,52 +1409,52 @@ async function generateProjectProposalPdf(
   // --- 1. HARDWARE SECTION (Left Side - Max 4 items) ---
   // Header Badge (Prominent bold heading)
   doc.setFillColor(LK_TEAL[0], LK_TEAL[1], LK_TEAL[2]);
-  doc.roundedRect(36.0, 34.0, 138.0, 11.5, 2.0, 2.0, "F");
+  doc.roundedRect(36.0, 34.0, 142.0, 12.0, 2.0, 2.0, "F");
   doc.setFont("helvetica", "bold");
-  doc.setFontSize(15.5);
+  doc.setFontSize(16.0);
   doc.setTextColor(255, 255, 255);
-  doc.text("1. HARDWARE COMPONENTS (BOM)", 41.0, 42.0);
+  doc.text("1. HARDWARE COMPONENTS (BOM)", 41.0, 42.2);
 
-  // Hardware items (Non-bold normal text, 14.5pt, clean and well-proportioned)
-  let hwY = hwItems.length <= 2 ? 58.0 : hwItems.length === 3 ? 55.0 : 53.5;
-  const hwStep = hwItems.length <= 2 ? 15.0 : hwItems.length === 3 ? 13.0 : 11.0;
+  // Hardware items (Non-bold normal text, increased 18pt font)
+  let hwY = hwItems.length <= 2 ? 59.0 : hwItems.length === 3 ? 56.0 : 53.5;
+  const hwStep = hwItems.length <= 2 ? 16.0 : hwItems.length === 3 ? 13.5 : 11.5;
   hwItems.forEach((it) => {
     const name = it.productOrService;
     const qtyStr = `x ${it.quantity}`;
 
-    // Bullet in Black (Normal weight)
+    // Bullet in Black (Normal weight, 18.5pt)
     doc.setFont("helvetica", "normal");
-    doc.setFontSize(16.0);
+    doc.setFontSize(18.5);
     doc.setTextColor(0, 0, 0);
     doc.text("•", 38.0, hwY);
 
-    // Quantity right-aligned in Black (Normal weight)
+    // Quantity right-aligned in Black (Normal weight, 18.0pt)
     doc.setFont("helvetica", "normal");
-    doc.setFontSize(14.5);
+    doc.setFontSize(18.0);
     doc.setTextColor(0, 0, 0);
     doc.text(qtyStr, 246.0, hwY, { align: "right" });
 
-    // Item name in Black (Normal font weight, 14.5pt)
+    // Item name in Black (Normal font weight, 18.0pt)
     const qtyW = doc.getTextWidth(qtyStr);
     const maxNameW = (246.0 - qtyW - 5.0) - 44.0;
     doc.setTextColor(0, 0, 0);
-    let nameFontSize = 14.5;
+    let nameFontSize = 18.0;
     doc.setFontSize(nameFontSize);
 
     if (doc.getTextWidth(name) > maxNameW) {
-      doc.setFontSize(13.5);
+      doc.setFontSize(16.0);
       if (doc.getTextWidth(name) > maxNameW) {
-        doc.setFontSize(12.5);
+        doc.setFontSize(14.5);
       }
       nameFontSize = doc.getFontSize();
     }
 
     const lines = doc.splitTextToSize(name, maxNameW);
     if (lines.length > 1) {
-      doc.setFontSize(nameFontSize * 0.92);
+      doc.setFontSize(nameFontSize * 0.90);
       doc.text(lines[0], 44.0, hwY - 2.0);
-      doc.text(lines[1], 44.0, hwY + 3.0);
-      hwY += hwStep + 2.0;
+      doc.text(lines[1], 44.0, hwY + 3.5);
+      hwY += hwStep + 2.5;
     } else {
       doc.text(lines[0], 44.0, hwY);
       hwY += hwStep;
@@ -1475,43 +1475,43 @@ async function generateProjectProposalPdf(
   doc.setFillColor(LK_TEAL[0], LK_TEAL[1], LK_TEAL[2]);
   doc.roundedRect(136.0, hwPillY, 112.0, 13.5, 2.5, 2.5, "F");
   doc.setFont("helvetica", "bold");
-  doc.setFontSize(20.5);
+  doc.setFontSize(22.0);
   doc.setTextColor(255, 255, 255);
-  doc.text(formatLkr(hwTotal), 192.0, hwPillY + 9.3, { align: "center" });
+  doc.text(formatLkr(hwTotal), 192.0, hwPillY + 9.5, { align: "center" });
 
   // --- 2. SERVICES SECTION (Left Side - Max 2 items) ---
   const srvHeaderY = 121.5;
   doc.setFillColor(LK_TEAL[0], LK_TEAL[1], LK_TEAL[2]);
-  doc.roundedRect(36.0, srvHeaderY, 126.0, 11.5, 2.0, 2.0, "F");
+  doc.roundedRect(36.0, srvHeaderY, 128.0, 12.0, 2.0, 2.0, "F");
   doc.setFont("helvetica", "bold");
-  doc.setFontSize(15.5);
+  doc.setFontSize(16.0);
   doc.setTextColor(255, 255, 255);
-  doc.text("2. ENGINEERING SERVICES", 41.0, srvHeaderY + 8.0);
+  doc.text("2. ENGINEERING SERVICES", 41.0, srvHeaderY + 8.2);
 
-  let srvY = 142.5;
+  let srvY = 143.5;
   const servicesToShow = srvItems.length > 0 ? srvItems : [
     { productOrService: "Testing / Engineering Charges", quantity: 1, unitPrice: 0, totalPrice: 0 },
     { productOrService: "IOT Installation and Programing", quantity: 1, unitPrice: 0, totalPrice: 0 },
   ];
   servicesToShow.forEach((srv, sIdx) => {
     const name = srv.productOrService;
-    const curSrvY = srvY + sIdx * 15.0;
+    const curSrvY = srvY + sIdx * 16.0;
 
-    // Bullet in Black (Normal weight)
+    // Bullet in Black (Normal weight, 18.5pt)
     doc.setFont("helvetica", "normal");
-    doc.setFontSize(16.0);
+    doc.setFontSize(18.5);
     doc.setTextColor(0, 0, 0);
     doc.text("•", 38.0, curSrvY);
 
-    // Service name in Black (Normal font weight, 14.5pt)
-    doc.setFontSize(14.5);
+    // Service name in Black (Normal font weight, 18.0pt)
+    doc.setFontSize(18.0);
     doc.setTextColor(0, 0, 0);
     const maxSrvW = 202.0;
     const lines = doc.splitTextToSize(name, maxSrvW);
     if (lines.length > 1) {
       doc.text(lines[0], 44.0, curSrvY - 2.0);
-      doc.setFontSize(13.0);
-      doc.text(lines[1], 44.0, curSrvY + 3.5);
+      doc.setFontSize(15.0);
+      doc.text(lines[1], 44.0, curSrvY + 4.0);
     } else {
       doc.text(lines[0], 44.0, curSrvY);
     }
@@ -1531,9 +1531,9 @@ async function generateProjectProposalPdf(
   doc.setFillColor(LK_TEAL[0], LK_TEAL[1], LK_TEAL[2]);
   doc.roundedRect(136.0, srvPillY, 112.0, 13.5, 2.5, 2.5, "F");
   doc.setFont("helvetica", "bold");
-  doc.setFontSize(20.5);
+  doc.setFontSize(22.0);
   doc.setTextColor(255, 255, 255);
-  doc.text(formatLkr(srvTotal), 192.0, srvPillY + 9.3, { align: "center" });
+  doc.text(formatLkr(srvTotal), 192.0, srvPillY + 9.5, { align: "center" });
 
   // --- 3. RIGHT SIDE CARDS (Lead Time, Warranty, Optional Commercial Note) ---
   // Lead Time Card
