@@ -1422,21 +1422,22 @@ async function generateProjectProposalPdf(
     const name = it.productOrService;
     const qtyStr = `x ${it.quantity}`;
 
-    // Bullet in LK Orange (Normal weight)
+    // Bullet in Black (Normal weight)
     doc.setFont("helvetica", "normal");
     doc.setFontSize(16.0);
-    doc.setTextColor(LK_ORANGE[0], LK_ORANGE[1], LK_ORANGE[2]);
+    doc.setTextColor(0, 0, 0);
     doc.text("•", 38.0, hwY);
 
-    // Quantity right-aligned in LK Orange (Normal weight)
+    // Quantity right-aligned in Black (Normal weight)
     doc.setFont("helvetica", "normal");
     doc.setFontSize(14.5);
+    doc.setTextColor(0, 0, 0);
     doc.text(qtyStr, 246.0, hwY, { align: "right" });
 
-    // Item name in slate (Normal font weight, 14.5pt)
+    // Item name in Black (Normal font weight, 14.5pt)
     const qtyW = doc.getTextWidth(qtyStr);
     const maxNameW = (246.0 - qtyW - 5.0) - 44.0;
-    doc.setTextColor(LK_SLATE[0], LK_SLATE[1], LK_SLATE[2]);
+    doc.setTextColor(0, 0, 0);
     let nameFontSize = 14.5;
     doc.setFontSize(nameFontSize);
 
@@ -1468,7 +1469,7 @@ async function generateProjectProposalPdf(
   doc.roundedRect(36.0, hwPillY, 98.0, 13.5, 2.5, 2.5, "FD");
   doc.setFont("helvetica", "bold");
   doc.setFontSize(13.0);
-  doc.setTextColor(LK_TEAL[0], LK_TEAL[1], LK_TEAL[2]);
+  doc.setTextColor(0, 0, 0);
   doc.text("COMPONENT RELATED COST", 40.0, hwPillY + 8.8);
 
   doc.setFillColor(LK_TEAL[0], LK_TEAL[1], LK_TEAL[2]);
@@ -1496,15 +1497,15 @@ async function generateProjectProposalPdf(
     const name = srv.productOrService;
     const curSrvY = srvY + sIdx * 15.0;
 
-    // Bullet in LK Orange (Normal weight)
+    // Bullet in Black (Normal weight)
     doc.setFont("helvetica", "normal");
     doc.setFontSize(16.0);
-    doc.setTextColor(LK_ORANGE[0], LK_ORANGE[1], LK_ORANGE[2]);
+    doc.setTextColor(0, 0, 0);
     doc.text("•", 38.0, curSrvY);
 
-    // Service name in slate (Normal font weight, 14.5pt)
+    // Service name in Black (Normal font weight, 14.5pt)
     doc.setFontSize(14.5);
-    doc.setTextColor(LK_SLATE[0], LK_SLATE[1], LK_SLATE[2]);
+    doc.setTextColor(0, 0, 0);
     const maxSrvW = 202.0;
     const lines = doc.splitTextToSize(name, maxSrvW);
     if (lines.length > 1) {
@@ -1524,7 +1525,7 @@ async function generateProjectProposalPdf(
   doc.roundedRect(36.0, srvPillY, 98.0, 13.5, 2.5, 2.5, "FD");
   doc.setFont("helvetica", "bold");
   doc.setFontSize(13.0);
-  doc.setTextColor(LK_TEAL[0], LK_TEAL[1], LK_TEAL[2]);
+  doc.setTextColor(0, 0, 0);
   doc.text("SERVICES RELATED COST", 40.0, srvPillY + 8.8);
 
   doc.setFillColor(LK_TEAL[0], LK_TEAL[1], LK_TEAL[2]);
