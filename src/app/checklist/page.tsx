@@ -722,17 +722,17 @@ export default function ChecklistPage() {
                     />
                   </div>
 
-                  {/* Serial Number (Battery) - Swapped first */}
+                  {/* Serial Number (Box) - Shown first */}
                   <div>
                     <div className="flex items-center justify-between mb-1">
                       <label className="text-xs font-semibold text-slate-400">
-                        Serial Number (Battery) *
+                        Serial Number (Box) *
                       </label>
                       <button
                         type="button"
                         onClick={handleSwapSerials}
                         className="text-[10px] text-teal-400 hover:text-teal-300 flex items-center gap-1 transition-colors"
-                        title="Swap Battery and Box serial numbers"
+                        title="Swap Box and Battery serial numbers"
                       >
                         <ArrowLeftRight className="w-3 h-3" />
                         <span>Swap Serials</span>
@@ -740,9 +740,9 @@ export default function ChecklistPage() {
                     </div>
                     <input
                       type="text"
-                      value={batteryInfo.serialNumberBattery}
-                      onChange={(e) => handleBatterySerialChange(e.target.value)}
-                      placeholder="e.g. BAT202611-00842"
+                      value={batteryInfo.serialNumberBox}
+                      onChange={(e) => handleBoxSerialChange(e.target.value)}
+                      placeholder="e.g. BX202611-00842"
                       className={`w-full bg-slate-950 rounded-lg px-3 py-2 text-xs text-white focus:outline-none font-mono transition-colors ${
                         hasBatterySerialMismatch
                           ? "border-2 border-amber-500 bg-amber-950/20 text-amber-200 focus:border-amber-400"
@@ -751,23 +751,23 @@ export default function ChecklistPage() {
                     />
                   </div>
 
-                  {/* Serial Number (Box) - Swapped second */}
+                  {/* Serial Number (Battery) - Shown second */}
                   <div>
                     <div className="flex items-center justify-between mb-1">
                       <label className="text-xs font-semibold text-slate-400">
-                        Serial Number (Box) *
+                        Serial Number (Battery) *
                       </label>
                       {boxSerialManuallyDiverged ? (
                         <span className="text-[10px] text-amber-400 font-medium">Custom edited</span>
                       ) : (
-                        <span className="text-[10px] text-teal-400 font-medium">Auto-syncs from battery</span>
+                        <span className="text-[10px] text-teal-400 font-medium">Auto-syncs from box</span>
                       )}
                     </div>
                     <input
                       type="text"
-                      value={batteryInfo.serialNumberBox}
-                      onChange={(e) => handleBoxSerialChange(e.target.value)}
-                      placeholder="e.g. BX202611-00842"
+                      value={batteryInfo.serialNumberBattery}
+                      onChange={(e) => handleBatterySerialChange(e.target.value)}
+                      placeholder="e.g. BAT202611-00842"
                       className={`w-full bg-slate-950 rounded-lg px-3 py-2 text-xs text-white focus:outline-none font-mono transition-colors ${
                         hasBatterySerialMismatch
                           ? "border-2 border-amber-500 bg-amber-950/20 text-amber-200 focus:border-amber-400"
@@ -849,17 +849,17 @@ export default function ChecklistPage() {
                     />
                   </div>
 
-                  {/* Serial Number (Inverter) */}
+                  {/* Serial Number (Box) - Shown first */}
                   <div>
                     <div className="flex items-center justify-between mb-1">
                       <label className="text-xs font-semibold text-slate-400">
-                        Serial Number (Inverter) *
+                        Serial Number (Box) *
                       </label>
                       <button
                         type="button"
                         onClick={handleSwapInverterSerials}
                         className="text-[10px] text-teal-400 hover:text-teal-300 flex items-center gap-1 transition-colors"
-                        title="Swap Inverter and Box serial numbers"
+                        title="Swap Box and Inverter serial numbers"
                       >
                         <ArrowLeftRight className="w-3 h-3" />
                         <span>Swap Serials</span>
@@ -867,9 +867,9 @@ export default function ChecklistPage() {
                     </div>
                     <input
                       type="text"
-                      value={inverterInfo.serialNumberInverter}
-                      onChange={(e) => handleInverterSerialChange(e.target.value)}
-                      placeholder="e.g. INV2410-983021"
+                      value={inverterInfo.serialNumberBox}
+                      onChange={(e) => handleInverterBoxSerialChange(e.target.value)}
+                      placeholder="e.g. BX-INV2410-983021"
                       className={`w-full bg-slate-950 rounded-lg px-3 py-2 text-xs text-white focus:outline-none font-mono transition-colors ${
                         hasInverterSerialMismatch
                           ? "border-2 border-amber-500 bg-amber-950/20 text-amber-200 focus:border-amber-400"
@@ -878,16 +878,16 @@ export default function ChecklistPage() {
                     />
                   </div>
 
-                  {/* Serial Number (Box) */}
+                  {/* Serial Number (Inverter) - Shown second */}
                   <div>
                     <label className="block text-xs font-semibold text-slate-400 mb-1">
-                      Serial Number (Box) *
+                      Serial Number (Inverter) *
                     </label>
                     <input
                       type="text"
-                      value={inverterInfo.serialNumberBox}
-                      onChange={(e) => handleInverterBoxSerialChange(e.target.value)}
-                      placeholder="e.g. BX-INV2410-983021"
+                      value={inverterInfo.serialNumberInverter}
+                      onChange={(e) => handleInverterSerialChange(e.target.value)}
+                      placeholder="e.g. INV2410-983021"
                       className={`w-full bg-slate-950 rounded-lg px-3 py-2 text-xs text-white focus:outline-none font-mono transition-colors ${
                         hasInverterSerialMismatch
                           ? "border-2 border-amber-500 bg-amber-950/20 text-amber-200 focus:border-amber-400"
@@ -1383,9 +1383,13 @@ export default function ChecklistPage() {
                   const modelNo = isBat
                     ? item.batteryInfo?.modelNumber || "N/A"
                     : item.inverterInfo?.modelNumber || "N/A";
-                  const serialNo = isBat
-                    ? item.batteryInfo?.serialNumberBattery || item.batteryInfo?.serialNumberBox || "N/A"
-                    : item.inverterInfo?.serialNumberInverter || item.inverterInfo?.serialNumberBox || item.inverterInfo?.serialNumber || "N/A";
+                  const boxSerial = isBat
+                    ? item.batteryInfo?.serialNumberBox || "N/A"
+                    : item.inverterInfo?.serialNumberBox || "N/A";
+                  const deviceSerial = isBat
+                    ? item.batteryInfo?.serialNumberBattery || "N/A"
+                    : item.inverterInfo?.serialNumberInverter || item.inverterInfo?.serialNumber || "N/A";
+                  const deviceLabel = isBat ? "Battery" : "Inverter";
                   const arrivedDate = isBat
                     ? item.batteryInfo?.arrivedDate || "-"
                     : item.inverterInfo?.arrivedDate || "-";
@@ -1437,9 +1441,12 @@ export default function ChecklistPage() {
                             )}
                           </div>
 
-                          <div className="text-xs text-slate-300 font-medium mt-1">
-                            Model: <span className="font-mono text-white">{modelNo}</span> • Serial:{" "}
-                            <span className="font-mono text-slate-300">{serialNo}</span>
+                          <div className="text-xs text-slate-300 font-medium mt-1 flex flex-wrap items-center gap-x-2 gap-y-1">
+                            <span>Model: <span className="font-mono text-white font-semibold">{modelNo}</span></span>
+                            <span className="text-slate-600">•</span>
+                            <span>Serial Number (Box): <span className="font-mono text-teal-300 font-semibold">{boxSerial}</span></span>
+                            <span className="text-slate-600">•</span>
+                            <span>Serial Number ({deviceLabel}): <span className="font-mono text-slate-200 font-semibold">{deviceSerial}</span></span>
                           </div>
 
                           <div className="text-[11px] text-slate-500 mt-0.5">

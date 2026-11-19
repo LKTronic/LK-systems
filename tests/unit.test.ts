@@ -933,7 +933,7 @@ describe("Unit Tests: Supply Excel Supplier Image Handling", () => {
     assert.equal(doc.getNumberOfPages(), 1);
 
     const pageStream = (doc as any).internal.pages[1].join("\n");
-    assert.ok(pageStream.includes("Serial Number \\(Inveter\\):"));
+    assert.ok(pageStream.includes("Serial Number \\(Inverter\\):"));
     assert.ok(pageStream.includes("Serial Number \\(Box\\):"));
     assert.ok(pageStream.includes("INV202611-1234"));
     assert.ok(pageStream.includes("BX-INV202611-1234"));
