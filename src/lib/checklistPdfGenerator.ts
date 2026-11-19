@@ -245,10 +245,10 @@ export async function generateChecklistPdf(checklist: ProductChecklist): Promise
       b?.macAddress || "N/A",
     ]);
     infoRows.push([
-      "Serial Number (Battery):",
-      batSerialDisplay,
       "Serial Number (Box):",
       boxSerialDisplay,
+      "Serial Number (Battery):",
+      batSerialDisplay,
     ]);
     infoRows.push([
       "Battery Input:",
@@ -289,10 +289,10 @@ export async function generateChecklistPdf(checklist: ProductChecklist): Promise
       inv?.batterySystem || "48V DC",
     ]);
     infoRows.push([
-      "Serial Number (Inveter):",
-      invSerialDisplay,
       "Serial Number (Box):",
       boxSerialDisplay,
+      "Serial Number (Inverter):",
+      invSerialDisplay,
     ]);
     infoRows.push([
       "Physical Damage Assessment:",
