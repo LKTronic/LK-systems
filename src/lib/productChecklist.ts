@@ -39,6 +39,16 @@ export interface ChecklistNoteItem {
   color?: NoteColor;
 }
 
+export interface ChecklistVideoInfo {
+  url: string;
+  publicId?: string;
+  bytes?: number;
+  duration?: number;
+  format?: string;
+  thumbnailUrl?: string;
+  uploadedAt?: string;
+}
+
 export interface ProductChecklist {
   id: string;
   checklistNo: string;
@@ -51,6 +61,7 @@ export interface ProductChecklist {
   checkedByName: string;
   checkedByDesignation?: string;
   additionalNotes: ChecklistNoteItem[];
+  videoInfo?: ChecklistVideoInfo | null;
   overallQcPassed: boolean;
   createdAt: string;
   updatedAt: string;

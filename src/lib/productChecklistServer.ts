@@ -2,7 +2,9 @@ import { prisma } from "@/lib/prisma";
 import {
   ProductChecklist,
   ProductChecklistType,
+  ChecklistVideoInfo,
 } from "./productChecklist";
+import { deleteQcVideo } from "./cloudinary";
 
 const SETTING_KEY = "productChecklists";
 let cachedChecklists: { data: ProductChecklist[]; timestamp: number } | null = null;
@@ -27,6 +29,21 @@ function formatDate(val: any): string {
 }
 
 function mapDbToProductChecklist(r: any): ProductChecklist {
+  const rawNotes = safeParseJson(r.additionalNotes, []);
+  let notesArray: any[] = [];
+  let videoInfoObj: ChecklistVideoInfo | null = null;
+
+  if (Array.isArray(rawNotes)) {
+    notesArray = rawNotes;
+  } else if (rawNotes && typeof rawNotes === "object") {
+    notesArray = Array.isArray(rawNotes.notes) ? rawNotes.notes : [];
+    videoInfoObj = rawNotes.videoInfo || null;
+  }
+
+  if (!videoInfoObj && r.videoInfo) {
+    videoInfoObj = safeParseJson(r.videoInfo, null);
+  }
+
   return {
     id: String(r.id),
     checklistNo: String(r.checklistNo),
@@ -38,7 +55,8 @@ function mapDbToProductChecklist(r: any): ProductChecklist {
     tests: safeParseJson(r.tests, []),
     checkedByName: String(r.checkedByName || "QC Inspector"),
     checkedByDesignation: r.checkedByDesignation ? String(r.checkedByDesignation) : undefined,
-    additionalNotes: safeParseJson(r.additionalNotes, []),
+    additionalNotes: notesArray,
+    videoInfo: videoInfoObj,
     overallQcPassed: Boolean(Number(r.overallQcPassed) === 1 || r.overallQcPassed === true),
     createdAt: r.createdAt ? new Date(r.createdAt).toISOString() : new Date().toISOString(),
     updatedAt: r.updatedAt ? new Date(r.updatedAt).toISOString() : new Date().toISOString(),
@@ -146,7 +164,12 @@ export async function saveChecklist(checklist: ProductChecklist): Promise<Produc
   const batteryJson = checklist.batteryInfo ? JSON.stringify(checklist.batteryInfo) : null;
   const inverterJson = checklist.inverterInfo ? JSON.stringify(checklist.inverterInfo) : null;
   const testsJson = JSON.stringify(checklist.tests || []);
-  const notesJson = checklist.additionalNotes ? JSON.stringify(checklist.additionalNotes) : null;
+  const notesJson = checklist.videoInfo
+    ? JSON.stringify({
+        notes: checklist.additionalNotes || [],
+        videoInfo: checklist.videoInfo,
+      })
+    : JSON.stringify(checklist.additionalNotes || []);
   const overallPassedInt = checklist.overallQcPassed ? 1 : 0;
   const entryId = checklist.id || `chk-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
 
@@ -307,4 +330,51 @@ export async function deleteChecklist(id: string): Promise<boolean> {
 
   cachedChecklists = null;
   return true;
+}
+
+/**
+ * Attach or update video on an existing checklist
+ */
+export async function attachChecklistVideo(
+  id: string,
+  videoInfo: ChecklistVideoInfo
+): Promise<ProductChecklist | null> {
+  const checklists = await getChecklists();
+  const target = checklists.find((c) => c.id === id || c.checklistNo === id);
+  if (!target) return null;
+
+  // If previous video existed with different publicId, delete the old one
+  if (target.videoInfo?.publicId && target.videoInfo.publicId !== videoInfo.publicId) {
+    try {
+      await deleteQcVideo(target.videoInfo.publicId);
+    } catch {}
+  }
+
+  target.videoInfo = videoInfo;
+  return await saveChecklist(target);
+}
+
+/**
+ * Delete only the video from a checklist without deleting the checklist itself
+ */
+export async function deleteChecklistVideo(
+  id: string
+): Promise<{ success: boolean; checklist?: ProductChecklist; error?: string }> {
+  const checklists = await getChecklists();
+  const target = checklists.find((c) => c.id === id || c.checklistNo === id);
+  if (!target) {
+    return { success: false, error: "Checklist not found" };
+  }
+
+  if (target.videoInfo?.publicId) {
+    try {
+      await deleteQcVideo(target.videoInfo.publicId);
+    } catch (err: any) {
+      console.warn("Failed to delete video from Cloudinary:", err?.message);
+    }
+  }
+
+  target.videoInfo = null;
+  const updated = await saveChecklist(target);
+  return { success: true, checklist: updated };
 }

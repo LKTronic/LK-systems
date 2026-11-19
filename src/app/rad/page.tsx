@@ -304,7 +304,7 @@ export default function RadDashboardPage() {
                     </Link>
 
                     <Link
-                      href="/rad/checklist"
+                      href="/rad/checklist?tab=form"
                       onClick={() => setShowCreateMenu(false)}
                       className="flex items-start gap-2.5 px-3.5 py-2.5 hover:bg-slate-800/80 transition-colors group"
                     >
@@ -580,10 +580,10 @@ export default function RadDashboardPage() {
             <h2 className="text-xs font-semibold uppercase tracking-wider text-slate-400">
               R&D Engineering Modules &amp; Documentation Hub
             </h2>
-            <span className="text-[11px] text-slate-500">5 Specialized Operational Tools</span>
+            <span className="text-[11px] text-slate-500">6 Specialized Operational Tools</span>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5">
             {/* Module 1: 3D Print */}
             <div className="group bg-slate-900/70 border border-slate-800 hover:border-amber-700/60 rounded-xl p-3.5 transition-all hover:shadow-lg hover:shadow-amber-950/20 flex flex-col justify-between">
               <div>
@@ -603,16 +603,16 @@ export default function RadDashboardPage() {
                 </p>
               </div>
 
-              <div className="mt-3 pt-2.5 border-t border-slate-800/80 flex items-center justify-between gap-1 text-[11px]">
+              <div className="mt-3 pt-2.5 border-t border-slate-800/80 flex items-center justify-between gap-2 text-[11px]">
                 <Link
                   href="/rad/3d-print"
-                  className="text-amber-400 font-medium hover:underline flex items-center gap-1 whitespace-nowrap shrink-0"
+                  className="text-amber-400 font-medium hover:text-amber-300 hover:underline flex items-center gap-1 whitespace-nowrap shrink-0"
                 >
-                  <span>Open Hub</span> <ArrowRight className="w-2.5 h-2.5 shrink-0" />
+                  <span>Open Hub</span> <ArrowRight className="w-3 h-3 shrink-0" />
                 </Link>
                 <Link
                   href="/rad/create?type=THREE_D_PRINT"
-                  className="px-2 py-0.5 bg-amber-600/20 hover:bg-amber-600/30 text-amber-300 rounded font-medium transition-colors whitespace-nowrap shrink-0 text-[10.5px]"
+                  className="px-2.5 py-1 bg-amber-600/20 hover:bg-amber-600/30 text-amber-300 hover:text-amber-200 border border-amber-500/30 rounded-lg font-medium transition-colors whitespace-nowrap shrink-0 text-[11px]"
                 >
                   + New Quote
                 </Link>
@@ -638,16 +638,16 @@ export default function RadDashboardPage() {
                 </p>
               </div>
 
-              <div className="mt-3 pt-2.5 border-t border-slate-800/80 flex items-center justify-between gap-1 text-[11px]">
+              <div className="mt-3 pt-2.5 border-t border-slate-800/80 flex items-center justify-between gap-2 text-[11px]">
                 <Link
                   href="/rad/pcb"
-                  className="text-emerald-400 font-medium hover:underline flex items-center gap-1 whitespace-nowrap shrink-0"
+                  className="text-emerald-400 font-medium hover:text-emerald-300 hover:underline flex items-center gap-1 whitespace-nowrap shrink-0"
                 >
-                  <span>Open Hub</span> <ArrowRight className="w-2.5 h-2.5 shrink-0" />
+                  <span>Open Hub</span> <ArrowRight className="w-3 h-3 shrink-0" />
                 </Link>
                 <Link
                   href="/rad/create?type=PCB"
-                  className="px-2 py-0.5 bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 rounded font-medium transition-colors whitespace-nowrap shrink-0 text-[10.5px]"
+                  className="px-2.5 py-1 bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 hover:text-emerald-200 border border-emerald-500/30 rounded-lg font-medium transition-colors whitespace-nowrap shrink-0 text-[11px]"
                 >
                   + New Plan
                 </Link>
@@ -673,16 +673,16 @@ export default function RadDashboardPage() {
                 </p>
               </div>
 
-              <div className="mt-3 pt-2.5 border-t border-slate-800/80 flex items-center justify-between gap-1 text-[11px]">
+              <div className="mt-3 pt-2.5 border-t border-slate-800/80 flex items-center justify-between gap-2 text-[11px]">
                 <Link
                   href="/rad/project-proposal"
-                  className="text-teal-400 font-medium hover:underline flex items-center gap-1 whitespace-nowrap shrink-0"
+                  className="text-teal-400 font-medium hover:text-teal-300 hover:underline flex items-center gap-1 whitespace-nowrap shrink-0"
                 >
-                  <span>Open Hub</span> <ArrowRight className="w-2.5 h-2.5 shrink-0" />
+                  <span>Open Hub</span> <ArrowRight className="w-3 h-3 shrink-0" />
                 </Link>
                 <Link
                   href="/rad/create?type=PROJECT_PROPOSAL"
-                  className="px-2 py-0.5 bg-teal-600/20 hover:bg-teal-600/30 text-teal-300 rounded font-medium transition-colors whitespace-nowrap shrink-0 text-[10.5px]"
+                  className="px-2.5 py-1 bg-teal-600/20 hover:bg-teal-600/30 text-teal-300 hover:text-teal-200 border border-teal-500/30 rounded-lg font-medium transition-colors whitespace-nowrap shrink-0 text-[11px]"
                 >
                   + New Proposal
                 </Link>
@@ -708,16 +708,16 @@ export default function RadDashboardPage() {
                 </p>
               </div>
 
-              <div className="mt-3 pt-2.5 border-t border-slate-800/80 flex items-center justify-between gap-1 text-[11px]">
+              <div className="mt-3 pt-2.5 border-t border-slate-800/80 flex items-center justify-between gap-2 text-[11px]">
                 <Link
                   href="/rad/uni-quotation"
-                  className="text-blue-400 font-medium hover:underline flex items-center gap-1 whitespace-nowrap shrink-0"
+                  className="text-blue-400 font-medium hover:text-blue-300 hover:underline flex items-center gap-1 whitespace-nowrap shrink-0"
                 >
-                  <span>Open Hub</span> <ArrowRight className="w-2.5 h-2.5 shrink-0" />
+                  <span>Open Hub</span> <ArrowRight className="w-3 h-3 shrink-0" />
                 </Link>
                 <Link
                   href="/rad/create?type=UNI_QUOTATION"
-                  className="px-2 py-0.5 bg-blue-600/20 hover:bg-blue-600/30 text-blue-300 rounded font-medium transition-colors whitespace-nowrap shrink-0 text-[10.5px]"
+                  className="px-2.5 py-1 bg-blue-600/20 hover:bg-blue-600/30 text-blue-300 hover:text-blue-200 border border-blue-500/30 rounded-lg font-medium transition-colors whitespace-nowrap shrink-0 text-[11px]"
                 >
                   + New Quote
                 </Link>
@@ -743,16 +743,16 @@ export default function RadDashboardPage() {
                 </p>
               </div>
 
-              <div className="mt-3 pt-2.5 border-t border-slate-800/80 flex items-center justify-between gap-1 text-[11px]">
+              <div className="mt-3 pt-2.5 border-t border-slate-800/80 flex items-center justify-between gap-2 text-[11px]">
                 <Link
                   href="/rad/checklist"
-                  className="text-cyan-400 font-medium hover:underline flex items-center gap-1 whitespace-nowrap shrink-0"
+                  className="text-cyan-400 font-medium hover:text-cyan-300 hover:underline flex items-center gap-1 whitespace-nowrap shrink-0"
                 >
-                  <span>Open Hub</span> <ArrowRight className="w-2.5 h-2.5 shrink-0" />
+                  <span>Open Hub</span> <ArrowRight className="w-3 h-3 shrink-0" />
                 </Link>
                 <Link
-                  href="/rad/checklist"
-                  className="px-2 py-0.5 bg-cyan-600/20 hover:bg-cyan-600/30 text-cyan-300 rounded font-medium transition-colors whitespace-nowrap shrink-0 text-[10.5px]"
+                  href="/rad/checklist?tab=form"
+                  className="px-2.5 py-1 bg-cyan-600/20 hover:bg-cyan-600/30 text-cyan-300 hover:text-cyan-200 border border-cyan-500/30 rounded-lg font-medium transition-colors whitespace-nowrap shrink-0 text-[11px]"
                 >
                   + New QC
                 </Link>
@@ -778,16 +778,16 @@ export default function RadDashboardPage() {
                 </p>
               </div>
 
-              <div className="mt-3 pt-2.5 border-t border-slate-800/80 flex items-center justify-between gap-1 text-[11px]">
+              <div className="mt-3 pt-2.5 border-t border-slate-800/80 flex items-center justify-between gap-2 text-[11px]">
                 <Link
                   href="/rad/handover"
-                  className="text-purple-400 font-medium hover:underline flex items-center gap-1 whitespace-nowrap shrink-0"
+                  className="text-purple-400 font-medium hover:text-purple-300 hover:underline flex items-center gap-1 whitespace-nowrap shrink-0"
                 >
-                  <span>Open Hub</span> <ArrowRight className="w-2.5 h-2.5 shrink-0" />
+                  <span>Open Hub</span> <ArrowRight className="w-3 h-3 shrink-0" />
                 </Link>
                 <Link
                   href="/rad/handover"
-                  className="px-2 py-0.5 bg-purple-600/20 hover:bg-purple-600/30 text-purple-300 rounded font-medium transition-colors whitespace-nowrap shrink-0 text-[10.5px]"
+                  className="px-2.5 py-1 bg-purple-600/20 hover:bg-purple-600/30 text-purple-300 hover:text-purple-200 border border-purple-500/30 rounded-lg font-medium transition-colors whitespace-nowrap shrink-0 text-[11px]"
                 >
                   + New Letter
                 </Link>

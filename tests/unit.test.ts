@@ -28,6 +28,7 @@ import {
   getUniQuotationTerms,
   extractAdditionalTerms,
   getProjectProposalCombinedTerms,
+  getProjectProposalTerms,
 } from "../src/lib/rdQuotationDefaults";
 import { DEFAULT_THREE_D_PRINT_PRICING } from "../src/lib/threeDPrintPricing";
 import {
@@ -1075,6 +1076,13 @@ describe("Unit Tests: Supply Excel Supplier Image Handling", () => {
     assert.equal(combined[1], extracted[1]);
     assert.equal(combined[2], extracted[2]);
     assert.equal(combined[3], extracted[3]);
+
+    const defaultTerms = getProjectProposalTerms(5);
+    assert.ok(
+      defaultTerms[2].includes(
+        "Source Code & Design Documents: All PLC/HMI programs, source codes, programming logic, and electrical design documents remain the exclusive intellectual property of LK TRONICS (Pvt) Ltd and will not be provided to the client."
+      )
+    );
   });
 
   it("generates sequential quotation numbers for UNI_QUOTATION using PQV series", async () => {
