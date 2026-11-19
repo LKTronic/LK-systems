@@ -1069,19 +1069,19 @@ async function generateProjectProposalPdf(
 
   // 2. Prepared By - Removed from cover/main page per user requirement
 
-  // 3. Quotation To / Client Details (Center Column: X=190.5mm, Prominent 22pt bold matching Terms page)
+  // 3. Quotation To / Client Details (Center Column: X=190.5mm, LK_TEAL matching project title)
   const quoToText = data.quotationTo || "Super Administrator";
-  let clientFontSize = 22.0;
+  let clientFontSize = 17.5;
   doc.setFont("helvetica", "bold");
   doc.setFontSize(clientFontSize);
   let quoToLines = doc.splitTextToSize(quoToText, 160.0);
   if (Array.isArray(quoToLines) && quoToLines.length > 2) {
-    clientFontSize = 19.0;
+    clientFontSize = 15.0;
     doc.setFontSize(clientFontSize);
     quoToLines = doc.splitTextToSize(quoToText, 160.0);
   }
-  doc.setTextColor(LK_SLATE[0], LK_SLATE[1], LK_SLATE[2]);
-  doc.text(quoToLines, 190.5, 137.5, { lineHeightFactor: 1.22 });
+  doc.setTextColor(LK_TEAL[0], LK_TEAL[1], LK_TEAL[2]);
+  doc.text(quoToLines, 190.5, 141.5, { lineHeightFactor: 1.30 });
 
   // 4. Prepared Date (Center Column, Bottom Left: X=190.5mm, Prominent 21pt bold)
   doc.setFont("helvetica", "bold");
