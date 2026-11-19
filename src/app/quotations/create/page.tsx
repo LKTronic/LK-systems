@@ -5,6 +5,7 @@ import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { AppLayout } from "@/components/AppLayout";
+import { useUnsavedChangesWarning } from "@/hooks/useUnsavedChangesWarning";
 import { formatLKR } from "@/lib/formatters";
 import {
   generateQuotationPdf,
@@ -101,6 +102,44 @@ export default function CreateQuotationPage() {
   const [savedQuotationId, setSavedQuotationId] = useState<number | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  // Unsaved changes tracking
+  const currentSnapshot = JSON.stringify({
+    registrationNo,
+    quotationNo,
+    preparedDate,
+    expireDate,
+    validityDays,
+    paymentMethod,
+    advancePercent,
+    preparedBy,
+    quotationTo,
+    items: items.map((it) => ({
+      d: it.description.trim(),
+      p: it.unitPrice,
+      q: it.quantity,
+      w: it.warranty,
+      s: it.stockStatus,
+      img: it.imagePath,
+    })),
+  });
+
+  const [lastSavedSnapshot, setLastSavedSnapshot] = useState<string>("");
+  const initialSnapshotRef = useRef<string>("");
+
+  useEffect(() => {
+    if (!initialSnapshotRef.current) {
+      initialSnapshotRef.current = currentSnapshot;
+    }
+  }, []);
+
+  const isFormDirty = Boolean(
+    lastSavedSnapshot
+      ? currentSnapshot !== lastSavedSnapshot
+      : initialSnapshotRef.current && currentSnapshot !== initialSnapshotRef.current
+  );
+
+  const { markAsSaved } = useUnsavedChangesWarning({ isDirty: isFormDirty });
 
   // Product Search Modal State
   const [isProductModalOpen, setIsProductModalOpen] = useState(false);
@@ -606,6 +645,9 @@ const formatPreparedBy = (u: UserListItem) => {
       if (data.quotation?.id) {
         setSavedQuotationId(data.quotation.id);
       }
+
+      setLastSavedSnapshot(currentSnapshot);
+      markAsSaved();
 
       setSuccessMessage(`Quotation ${quotationNo} successfully saved!`);
       return data.quotation;

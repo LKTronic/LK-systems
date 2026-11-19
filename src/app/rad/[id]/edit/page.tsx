@@ -1,9 +1,10 @@
 "use client";
 
-import { useState, useEffect, use } from "react";
+import { useState, useEffect, useRef, use } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { AppLayout } from "@/components/AppLayout";
+import { useUnsavedChangesWarning } from "@/hooks/useUnsavedChangesWarning";
 import { formatLKR } from "@/lib/formatters";
 import {
   generateRdQuotationPdf,
@@ -1203,6 +1204,33 @@ export default function EditRadQuotationPage({
     };
   };
 
+  // Unsaved changes tracking
+  const currentPayloadStr = (() => {
+    try {
+      return JSON.stringify(preparePayload());
+    } catch {
+      return "";
+    }
+  })();
+
+  const lastSavedSnapshotRef = useRef<string>("");
+  const isInitialLoadedRef = useRef(false);
+
+  useEffect(() => {
+    if (!isLoading && !isInitialLoadedRef.current && quotationNo) {
+      lastSavedSnapshotRef.current = currentPayloadStr;
+      isInitialLoadedRef.current = true;
+    }
+  }, [isLoading, quotationNo, currentPayloadStr]);
+
+  const isFormDirty = Boolean(
+    isInitialLoadedRef.current &&
+    lastSavedSnapshotRef.current &&
+    currentPayloadStr !== lastSavedSnapshotRef.current
+  );
+
+  const { markAsSaved } = useUnsavedChangesWarning({ isDirty: isFormDirty });
+
   // Check form completion and collect missing required fields for validation and highlight
   const getFormValidation = () => {
     const missing: Record<string, string> = {};
@@ -1322,6 +1350,9 @@ export default function EditRadQuotationPage({
         const err = await res.json();
         throw new Error(err.error || "Failed to update quotation");
       }
+
+      lastSavedSnapshotRef.current = currentPayloadStr;
+      markAsSaved();
 
       setQuotationStatus(targetStatus);
 

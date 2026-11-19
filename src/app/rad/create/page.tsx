@@ -1,10 +1,11 @@
 "use client";
 
-import { useState, useEffect, Suspense } from "react";
+import { useState, useEffect, useRef, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import Link from "next/link";
 import { AppLayout } from "@/components/AppLayout";
+import { useUnsavedChangesWarning } from "@/hooks/useUnsavedChangesWarning";
 import { formatLKR } from "@/lib/formatters";
 import {
   generateRdQuotationPdf,
@@ -1178,6 +1179,34 @@ function CreateRadQuotationContent() {
     };
   };
 
+  // Unsaved changes tracking
+  const [lastSavedSnapshot, setLastSavedSnapshot] = useState<string>("");
+  const initialSnapshotRef = useRef<string>("");
+
+  useEffect(() => {
+    if (!initialSnapshotRef.current) {
+      try {
+        initialSnapshotRef.current = JSON.stringify(preparePayload());
+      } catch {}
+    }
+  }, []);
+
+  const currentPayloadStr = (() => {
+    try {
+      return JSON.stringify(preparePayload());
+    } catch {
+      return "";
+    }
+  })();
+
+  const isFormDirty = Boolean(
+    lastSavedSnapshot
+      ? currentPayloadStr !== lastSavedSnapshot
+      : initialSnapshotRef.current && currentPayloadStr !== initialSnapshotRef.current
+  );
+
+  const { markAsSaved } = useUnsavedChangesWarning({ isDirty: isFormDirty });
+
   // Check form completion and collect missing required fields for validation and highlight
   const getFormValidation = () => {
     const missing: Record<string, string> = {};
@@ -1325,6 +1354,9 @@ function CreateRadQuotationContent() {
           window.history.replaceState(null, "", `/rad/${newId}/edit`);
         } catch {}
       }
+
+      setLastSavedSnapshot(currentPayloadStr);
+      markAsSaved();
 
       setQuotationStatus(targetStatus);
 

@@ -1,8 +1,9 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { useSession } from "next-auth/react";
 import { AppLayout } from "@/components/AppLayout";
+import { useUnsavedChangesWarning } from "@/hooks/useUnsavedChangesWarning";
 import {
   ProductChecklistType,
   BatteryInfo,
@@ -570,6 +571,36 @@ export default function ChecklistPage() {
     };
   };
 
+  // Unsaved changes tracking
+  const currentChecklistSnapshot = JSON.stringify({
+    type: checklistType,
+    batteryInfo,
+    inverterInfo,
+    tests,
+    notes,
+    overallQcPassed,
+    formVideoInfo,
+    editingId,
+  });
+
+  const [lastSavedSnapshot, setLastSavedSnapshot] = useState<string>("");
+  const initialSnapshotRef = useRef<string>("");
+
+  useEffect(() => {
+    if (activeTab === "form" && !initialSnapshotRef.current) {
+      initialSnapshotRef.current = currentChecklistSnapshot;
+    }
+  }, [activeTab, currentChecklistSnapshot]);
+
+  const isFormDirty = Boolean(
+    activeTab === "form" &&
+    (lastSavedSnapshot
+      ? currentChecklistSnapshot !== lastSavedSnapshot
+      : initialSnapshotRef.current && currentChecklistSnapshot !== initialSnapshotRef.current)
+  );
+
+  const { markAsSaved } = useUnsavedChangesWarning({ isDirty: isFormDirty });
+
   // Save Checklist to API: auto-draft if half-filled, certified if complete
   const handleSave = async (explicitStatus?: "DRAFT" | "COMPLETED") => {
     const modelStr = checklistType === "BATTERY" ? batteryInfo.modelNumber : inverterInfo.modelNumber;
@@ -602,6 +633,8 @@ export default function ChecklistPage() {
         if (!editingId && d.checklist?.id) {
           setEditingId(d.checklist.id);
         }
+        setLastSavedSnapshot(currentChecklistSnapshot);
+        markAsSaved();
       } else {
         const err = await res.json();
         showNotification("error", err?.error || "Failed to save checklist");
