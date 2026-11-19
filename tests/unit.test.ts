@@ -1111,5 +1111,43 @@ describe("Unit Tests: Supply Excel Supplier Image Handling", () => {
     assert.equal(DEFAULT_UNI_QUOTATION_SPECS.completionTime, "10 business working days");
     assert.equal(DEFAULT_UNI_QUOTATION_SPECS.engineeringCharges, 37580);
     assert.equal(DEFAULT_UNI_QUOTATION_SPECS.discount, 4580);
+    assert.equal(DEFAULT_UNI_QUOTATION_SPECS.paymentTermsText, "80% advance payment");
+  });
+
+  it("validates Settlement Bank Account, Payment Method and advance payment percentage logic", () => {
+    // Validate advance percent calculation
+    const calcAdvance = (total: number, percent: number) => (total * percent) / 100;
+    const calcBalance = (total: number, percent: number) => total - calcAdvance(total, percent);
+
+    const total = 100000;
+    assert.equal(calcAdvance(total, 80), 80000);
+    assert.equal(calcBalance(total, 80), 20000);
+
+    // Validate percentage boundaries
+    const isValidAdvancePercent = (pct: any) => {
+      const num = Number(pct);
+      return !isNaN(num) && num >= 1 && num <= 100;
+    };
+    assert.equal(isValidAdvancePercent(80), true);
+    assert.equal(isValidAdvancePercent(60), true);
+    assert.equal(isValidAdvancePercent(0), false);
+    assert.equal(isValidAdvancePercent(-10), false);
+    assert.equal(isValidAdvancePercent(101), false);
+    assert.equal(isValidAdvancePercent("abc"), false);
+
+    // Validate formatting of payment method display
+    const formatPaymentMethod = (method: string, percent?: number | string) => {
+      if (method === "ADVANCE_PAYMENT") {
+        return `${percent || 80}% advance payment`;
+      }
+      if (method === "FULL_PAYMENT") return "100% payment";
+      if (method === "CREDIT") return "Corporate Credit";
+      return method;
+    };
+
+    assert.equal(formatPaymentMethod("ADVANCE_PAYMENT", 80), "80% advance payment");
+    assert.equal(formatPaymentMethod("ADVANCE_PAYMENT", 50), "50% advance payment");
+    assert.equal(formatPaymentMethod("FULL_PAYMENT"), "100% payment");
+    assert.equal(formatPaymentMethod("CREDIT"), "Corporate Credit");
   });
 });

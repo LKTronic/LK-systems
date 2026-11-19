@@ -287,3 +287,46 @@ model RdQuotationItem {
 
   @@index([rdQuotationId])
 }
+
+model ProductChecklist {
+  id                   String    @id @default(cuid())
+  checklistNo          String    @unique
+  type                 String    @default("BATTERY") // "BATTERY" or "INVERTER"
+  status               String    @default("COMPLETED") // "DRAFT" or "COMPLETED"
+  checkedDate          DateTime  @db.Date
+  checkedByName        String    @default("QC Inspector")
+  checkedByDesignation String?   @default("Quality Control & Hardware Engineer")
+  overallQcPassed      Boolean   @default(false)
+  batteryInfo          String?   @db.LongText // JSON string
+  inverterInfo         String?   @db.LongText // JSON string
+  tests                String    @db.LongText // JSON string
+  additionalNotes      String?   @db.LongText // JSON string
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+
+  @@index([type])
+  @@index([checklistNo])
+  @@index([status])
+  @@index([checkedDate])
+}
+
+model HandoverLetter {
+  id                   String    @id @default(cuid())
+  refNo                String    @unique
+  productName          String
+  modelDescription     String?   @db.Text
+  serialNumbers        String?   @db.Text
+  quantity             String    @default("1 Unit")
+  additionalItems      String?   @db.LongText // JSON string array
+  collectorName        String
+  collectorDesignation String?   @default("Quality Control & Hardware Engineer")
+  handoverDate         DateTime  @db.Date
+  contactNumber        String?   @default("+94 76 357 31 31")
+  confirmationText     String?   @db.Text
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+
+  @@index([refNo])
+  @@index([handoverDate])
+}
+

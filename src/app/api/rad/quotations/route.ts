@@ -137,9 +137,16 @@ export async function POST(request: NextRequest) {
         );
       }
 
-      if (type === "PROJECT_PROPOSAL" && (!projectTitle || !projectTitle.trim())) {
+      if ((type === "PROJECT_PROPOSAL" || type === "UNI_QUOTATION") && (!projectTitle || !projectTitle.trim())) {
         return NextResponse.json(
-          { error: "Project Title is required for Project Proposals." },
+          { error: "Project Title is required for Project Proposals and University Quotations." },
+          { status: 400 }
+        );
+      }
+
+      if (type === "UNI_QUOTATION" && Array.isArray(items) && items.length > 4) {
+        return NextResponse.json(
+          { error: "University Quotations can have at most 4 items." },
           { status: 400 }
         );
       }
