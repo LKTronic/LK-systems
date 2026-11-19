@@ -5,6 +5,7 @@ import { useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { AppLayout } from "@/components/AppLayout";
+import { useUnsavedChangesWarning } from "@/hooks/useUnsavedChangesWarning";
 import { formatLKR } from "@/lib/formatters";
 import {
   generateQuotationPdf,
@@ -131,6 +132,46 @@ const formatPreparedBy = (u: UserListItem) => {
   // Special Notes State & Ref
   const [notes, setNotes] = useState("");
   const notesTextareaRef = useRef<HTMLTextAreaElement | null>(null);
+
+  // Unsaved changes tracking
+  const currentSnapshot = JSON.stringify({
+    registrationNo,
+    quotationNo,
+    preparedDate,
+    expireDate,
+    validityDays,
+    paymentMethod,
+    advancePercent,
+    preparedBy,
+    quotationTo,
+    notes,
+    items: items.map((it) => ({
+      d: it.description.trim(),
+      p: it.unitPrice,
+      q: it.quantity,
+      w: it.warranty,
+      s: it.stockStatus,
+      img: it.imagePath,
+    })),
+  });
+
+  const lastSavedSnapshotRef = useRef<string>("");
+  const isInitialLoadedRef = useRef(false);
+
+  useEffect(() => {
+    if (!isLoading && !isInitialLoadedRef.current && quotationNo) {
+      lastSavedSnapshotRef.current = currentSnapshot;
+      isInitialLoadedRef.current = true;
+    }
+  }, [isLoading, quotationNo, currentSnapshot]);
+
+  const isFormDirty = Boolean(
+    isInitialLoadedRef.current &&
+    lastSavedSnapshotRef.current &&
+    currentSnapshot !== lastSavedSnapshotRef.current
+  );
+
+  const { markAsSaved } = useUnsavedChangesWarning({ isDirty: isFormDirty });
 
   const applyNotesFormat = (prefix: string, suffix: string) => {
     const textarea = notesTextareaRef.current;
@@ -633,6 +674,9 @@ const formatPreparedBy = (u: UserListItem) => {
       if (!res.ok) {
         throw new Error(data.error || "Failed to update quotation");
       }
+
+      lastSavedSnapshotRef.current = currentSnapshot;
+      markAsSaved();
 
       setSuccessMessage(`Quotation ${quotationNo} successfully updated!`);
       return data.quotation;

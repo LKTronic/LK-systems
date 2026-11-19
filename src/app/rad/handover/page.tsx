@@ -1,8 +1,9 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { useSession } from "next-auth/react";
 import { AppLayout } from "@/components/AppLayout";
+import { useUnsavedChangesWarning } from "@/hooks/useUnsavedChangesWarning";
 import {
   ProductHandoverData,
   printHandoverLetter,
@@ -150,6 +151,38 @@ export default function ProductHandoverPage() {
     confirmationText: confirmationText.trim(),
   });
 
+  // Unsaved changes tracking
+  const currentHandoverSnapshot = JSON.stringify({
+    productName: productName.trim(),
+    modelDescription: modelDescription.trim(),
+    serialNumbers: serialNumbers.trim(),
+    quantity: quantity.trim(),
+    collectorName: collectorName.trim(),
+    collectorDesignation: collectorDesignation.trim(),
+    handoverDate,
+    contactNumber: contactNumber.trim(),
+    confirmationText: confirmationText.trim(),
+    editingId,
+  });
+
+  const [lastSavedSnapshot, setLastSavedSnapshot] = useState<string>("");
+  const initialSnapshotRef = useRef<string>("");
+
+  useEffect(() => {
+    if (activeTab === "form" && !initialSnapshotRef.current) {
+      initialSnapshotRef.current = currentHandoverSnapshot;
+    }
+  }, [activeTab, currentHandoverSnapshot]);
+
+  const isFormDirty = Boolean(
+    activeTab === "form" &&
+    (lastSavedSnapshot
+      ? currentHandoverSnapshot !== lastSavedSnapshot
+      : initialSnapshotRef.current && currentHandoverSnapshot !== initialSnapshotRef.current)
+  );
+
+  const { markAsSaved } = useUnsavedChangesWarning({ isDirty: isFormDirty });
+
   // Save Handover Letter to Database
   const handleSave = async () => {
     if (!productName.trim() && !modelDescription.trim()) {
@@ -179,6 +212,8 @@ export default function ProductHandoverPage() {
         if (!editingId && d.handover?.id) {
           setEditingId(d.handover.id);
         }
+        setLastSavedSnapshot(currentHandoverSnapshot);
+        markAsSaved();
       } else {
         const err = await res.json();
         showNotification("error", err?.error || "Failed to save handover letter");
