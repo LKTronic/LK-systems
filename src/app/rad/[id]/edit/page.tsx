@@ -927,7 +927,7 @@ export default function EditRadQuotationPage({
       ? Number(customServicesTotal)
       : computedServicesTotal;
 
-  const componentsTotal = items.reduce(
+  const componentsTotal = items.slice(0, 4).reduce(
     (sum, i) =>
       sum + (Number(i.quantity) || 0) * (Number(i.unitPrice) || 0),
     0
@@ -956,6 +956,10 @@ export default function EditRadQuotationPage({
         alert("Maximum 2 Engineering Services items allowed for Slide 4 presentation.");
         return;
       }
+    }
+    if (quotationType === "UNI_QUOTATION" && items.length >= 4) {
+      alert("Maximum 4 Components allowed for Uni Quotation Table.");
+      return;
     }
     setItems((prev) => [
       ...prev,
@@ -3239,11 +3243,25 @@ export default function EditRadQuotationPage({
 
                   <button
                     type="button"
+                    disabled={quotationType === "UNI_QUOTATION" && items.length >= 4}
                     onClick={() => handleAddItem("HARDWARE")}
-                    className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-teal-600 hover:bg-teal-500 text-white rounded-lg text-xs font-semibold transition-colors"
+                    className={`inline-flex items-center gap-1.5 px-3.5 py-1.5 text-white rounded-lg text-xs font-semibold transition-colors ${
+                      quotationType === "UNI_QUOTATION" && items.length >= 4
+                        ? "bg-slate-800 text-slate-500 cursor-not-allowed border border-slate-700"
+                        : quotationType === "UNI_QUOTATION"
+                        ? "bg-blue-600 hover:bg-blue-500"
+                        : "bg-teal-600 hover:bg-teal-500"
+                    }`}
+                    title={
+                      quotationType === "UNI_QUOTATION" && items.length >= 4
+                        ? "Maximum 4 components allowed for Uni Quotation Table"
+                        : "Add Line Item"
+                    }
                   >
                     <Plus className="w-3.5 h-3.5" />
-                    Add Line Item
+                    {quotationType === "UNI_QUOTATION"
+                      ? `+ Add Component ${items.length >= 4 ? "(Max 4 Reached)" : `(${items.length}/4)`}`
+                      : "Add Line Item"}
                   </button>
                 </div>
               </div>
@@ -3741,17 +3759,24 @@ export default function EditRadQuotationPage({
                 </div>
               ) : quotationType === "UNI_QUOTATION" ? (
                 <div className="space-y-3 bg-slate-950/60 p-3.5 rounded-lg border border-slate-800/80 text-xs">
-                  <div className="flex justify-between items-center text-slate-400">
-                    <span>1. Components Cost:</span>
-                    <span className="font-mono text-slate-200 font-semibold">
+                  <div className="text-[11px] font-bold text-blue-400 uppercase tracking-wider pb-1 border-b border-slate-800/80">
+                    Table 2: Key Cost Elements (Fixed)
+                  </div>
+
+                  <div className="flex justify-between items-center text-slate-300">
+                    <span className="font-medium">1. Total Estimated Cost of Project Components:</span>
+                    <span className="font-mono text-slate-100 font-bold">
                       {formatLKR(componentsTotal)}
                     </span>
                   </div>
+                  <p className="text-[10px] text-slate-500 italic">
+                    (Auto-calculated from Table 1 components utilized, max 4 items)
+                  </p>
 
-                  <div className="space-y-1">
-                    <div className="flex justify-between items-center text-slate-400">
-                      <span>2. Engineering Charges:</span>
-                      <span className="font-mono text-slate-200 font-semibold">
+                  <div className="space-y-1 pt-1 border-t border-slate-800/60">
+                    <div className="flex justify-between items-center text-slate-300">
+                      <span className="font-medium">2. Engineering Charges *</span>
+                      <span className="font-mono text-blue-300 font-bold">
                         {formatLKR(Number(engineeringCharges) || 0)}
                       </span>
                     </div>
@@ -3765,10 +3790,10 @@ export default function EditRadQuotationPage({
                     />
                   </div>
 
-                  <div className="space-y-1">
-                    <div className="flex justify-between items-center text-amber-400">
-                      <span>3. Discount (Deduction):</span>
-                      <span className="font-mono text-amber-300 font-semibold">
+                  <div className="space-y-1 pt-1 border-t border-slate-800/60">
+                    <div className="flex justify-between items-center text-red-400">
+                      <span className="font-medium">Discount (Deduction in Red)</span>
+                      <span className="font-mono text-red-400 font-bold">
                         -{formatLKR(Number(discount) || 0)}
                       </span>
                     </div>
@@ -3778,13 +3803,13 @@ export default function EditRadQuotationPage({
                       value={discount}
                       onChange={(e) => setDiscount(e.target.value)}
                       placeholder="Discount Amount (LKR)"
-                      className="w-full bg-slate-900 border border-slate-700 rounded px-2.5 py-1 text-xs text-white font-mono focus:outline-none focus:border-blue-500"
+                      className="w-full bg-slate-900 border border-slate-700 rounded px-2.5 py-1 text-xs text-white font-mono focus:outline-none focus:border-red-500"
                     />
                   </div>
 
-                  <div className="border-t border-slate-800 pt-2 flex justify-between items-center">
-                    <span className="text-blue-400 font-bold text-sm">Total Project Cost:</span>
-                    <span className="font-mono text-emerald-400 text-lg font-bold">
+                  <div className="border-t-2 border-slate-700 pt-2.5 flex justify-between items-center">
+                    <span className="text-white font-bold text-sm">Total Project Cost:</span>
+                    <span className="font-mono text-emerald-400 text-lg font-bold underline decoration-double">
                       {formatLKR(totalAmount)}
                     </span>
                   </div>
