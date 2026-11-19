@@ -2103,6 +2103,78 @@ async function generateUniQuotationPdf(
     return currentY;
   };
 
+  const renderInlineHighlightedParagraph = (
+    heading: string,
+    prefix: string,
+    highlight: string,
+    suffix: string,
+    startY: number
+  ): number => {
+    let y = startY;
+    doc.setFont("times", "bold");
+    doc.setFontSize(10);
+    doc.setTextColor(0, 0, 0);
+    doc.text(heading, 25.4, y);
+    y += 4.2;
+
+    const leftX = 25.4;
+    const maxW = 159.2;
+    const lineHeight = 4.0;
+    doc.setFontSize(9.2);
+
+    const fullText = prefix + highlight + suffix;
+    const hStart = prefix.length;
+    const hEnd = prefix.length + highlight.length;
+
+    type Word = { text: string; isBold: boolean };
+    const words: Word[] = [];
+    const regex = /\S+/g;
+    let match;
+    while ((match = regex.exec(fullText)) !== null) {
+      const wordStart = match.index;
+      const wordEnd = match.index + match[0].length;
+      const overlaps = Math.max(wordStart, hStart) < Math.min(wordEnd, hEnd);
+      words.push({ text: match[0], isBold: overlaps });
+    }
+
+    let lineWords: Word[] = [];
+    let lineW = 0;
+
+    const flush = () => {
+      if (lineWords.length === 0) return;
+      let curX = leftX;
+      lineWords.forEach((w, idx) => {
+        doc.setFont("times", w.isBold ? "bold" : "normal");
+        doc.text(w.text, curX, y);
+        curX += doc.getTextWidth(w.text);
+        if (idx < lineWords.length - 1) {
+          doc.setFont("times", "normal");
+          curX += doc.getTextWidth(" ");
+        }
+      });
+      y += lineHeight;
+      lineWords = [];
+      lineW = 0;
+    };
+
+    words.forEach((w) => {
+      doc.setFont("times", w.isBold ? "bold" : "normal");
+      const wWidth = doc.getTextWidth(w.text);
+      const spaceWidth = lineWords.length > 0 ? doc.getTextWidth(" ") : 0;
+      if (lineW + spaceWidth + wWidth > maxW && lineWords.length > 0) {
+        flush();
+        lineWords.push(w);
+        lineW = wWidth;
+      } else {
+        lineWords.push(w);
+        lineW += spaceWidth + wWidth;
+      }
+    });
+
+    flush();
+    return y + 3.0;
+  };
+
   // Parse technical specs
   let parsedSpecs: any = {};
   if (data.technicalSpecs) {
@@ -2184,15 +2256,16 @@ async function generateUniQuotationPdf(
       : `[${preparedByClean}]`;
 
   const metaRows = [
-    { label: "Quotation No:", val: data.quotationNo },
-    { label: "Quotation Prepared Date:", val: prepDateDisplay },
-    { label: "Quotation Expire Date:", val: expDateDisplay },
-    { label: "Payment Method:", val: paymentMethodDisplay },
-    { label: "Prepared by:", val: preparedByDisplay },
+    { label: "Quotation No", val: data.quotationNo },
+    { label: "Quotation Prepared Date", val: prepDateDisplay },
+    { label: "Quotation Expire Date", val: expDateDisplay },
+    { label: "Payment Method", val: paymentMethodDisplay },
+    { label: "Prepared by", val: preparedByDisplay },
   ];
 
   const labelX = metaBoxX + 2.5;
-  const valX = metaBoxX + 41.5;
+  const colonX = metaBoxX + 37.5;
+  const valX = metaBoxX + 39.5;
 
   let currentMetaY = metaBoxY + 4.6;
   metaRows.forEach((r) => {
@@ -2200,6 +2273,7 @@ async function generateUniQuotationPdf(
     doc.setFontSize(9.5);
     doc.setTextColor(0, 0, 0);
     doc.text(r.label, labelX, currentMetaY);
+    doc.text(":", colonX, currentMetaY);
     doc.text(String(r.val), valX, currentMetaY);
     currentMetaY += 4.5;
   });
@@ -2229,7 +2303,7 @@ async function generateUniQuotationPdf(
   });
 
   // --- PROJECT PROPOSAL TITLE (Centered Bold 13pt) ---
-  const titleY = Math.max(custY + 2.0, metaBoxY + metaBoxH + 4.0);
+  const titleY = Math.max(custY + 5.0, metaBoxY + metaBoxH + 9.5);
   const projTitle = data.projectTitle || "University Project Proposal";
   doc.setFont("times", "bold");
   doc.setFontSize(13);
@@ -2242,7 +2316,7 @@ async function generateUniQuotationPdf(
     parsedSpecs?.completionTime ||
     parsedSpecs?.leadTime ||
     "10 business working days";
-  const completionY = titleY + 6.5;
+  const completionY = titleY + 7.5;
   doc.setFont("times", "bold");
   doc.setFontSize(11);
   doc.setTextColor(0, 0, 0);
@@ -2253,7 +2327,7 @@ async function generateUniQuotationPdf(
   );
 
   // --- TABLE 1: COMPONENTS UTILIZED IN THIS PROJECT ---
-  const t1IntroY = completionY + 6.0;
+  const t1IntroY = completionY + 7.0;
   doc.setFont("times", "normal");
   doc.setFontSize(10.5);
   doc.setTextColor(0, 0, 0);
@@ -2277,7 +2351,7 @@ async function generateUniQuotationPdf(
   const t1RowMinHeight = hasAnyImages ? 20.0 : 8.0;
 
   autoTable(doc, {
-    startY: t1IntroY + 2.5,
+    startY: t1IntroY + 5.5,
     margin: { left: 25.4, right: 25.4 },
     head: [["No.", "Image", "Product/Service", "Quantity"]],
     body: t1Body,
@@ -2485,10 +2559,18 @@ async function generateUniQuotationPdf(
     curY = ensureSpace(9.0, curY);
     doc.setFont("times", "normal");
     doc.setFontSize(9.5);
-    const bulletText = `•  ${term}`;
-    const wrapped = doc.splitTextToSize(bulletText, 159.2);
-    doc.text(wrapped, 25.4, curY);
-    curY += wrapped.length * 4.2 + 1.5;
+    const wrapped = doc.splitTextToSize(term, 153.0);
+
+    // Draw checkmark
+    doc.saveGraphicsState();
+    doc.setDrawColor(0, 0, 0);
+    doc.setLineWidth(0.35);
+    doc.line(25.4, curY - 0.5, 26.6, curY + 0.9);
+    doc.line(26.6, curY + 0.9, 29.0, curY - 2.2);
+    doc.restoreGraphicsState();
+
+    doc.text(wrapped, 31.0, curY);
+    curY += wrapped.length * 4.2 + 2.0;
   });
 
   curY += 2.0;
@@ -2504,39 +2586,90 @@ async function generateUniQuotationPdf(
     data.warranty || parsedSpecs?.warrantyText
   );
 
-  const subTerms = [
-    { heading: "Validity of Quotation", body: termsConfig.validityTerm },
-    { heading: "Project Duration", body: termsConfig.durationTerm },
-    { heading: "Warranty Terms", body: termsConfig.warrantyTerm },
-    { heading: "Delivery from Homagama Warehouse", body: termsConfig.deliveryTerm },
-    { heading: "Confidentiality", body: termsConfig.confidentialityTerm },
-    { heading: "Payment Terms", body: termsConfig.paymentTerm },
-  ];
+  // Page 2 subterms (Validity, Duration, Warranty, Delivery, Confidentiality)
+  // Validity of Quotation
+  curY = ensureSpace(16.0, curY);
+  doc.setFont("times", "bold");
+  doc.setFontSize(10);
+  doc.setTextColor(0, 0, 0);
+  doc.text("Validity of Quotation", 25.4, curY);
+  curY += 4.2;
+  doc.setFont("times", "normal");
+  doc.setFontSize(9.2);
+  const wrappedValidity = doc.splitTextToSize(termsConfig.validityTerm, 159.2);
+  doc.text(wrappedValidity, 25.4, curY);
+  curY += wrappedValidity.length * 4.0 + 3.0;
 
-  subTerms.forEach((term) => {
-    curY = ensureSpace(16.0, curY);
-    doc.setFont("times", "bold");
-    doc.setFontSize(10);
-    doc.setTextColor(0, 0, 0);
-    doc.text(term.heading, 25.4, curY);
-    curY += 4.2;
+  // Project Duration (with completionTime bolded)
+  curY = ensureSpace(16.0, curY);
+  curY = renderInlineHighlightedParagraph(
+    "Project Duration",
+    "The estimated project completion period is ",
+    completionTime,
+    " from the date of official confirmation and/or advance payment. Unforeseen delays due to third-party dependencies, import lead times, or component availability will be communicated in advance.",
+    curY
+  );
 
-    doc.setFont("times", "normal");
-    doc.setFontSize(9.2);
-    const wrapped = doc.splitTextToSize(term.body, 159.2);
-    doc.text(wrapped, 25.4, curY);
-    curY += wrapped.length * 4.0 + 3.0;
-  });
+  // Warranty Terms
+  curY = ensureSpace(14.0, curY);
+  doc.setFont("times", "bold");
+  doc.setFontSize(10);
+  doc.setTextColor(0, 0, 0);
+  doc.text("Warranty Terms", 25.4, curY);
+  curY += 4.2;
+  doc.setFont("times", "normal");
+  doc.setFontSize(9.2);
+  const wrappedWarranty = doc.splitTextToSize(termsConfig.warrantyTerm, 159.2);
+  doc.text(wrappedWarranty, 25.4, curY);
+  curY += wrappedWarranty.length * 4.0 + 3.0;
+
+  // Delivery from Homagama Warehouse
+  curY = ensureSpace(16.0, curY);
+  doc.setFont("times", "bold");
+  doc.setFontSize(10);
+  doc.setTextColor(0, 0, 0);
+  doc.text("Delivery from Homagama Warehouse", 25.4, curY);
+  curY += 4.2;
+  doc.setFont("times", "normal");
+  doc.setFontSize(9.2);
+  const wrappedDelivery = doc.splitTextToSize(termsConfig.deliveryTerm, 159.2);
+  doc.text(wrappedDelivery, 25.4, curY);
+  curY += wrappedDelivery.length * 4.0 + 3.0;
+
+  // Confidentiality
+  curY = ensureSpace(16.0, curY);
+  doc.setFont("times", "bold");
+  doc.setFontSize(10);
+  doc.setTextColor(0, 0, 0);
+  doc.text("Confidentiality", 25.4, curY);
+  curY += 4.2;
+  doc.setFont("times", "normal");
+  doc.setFontSize(9.2);
+  const wrappedConf = doc.splitTextToSize(termsConfig.confidentialityTerm, 159.2);
+  doc.text(wrappedConf, 25.4, curY);
+  curY += wrappedConf.length * 4.0 + 3.0;
+
+  // --- PAGE 3: PAYMENT TERMS, BANK DETAILS & AUTHORIZED BY ---
+  doc.addPage("a4", "portrait");
+  doc.setFont("times", "normal");
+  drawLetterheadBackground();
+  curY = 66.0;
+
+  curY = renderInlineHighlightedParagraph(
+    "Payment Terms",
+    "Payment shall be affected based on the agreed payment method (",
+    paymentMethodDisplay,
+    ") selected by the client and confirmed at the time of order. No processing or delivery will commence until the agreed payment terms are fulfilled.",
+    curY
+  );
+  curY += 7.0;
 
   // --- BANK DETAILS & AUTHORIZED BY STAMP SECTION ---
-  curY = ensureSpace(50.0, curY);
-  curY += 2.0;
-
   doc.setFont("times", "bold");
   doc.setFontSize(11.5);
   doc.setTextColor(0, 0, 0);
   doc.text("Bank Details", 25.4, curY);
-  curY += 4.0;
+  curY += 5.0;
 
   const bankBoxY = curY;
   const bankBoxW = 112.0;
@@ -2612,7 +2745,7 @@ async function generateUniQuotationPdf(
   doc.text("Authorized by", stampX + 4.0, bankBoxY + 27.0);
 
   // Appreciation Note
-  const appY = Math.min(bankBoxY + bankBoxH + 9.0, 268.0);
+  const appY = Math.min(bankBoxY + bankBoxH + 12.0, 268.0);
   doc.setFont("times", "bold");
   doc.setFontSize(10.5);
   doc.setTextColor(0, 0, 0);

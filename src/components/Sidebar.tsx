@@ -123,6 +123,16 @@ export function Sidebar() {
                         Project Proposals
                       </Link>
                       <Link
+                        href="/rad/uni-quotation"
+                        className={`block px-2.5 py-1.5 rounded-md text-xs font-medium transition-colors ${
+                          pathname.startsWith("/rad/uni-quotation")
+                            ? "bg-blue-950/80 text-blue-300 font-semibold border border-blue-800/60"
+                            : "text-slate-400 hover:text-white hover:bg-slate-800/60"
+                        }`}
+                      >
+                        Uni Projects
+                      </Link>
+                      <Link
                         href="/rad/3d-print"
                         className={`block px-2.5 py-1.5 rounded-md text-xs font-medium transition-colors ${
                           pathname.startsWith("/rad/3d-print")
