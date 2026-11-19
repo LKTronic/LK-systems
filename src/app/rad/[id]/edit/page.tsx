@@ -18,7 +18,6 @@ import {
   DEFAULT_PROJECT_PROPOSAL_TERMS,
   DEFAULT_PROJECT_PROPOSAL_INTRO,
   DEFAULT_UNI_QUOTATION_SPECS,
-  DEFAULT_UNI_QUOTATION_ITEMS,
   DEFAULT_UNI_QUOTATION_GENERAL_TERMS,
   getUniQuotationTerms,
   getProjectProposalTerms,
@@ -144,9 +143,9 @@ export default function EditRadQuotationPage({
   const [customServicesTotal, setCustomServicesTotal] = useState<string>("");
 
   // Uni Quotation Specific Fields
-  const [engineeringCharges, setEngineeringCharges] = useState<number | string>(37580);
-  const [discount, setDiscount] = useState<number | string>(4580);
-  const [uniCompletionTime, setUniCompletionTime] = useState<string>("10 business working days");
+  const [engineeringCharges, setEngineeringCharges] = useState<number | string>("");
+  const [discount, setDiscount] = useState<number | string>("");
+  const [uniCompletionTime, setUniCompletionTime] = useState<string>("");
 
   // Bank Accounts Management & Selection
   const [bankAccounts, setBankAccounts] = useState<BankAccount[]>([]);

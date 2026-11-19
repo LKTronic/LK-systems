@@ -21,7 +21,6 @@ import {
   DEFAULT_PROJECT_PROPOSAL_HARDWARE,
   DEFAULT_PROJECT_PROPOSAL_SERVICES,
   DEFAULT_UNI_QUOTATION_SPECS,
-  DEFAULT_UNI_QUOTATION_ITEMS,
   DEFAULT_UNI_QUOTATION_GENERAL_TERMS,
   getUniQuotationTerms,
   getProjectProposalTerms,
@@ -170,9 +169,9 @@ function CreateRadQuotationContent() {
   const [customServicesTotal, setCustomServicesTotal] = useState<string>("");
 
   // Uni Quotation Specific Fields
-  const [engineeringCharges, setEngineeringCharges] = useState<number | string>(37580);
-  const [discount, setDiscount] = useState<number | string>(4580);
-  const [uniCompletionTime, setUniCompletionTime] = useState<string>("10 business working days");
+  const [engineeringCharges, setEngineeringCharges] = useState<number | string>("");
+  const [discount, setDiscount] = useState<number | string>("");
+  const [uniCompletionTime, setUniCompletionTime] = useState<string>("");
 
   // Bank Accounts Management & Selection
   const [bankAccounts, setBankAccounts] = useState<BankAccount[]>([]);
@@ -757,26 +756,16 @@ function CreateRadQuotationContent() {
       setItems(emptyRow);
     } else if (quotationType === "UNI_QUOTATION") {
       setTerms(DEFAULT_UNI_QUOTATION_GENERAL_TERMS.join("\n\n"));
-      setLeadTime("10 business working days");
-      setUniCompletionTime("10 business working days");
-      setWarranty("Warranty terms apply as per manufacturer specifications");
+      setLeadTime("");
+      setUniCompletionTime("");
+      setWarranty("");
       setPaymentMethod("ADVANCE_PAYMENT");
       setAdvancePercent(80);
       setValidityDays(5);
-      setProjectTitle("Cartridge Lighting System");
-      setEngineeringCharges(37580);
-      setDiscount(4580);
-      setItems(
-        DEFAULT_UNI_QUOTATION_ITEMS.map((it, idx) => ({
-          id: `item-uni-${idx + 1}`,
-          itemType: "HARDWARE" as const,
-          productOrService: it.productOrService,
-          quantity: it.quantity,
-          unitPrice: it.unitPrice,
-          notes: "",
-          image: it.image,
-        }))
-      );
+      setProjectTitle("");
+      setEngineeringCharges("");
+      setDiscount("");
+      setItems(emptyRow);
     }
   }, [quotationType]);
 
