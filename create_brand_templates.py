@@ -314,7 +314,7 @@ def make_slide5():
     # Left Box: Payment Terms & Credit Facility
     draw_chamfered_card(draw, 180, 200, 1440, 580, chamfer=16, fill=(248, 250, 252), stroke=BORDER_COLOR, width=2)
     font_po_title = ImageFont.truetype(os.path.join(FONT_DIR, "arialbd.ttf"), 30)
-    font_po_body = ImageFont.truetype(os.path.join(FONT_DIR, "arial.ttf"), 36)
+    font_po_body = ImageFont.truetype(os.path.join(FONT_DIR, "arialbd.ttf"), 36)
     draw.text((220, 230), "PURCHASE ORDER & ADVANCE TERMS", font=font_po_title, fill=LK_ORANGE + (255,))
     default_clause = (
         "The total value of the product or 60% of the total value\n"
@@ -324,6 +324,18 @@ def make_slide5():
         "To initiate this credit facility, kindly reach out to us.)"
     )
     draw.text((220, 285), default_clause, font=font_po_body, fill=LK_SLATE + (255,), spacing=10)
+
+    # Top Right Box: Official LK Tronics Logo Badge
+    draw_chamfered_card(draw, 1500, 200, 2380, 580, chamfer=16, fill=(255, 255, 255), stroke=BORDER_COLOR, width=2)
+    logo_file = "public/template_assets/lk_tronics_logo.png"
+    if os.path.exists(logo_file):
+        slide5_logo = Image.open(logo_file).convert("RGBA")
+        target_h = 340
+        target_w = int(slide5_logo.width * (target_h / slide5_logo.height))
+        resized_logo = slide5_logo.resize((target_w, target_h), Image.Resampling.LANCZOS)
+        paste_x = 1500 + (880 - target_w) // 2
+        paste_y = 200 + (380 - target_h) // 2
+        img.paste(resized_logo, (paste_x, paste_y))
 
     # Right Box: Corporate Banking Card (Hatton National Bank)
     bank_x1, bank_y1, bank_x2, bank_y2 = 180, 630, W - 180, 1170

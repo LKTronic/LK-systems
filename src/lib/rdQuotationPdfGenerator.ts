@@ -1750,7 +1750,7 @@ async function generateProjectProposalPdf(
     doc.setFontSize(20.0);
     doc.setTextColor(LK_ORANGE[0], LK_ORANGE[1], LK_ORANGE[2]);
     doc.text("PURCHASE ORDER & ADVANCE TERMS", 44.0, 50.0);
-    doc.setFont("helvetica", "normal");
+    doc.setFont("helvetica", "bold");
     doc.setFontSize(18.0);
     doc.setTextColor(LK_SLATE[0], LK_SLATE[1], LK_SLATE[2]);
     const clauseText = `The total value of the product or ${advancePercent}% of the total value\nshould be payable together with your purchase order.\n\n(If only we are registered as your vendor, a one-month\ncredit facility can be extended for your orders.\nTo initiate this credit facility, kindly reach out to us.)`;
