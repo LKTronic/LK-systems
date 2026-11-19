@@ -9,6 +9,7 @@ import {
   InverterInfo,
   ChecklistTestItem,
   ChecklistNoteItem,
+  ChecklistVideoInfo,
   ProductChecklist,
   getDefaultTestItems,
   getDefaultBatteryInfo,
@@ -42,6 +43,11 @@ import {
   Sparkles,
   Lock,
   Unlock,
+  Video,
+  Play,
+  HardDrive,
+  X,
+  Upload,
 } from "lucide-react";
 
 export default function ChecklistPage() {
@@ -60,9 +66,9 @@ export default function ChecklistPage() {
     }
   }, []);
 
-  // Form State
-  const [checklistType, setChecklistType] = useState<ProductChecklistType>("BATTERY");
-  const [checklistNo, setChecklistNo] = useState<string>(() => formatAutoChecklistNo("BATTERY"));
+  // Form State - Default selected to INVERTER
+  const [checklistType, setChecklistType] = useState<ProductChecklistType>("INVERTER");
+  const [checklistNo, setChecklistNo] = useState<string>(() => formatAutoChecklistNo("INVERTER"));
   const [isNumberAutoLocked, setIsNumberAutoLocked] = useState(true);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [status, setStatus] = useState<"DRAFT" | "COMPLETED">("COMPLETED");
@@ -76,7 +82,7 @@ export default function ChecklistPage() {
 
   // Section 2: QC Tests & Dates
   const [checkedDate, setCheckedDate] = useState<string>(() => new Date().toISOString().split("T")[0]);
-  const [tests, setTests] = useState<ChecklistTestItem[]>(() => getDefaultTestItems("BATTERY"));
+  const [tests, setTests] = useState<ChecklistTestItem[]>(() => getDefaultTestItems("INVERTER"));
   const [overallQcPassed, setOverallQcPassed] = useState<boolean>(false);
 
   // Serial Number Mismatch Detection
@@ -108,6 +114,33 @@ export default function ChecklistPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [typeFilter, setTypeFilter] = useState<"ALL" | "BATTERY" | "INVERTER">("ALL");
   const [isLoadingHistory, setIsLoadingHistory] = useState(false);
+
+  // Cloudinary Storage Usage State
+  const [storageUsage, setStorageUsage] = useState<{
+    isConfigured: boolean;
+    usedBytes: number;
+    totalBytes: number;
+    remainingBytes: number;
+    usedPercent: number;
+    usedFormatted: string;
+    totalFormatted: string;
+    remainingFormatted: string;
+    plan?: string;
+    message?: string;
+  } | null>(null);
+  const [isLoadingStorage, setIsLoadingStorage] = useState(false);
+
+  // Video Uploading States
+  const [uploadingChecklistId, setUploadingChecklistId] = useState<string | null>(null);
+  const [deletingVideoId, setDeletingVideoId] = useState<string | null>(null);
+
+  // Form Video State
+  const [formVideoInfo, setFormVideoInfo] = useState<ChecklistVideoInfo | null>(null);
+  const [isUploadingFormVideo, setIsUploadingFormVideo] = useState(false);
+
+  // Upload Progress States (Percentage 0-100%)
+  const [formUploadProgress, setFormUploadProgress] = useState<number>(0);
+  const [itemUploadProgress, setItemUploadProgress] = useState<{ id: string; percent: number } | null>(null);
 
   // UI state
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -160,11 +193,215 @@ export default function ChecklistPage() {
     }
   };
 
+  // Fetch Storage Usage
+  const fetchStorageUsage = async () => {
+    setIsLoadingStorage(true);
+    try {
+      const res = await fetch("/api/checklists/storage", { cache: "no-store" });
+      if (res.ok) {
+        const d = await res.json();
+        setStorageUsage(d);
+      }
+    } catch (err) {
+      console.error("Failed to load storage usage:", err);
+    } finally {
+      setIsLoadingStorage(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchStorageUsage();
+  }, []);
+
   useEffect(() => {
     if (activeTab === "history") {
       fetchHistory();
+      fetchStorageUsage();
     }
   }, [activeTab]);
+
+  // Helper for tracking upload progress percentages via XMLHttpRequest
+  const uploadFileWithProgress = (
+    url: string,
+    formData: FormData,
+    onProgress: (percent: number) => void
+  ): Promise<any> => {
+    return new Promise((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      xhr.open("POST", url);
+
+      xhr.upload.onprogress = (e) => {
+        if (e.lengthComputable && e.total > 0) {
+          const percent = Math.min(100, Math.round((e.loaded / e.total) * 100));
+          onProgress(percent);
+        }
+      };
+
+      xhr.onload = () => {
+        try {
+          const data = JSON.parse(xhr.responseText || "{}");
+          if (xhr.status >= 200 && xhr.status < 300) {
+            resolve(data);
+          } else {
+            reject(new Error(data.error || `Upload failed with status ${xhr.status}`));
+          }
+        } catch {
+          reject(new Error("Invalid response received from server"));
+        }
+      };
+
+      xhr.onerror = () => reject(new Error("Network error during video upload"));
+      xhr.ontimeout = () => reject(new Error("Video upload timed out"));
+      xhr.timeout = 300000; // 5 minutes
+      xhr.send(formData);
+    });
+  };
+
+  // Video Upload Handler (Max 150MB) with Progress Tracking
+  const handleUploadVideo = async (checklistId: string, file: File) => {
+    if (!file) return;
+    const maxBytes = 150 * 1024 * 1024;
+    if (file.size > maxBytes) {
+      showNotification(
+        "error",
+        `Video size (${(file.size / (1024 * 1024)).toFixed(1)} MB) exceeds 150MB maximum limit. Please select a smaller video.`
+      );
+      return;
+    }
+
+    setUploadingChecklistId(checklistId);
+    setItemUploadProgress({ id: checklistId, percent: 0 });
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+
+      const data = await uploadFileWithProgress(
+        `/api/checklists/${checklistId}/video`,
+        formData,
+        (percent) => setItemUploadProgress({ id: checklistId, percent })
+      );
+
+      showNotification("success", "QC inspection video uploaded successfully!");
+      setSavedChecklists((prev) =>
+        prev.map((item) =>
+          item.id === checklistId ? { ...item, videoInfo: data.videoInfo || data.video } : item
+        )
+      );
+      fetchStorageUsage();
+    } catch (err: any) {
+      console.error("Video upload error:", err);
+      showNotification("error", err.message || "Failed to upload video");
+    } finally {
+      setUploadingChecklistId(null);
+      setItemUploadProgress(null);
+    }
+  };
+
+  // Video Delete Handler (Only deletes video, checklist preserved)
+  const handleDeleteVideo = async (checklistId: string, checklistNo: string) => {
+    const confirmed = window.confirm(
+      `Delete only the test video for "${checklistNo}"?\n\nThe checklist inspection data, parameters, and PDF report will remain completely saved.`
+    );
+    if (!confirmed) return;
+
+    setDeletingVideoId(checklistId);
+    try {
+      const res = await fetch(`/api/checklists/${checklistId}/video`, {
+        method: "DELETE",
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to delete video");
+      }
+
+      showNotification("success", `Video deleted from cloud storage. Checklist "${checklistNo}" preserved.`);
+      setSavedChecklists((prev) =>
+        prev.map((item) =>
+          item.id === checklistId ? { ...item, videoInfo: null } : item
+        )
+      );
+      fetchStorageUsage();
+    } catch (err: any) {
+      console.error("Video delete error:", err);
+      showNotification("error", err.message || "Failed to delete video");
+    } finally {
+      setDeletingVideoId(null);
+    }
+  };
+
+  // Upload Video from Inspection Form with Progress Tracking
+  const handleUploadFormVideo = async (file: File) => {
+    if (!file) return;
+    const maxBytes = 150 * 1024 * 1024;
+    if (file.size > maxBytes) {
+      showNotification(
+        "error",
+        `Video size (${(file.size / (1024 * 1024)).toFixed(1)} MB) exceeds 150MB limit. Please select a smaller video.`
+      );
+      return;
+    }
+
+    setIsUploadingFormVideo(true);
+    setFormUploadProgress(0);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      if (editingId) {
+        formData.append("checklistId", editingId);
+      }
+
+      const data = await uploadFileWithProgress(
+        "/api/checklists/upload-video",
+        formData,
+        (percent) => setFormUploadProgress(percent)
+      );
+
+      setFormVideoInfo(data.videoInfo);
+      if (editingId) {
+        setSavedChecklists((prev) =>
+          prev.map((item) =>
+            item.id === editingId ? { ...item, videoInfo: data.videoInfo } : item
+          )
+        );
+      }
+      showNotification("success", "QC inspection video attached successfully!");
+      fetchStorageUsage();
+    } catch (err: any) {
+      console.error("Form video upload error:", err);
+      showNotification("error", err.message || "Failed to upload video");
+    } finally {
+      setIsUploadingFormVideo(false);
+      setFormUploadProgress(0);
+    }
+  };
+
+  // Delete Video from Inspection Form
+  const handleDeleteFormVideo = async () => {
+    if (!window.confirm("Are you sure you want to remove this attached video?")) return;
+
+    if (editingId) {
+      try {
+        const res = await fetch(`/api/checklists/${editingId}/video`, {
+          method: "DELETE",
+        });
+        if (res.ok) {
+          setSavedChecklists((prev) =>
+            prev.map((item) =>
+              item.id === editingId ? { ...item, videoInfo: null } : item
+            )
+          );
+        }
+      } catch (err) {
+        console.error("Error deleting video:", err);
+      }
+    }
+
+    setFormVideoInfo(null);
+    showNotification("success", "Video removed from inspection form");
+    fetchStorageUsage();
+  };
 
   // Handle Product Type Change
   const handleTypeChange = (newType: ProductChecklistType) => {
@@ -253,16 +490,17 @@ export default function ChecklistPage() {
   const handleResetForm = () => {
     setEditingId(null);
     setStatus("COMPLETED");
-    setChecklistType("BATTERY");
+    setChecklistType("INVERTER");
     setBatteryInfo(getDefaultBatteryInfo());
     setInverterInfo(getDefaultInverterInfo());
-    setTests(getDefaultTestItems("BATTERY"));
+    setTests(getDefaultTestItems("INVERTER"));
     setOverallQcPassed(false);
     setNotes([]);
+    setFormVideoInfo(null);
     setBoxSerialManuallyDiverged(false);
     setIsNumberAutoLocked(true);
-    setChecklistNo(formatAutoChecklistNo("BATTERY"));
-    fetchNextNumber("BATTERY");
+    setChecklistNo(formatAutoChecklistNo("INVERTER"));
+    fetchNextNumber("INVERTER");
     showNotification("success", "Form reset to new inspection state");
   };
 
@@ -289,6 +527,7 @@ export default function ChecklistPage() {
     setCheckedByName(item.checkedByName || "");
     setCheckedByDesignation(item.checkedByDesignation || "Quality Control & Hardware Engineer");
     setNotes(item.additionalNotes || []);
+    setFormVideoInfo(item.videoInfo || null);
     setOverallQcPassed(item.overallQcPassed !== undefined ? item.overallQcPassed : true);
     setActiveTab("form");
     showNotification("success", `Loaded ${item.checklistNo} for editing`);
@@ -324,6 +563,7 @@ export default function ChecklistPage() {
       checkedByName: checkedByName || session?.user?.name || "QC Inspector",
       checkedByDesignation,
       additionalNotes: notes,
+      videoInfo: formVideoInfo || undefined,
       overallQcPassed,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
@@ -1209,6 +1449,163 @@ export default function ChecklistPage() {
               </div>
             </div>
 
+            {/* ================= SECTION 5: QC TEST VIDEO RECORDING ================= */}
+            <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 space-y-4 shadow-sm">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-800">
+                <div className="flex items-center gap-2.5">
+                  <div className="p-2 rounded-xl bg-cyan-950/80 border border-cyan-800/60 text-cyan-400">
+                    <Video className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <h2 className="text-xs font-bold text-white uppercase tracking-wider">
+                        Section 5: QC Inspection Video Recording
+                      </h2>
+                      <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-cyan-950 text-cyan-300 border border-cyan-800/60">
+                        Max 150MB
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-slate-400 mt-0.5">
+                      Upload battery or inverter operational test, load run or thermal video proof
+                    </p>
+                  </div>
+                </div>
+
+                {storageUsage?.isConfigured && (
+                  <div className="text-[10px] text-slate-400 font-mono flex items-center gap-2 bg-slate-950 px-3 py-1.5 rounded-xl border border-slate-800 self-start sm:self-auto">
+                    <HardDrive className="w-3.5 h-3.5 text-teal-400" />
+                    <span>Cloud Storage:</span>
+                    <strong className="text-emerald-400">{storageUsage.remainingFormatted}</strong>
+                    <span className="text-slate-600">/</span>
+                    <span className="text-slate-400">{storageUsage.totalFormatted}</span>
+                  </div>
+                )}
+              </div>
+
+              {formVideoInfo?.url ? (
+                /* Video Attached State */
+                <div className="bg-slate-950/80 border border-cyan-900/60 rounded-xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                  <div className="flex items-center gap-3">
+                    <div className="w-12 h-12 rounded-xl bg-cyan-950 border border-cyan-800/80 flex items-center justify-center text-cyan-400 shrink-0">
+                      <Play className="w-6 h-6 fill-cyan-400" />
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-xs font-bold text-white">Test Video Attached</span>
+                        <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-950 text-emerald-400 border border-emerald-800 flex items-center gap-1">
+                          <CheckCircle2 className="w-3 h-3" />
+                          Attached
+                        </span>
+                      </div>
+                      <div className="text-[11px] text-slate-400 font-mono mt-0.5 flex items-center gap-2">
+                        {formVideoInfo.bytes && (
+                          <span>{(formVideoInfo.bytes / (1024 * 1024)).toFixed(1)} MB</span>
+                        )}
+                        {formVideoInfo.duration && (
+                          <>
+                            <span>•</span>
+                            <span>{Math.floor(formVideoInfo.duration / 60)}:{String(Math.floor(formVideoInfo.duration % 60)).padStart(2, "0")}</span>
+                          </>
+                        )}
+                        <span>• Cloudinary CDN</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2 self-end sm:self-auto">
+                    <a
+                      href={formVideoInfo.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-cyan-900/60 hover:bg-cyan-800 text-cyan-200 hover:text-white border border-cyan-700/60 rounded-xl text-xs font-semibold transition-all shadow-sm"
+                      title="Open video in new tab"
+                    >
+                      <Play className="w-3.5 h-3.5 fill-cyan-300" />
+                      <span>Watch Video ↗</span>
+                    </a>
+
+                    <button
+                      type="button"
+                      onClick={handleDeleteFormVideo}
+                      className="inline-flex items-center gap-1.5 px-3 py-2 bg-rose-950/40 hover:bg-rose-900/60 text-rose-300 hover:text-rose-100 border border-rose-800/60 rounded-xl text-xs font-semibold transition-colors"
+                      title="Remove video"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                      <span>Delete Video Only</span>
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                /* Upload State */
+                <div className="border-2 border-dashed border-slate-800 hover:border-teal-600/60 rounded-2xl p-6 text-center transition-all bg-slate-950/40 hover:bg-slate-950/80">
+                  <input
+                    type="file"
+                    id="form-video-upload"
+                    accept="video/*"
+                    disabled={isUploadingFormVideo}
+                    className="hidden"
+                    onChange={(e) => {
+                      const f = e.target.files?.[0];
+                      if (f) handleUploadFormVideo(f);
+                      e.target.value = "";
+                    }}
+                  />
+
+                  {isUploadingFormVideo ? (
+                    <div className="py-5 px-4 space-y-3 flex flex-col items-center max-w-sm mx-auto">
+                      <div className="flex items-center justify-between w-full text-xs">
+                        <span className="font-semibold text-white flex items-center gap-2">
+                          <Loader2 className="w-4 h-4 animate-spin text-teal-400" />
+                          <span>
+                            {formUploadProgress >= 100
+                              ? "Processing on Cloudinary..."
+                              : "Uploading Test Video..."}
+                          </span>
+                        </span>
+                        <span className="font-mono font-bold text-teal-400 text-sm">
+                          {formUploadProgress}%
+                        </span>
+                      </div>
+
+                      {/* Animated Progress Bar */}
+                      <div className="w-full bg-slate-950 rounded-full h-2.5 overflow-hidden border border-slate-800 p-0.5">
+                        <div
+                          className="bg-gradient-to-r from-teal-500 via-cyan-400 to-emerald-400 h-1.5 rounded-full transition-all duration-150"
+                          style={{ width: `${formUploadProgress}%` }}
+                        />
+                      </div>
+
+                      <div className="text-[11px] text-slate-400 font-mono flex items-center justify-between w-full">
+                        <span>Streaming chunked upload</span>
+                        <span>Max 150MB</span>
+                      </div>
+                    </div>
+                  ) : (
+                    <label
+                      htmlFor="form-video-upload"
+                      className="cursor-pointer flex flex-col items-center space-y-2.5"
+                    >
+                      <div className="w-12 h-12 rounded-2xl bg-teal-500/10 border border-teal-500/20 text-teal-400 flex items-center justify-center transition-transform hover:scale-105">
+                        <Upload className="w-6 h-6" />
+                      </div>
+                      <div>
+                        <div className="text-xs font-bold text-white hover:text-teal-300 transition-colors">
+                          Click to Browse or Drag &amp; Drop QC Test Video
+                        </div>
+                        <div className="text-[11px] text-slate-400 mt-0.5">
+                          Supports MP4, WebM, MOV, MKV • Maximum size: <strong className="text-teal-400">150 MB</strong>
+                        </div>
+                      </div>
+                      <span className="inline-flex items-center gap-1 px-3 py-1 rounded-lg bg-teal-600 hover:bg-teal-500 text-white text-xs font-semibold shadow-sm transition-colors mt-1">
+                        <Plus className="w-3.5 h-3.5" />
+                        <span>Select Video File</span>
+                      </span>
+                    </label>
+                  )}
+                </div>
+              )}
+            </div>
+
             {/* ================= ACTION BUTTONS BAR ================= */}
             <div className="flex flex-col sm:flex-row items-center justify-between gap-3 bg-slate-900 border border-slate-800 rounded-2xl p-4 sticky bottom-4 shadow-xl shadow-slate-950/50 backdrop-blur-md">
               <button
@@ -1261,6 +1658,61 @@ export default function ChecklistPage() {
         {/* ================= TAB 2: HISTORY ================= */}
         {activeTab === "history" && (
           <div className="space-y-4">
+            {/* Slim Top Cloud Storage Bar */}
+            <div className="bg-slate-900/90 border border-slate-800 rounded-xl px-4 py-2.5 flex flex-wrap md:flex-nowrap items-center justify-between gap-3 shadow-sm">
+              <div className="flex items-center gap-2.5 shrink-0">
+                <div className="p-1.5 rounded-lg bg-teal-500/10 border border-teal-500/20 text-teal-400 shrink-0">
+                  <HardDrive className="w-4 h-4" />
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="font-bold text-white tracking-wide text-xs">
+                    QC Video Cloud Storage
+                  </span>
+                  {storageUsage?.isConfigured ? (
+                    <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-950/80 text-emerald-400 border border-emerald-800/80 flex items-center gap-1 shrink-0">
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+                      Cloudinary Connected
+                    </span>
+                  ) : (
+                    <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-amber-950 text-amber-300 border border-amber-800 shrink-0">
+                      Setup Required
+                    </span>
+                  )}
+                  <span className="text-[10px] text-slate-500 hidden xl:inline">
+                    • Max 150MB
+                  </span>
+                </div>
+              </div>
+
+              {storageUsage?.isConfigured ? (
+                <div className="flex items-center gap-3.5 flex-1 max-w-2xl justify-end">
+                  {/* Large & Wide Progress Bar */}
+                  <div className="flex items-center gap-2.5 flex-1 max-w-xs sm:max-w-sm md:max-w-md">
+                    <div className="flex-1 bg-slate-950 rounded-full h-3 overflow-hidden border border-slate-700/80 p-0.5 shadow-inner">
+                      <div
+                        className="bg-gradient-to-r from-teal-500 via-cyan-400 to-emerald-400 h-2 rounded-full transition-all duration-300 shadow-sm"
+                        style={{ width: `${Math.min(100, Math.max(1, storageUsage.usedPercent))}%` }}
+                      />
+                    </div>
+                    <span className="text-xs font-mono font-bold text-teal-300 shrink-0">
+                      {storageUsage.usedPercent}%
+                    </span>
+                  </div>
+
+                  <div className="flex items-baseline gap-1.5 text-xs font-mono shrink-0">
+                    <span className="text-[11px] text-slate-400">Remaining:</span>
+                    <strong className="text-emerald-400 font-bold">{storageUsage.remainingFormatted}</strong>
+                    <span className="text-slate-600 font-light">/</span>
+                    <span className="text-slate-300">{storageUsage.totalFormatted}</span>
+                  </div>
+                </div>
+              ) : (
+                <span className="text-[11px] text-amber-300">
+                  Add Cloudinary keys to .env to activate 25 GB storage
+                </span>
+              )}
+            </div>
+
             {/* Filter & Search Bar */}
             <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 flex flex-col sm:flex-row items-center justify-between gap-3">
               <div className="relative flex-1 w-full sm:w-auto">
@@ -1288,12 +1740,15 @@ export default function ChecklistPage() {
 
                 <button
                   type="button"
-                  onClick={fetchHistory}
-                  disabled={isLoadingHistory}
+                  onClick={() => {
+                    fetchHistory();
+                    fetchStorageUsage();
+                  }}
+                  disabled={isLoadingHistory || isLoadingStorage}
                   className="p-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl transition-colors disabled:opacity-50"
                   title="Refresh"
                 >
-                  <RefreshCw className={`w-4 h-4 ${isLoadingHistory ? "animate-spin" : ""}`} />
+                  <RefreshCw className={`w-4 h-4 ${isLoadingHistory || isLoadingStorage ? "animate-spin" : ""}`} />
                 </button>
 
                 <button
@@ -1355,105 +1810,200 @@ export default function ChecklistPage() {
                   return (
                     <div
                       key={item.id}
-                      className="bg-slate-900 border border-slate-800 hover:border-slate-700 rounded-2xl p-4 transition-all flex flex-col md:flex-row md:items-center justify-between gap-4"
+                      className="bg-slate-900 border border-slate-800 hover:border-slate-700 rounded-2xl p-4 transition-all flex flex-col gap-3"
                     >
-                      <div className="flex items-start gap-3.5">
-                        <div
-                          className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 border ${
-                            isBat
-                              ? "bg-teal-500/10 border-teal-500/20 text-teal-400"
-                              : "bg-amber-500/10 border-amber-500/20 text-amber-400"
-                          }`}
-                        >
-                          {isBat ? <BatteryCharging className="w-5 h-5" /> : <Zap className="w-5 h-5" />}
-                        </div>
+                      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                        <div className="flex items-start gap-3.5">
+                          <div
+                            className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 border ${
+                              isBat
+                                ? "bg-teal-500/10 border-teal-500/20 text-teal-400"
+                                : "bg-amber-500/10 border-amber-500/20 text-amber-400"
+                            }`}
+                          >
+                            {isBat ? <BatteryCharging className="w-5 h-5" /> : <Zap className="w-5 h-5" />}
+                          </div>
 
-                        <div>
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <span className="text-xs font-mono font-bold text-white">
-                              {item.checklistNo}
-                            </span>
-                            <span
-                              className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${
-                                isBat
-                                  ? "bg-teal-950 text-teal-400 border border-teal-800"
-                                  : "bg-amber-950 text-amber-400 border border-amber-800"
-                              }`}
-                            >
-                              {isBat ? "BATTERY" : "INVERTER"}
-                            </span>
-                            {item.status === "DRAFT" ? (
-                              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-950 text-amber-300 border border-amber-800">
-                                DRAFT
+                          <div>
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className="text-xs font-mono font-bold text-white">
+                                {item.checklistNo}
                               </span>
-                            ) : (
                               <span
-                                className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
-                                  item.overallQcPassed
-                                    ? "bg-emerald-950 text-emerald-400 border border-emerald-800"
-                                    : "bg-rose-950 text-rose-400 border border-rose-800"
+                                className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${
+                                  isBat
+                                    ? "bg-teal-950 text-teal-400 border border-teal-800"
+                                    : "bg-amber-950 text-amber-400 border border-amber-800"
                                 }`}
                               >
-                                {item.overallQcPassed ? "✔ PASSED" : "✖ FAILED"}
+                                {isBat ? "BATTERY" : "INVERTER"}
                               </span>
-                            )}
-                          </div>
+                              {item.status === "DRAFT" ? (
+                                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-950 text-amber-300 border border-amber-800">
+                                  DRAFT
+                                </span>
+                              ) : (
+                                <span
+                                  className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                                    item.overallQcPassed
+                                      ? "bg-emerald-950 text-emerald-400 border border-emerald-800"
+                                      : "bg-rose-950 text-rose-400 border border-rose-800"
+                                  }`}
+                                >
+                                  {item.overallQcPassed ? "✔ PASSED" : "✖ FAILED"}
+                                </span>
+                              )}
+                            </div>
 
-                          <div className="text-xs text-slate-300 font-medium mt-1 flex flex-wrap items-center gap-x-2 gap-y-1">
-                            <span>Model: <span className="font-mono text-white font-semibold">{modelNo}</span></span>
-                            <span className="text-slate-600">•</span>
-                            <span>Serial Number (Box): <span className="font-mono text-teal-300 font-semibold">{boxSerial}</span></span>
-                            <span className="text-slate-600">•</span>
-                            <span>Serial Number ({deviceLabel}): <span className="font-mono text-slate-200 font-semibold">{deviceSerial}</span></span>
-                          </div>
+                            <div className="text-xs text-slate-300 font-medium mt-1 flex flex-wrap items-center gap-x-2 gap-y-1">
+                              <span>Model: <span className="font-mono text-white font-semibold">{modelNo}</span></span>
+                              <span className="text-slate-600">•</span>
+                              <span>Serial Number (Box): <span className="font-mono text-teal-300 font-semibold">{boxSerial}</span></span>
+                              <span className="text-slate-600">•</span>
+                              <span>Serial Number ({deviceLabel}): <span className="font-mono text-slate-200 font-semibold">{deviceSerial}</span></span>
+                            </div>
 
-                          <div className="text-[11px] text-slate-500 mt-0.5">
-                            Arrived: {arrivedDate} • Checked: {item.checkedDate} • Inspector: {item.checkedByName}
+                            <div className="text-[11px] text-slate-500 mt-0.5">
+                              Arrived: {arrivedDate} • Checked: {item.checkedDate} • Inspector: {item.checkedByName}
+                            </div>
                           </div>
+                        </div>
+
+                        {/* Action buttons */}
+                        <div className="flex items-center gap-2 shrink-0 self-end md:self-auto">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (item.status === "DRAFT") {
+                                showNotification("error", `Draft checklist "${item.checklistNo}" cannot be downloaded. Please edit and certify it first.`);
+                                return;
+                              }
+                              handleDownloadPdf(item);
+                            }}
+                            disabled={item.status === "DRAFT"}
+                            className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors ${
+                              item.status === "DRAFT"
+                                ? "bg-slate-900 border border-slate-800 text-slate-600 cursor-not-allowed opacity-40"
+                                : "bg-slate-800 hover:bg-slate-700 text-teal-300 border border-teal-800/60"
+                            }`}
+                            title={item.status === "DRAFT" ? "Draft inspection cannot be downloaded. Please certify first." : "Download official PDF"}
+                          >
+                            <FileDown className="w-3.5 h-3.5 text-teal-400" />
+                            <span>PDF</span>
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => handleLoadForEdit(item)}
+                            className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors"
+                            title="Edit checklist"
+                          >
+                            <Edit3 className="w-3.5 h-3.5 text-slate-400" />
+                            <span>Edit</span>
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => handleDelete(item.id, item.checklistNo)}
+                            className="p-1.5 bg-slate-800 hover:bg-rose-900/40 text-slate-400 hover:text-rose-300 border border-slate-700 rounded-lg transition-colors"
+                            title="Delete"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
                         </div>
                       </div>
 
-                      {/* Action buttons */}
-                      <div className="flex items-center gap-2 shrink-0 self-end md:self-auto">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            if (item.status === "DRAFT") {
-                              showNotification("error", `Draft checklist "${item.checklistNo}" cannot be downloaded. Please edit and certify it first.`);
-                              return;
-                            }
-                            handleDownloadPdf(item);
-                          }}
-                          disabled={item.status === "DRAFT"}
-                          className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors ${
-                            item.status === "DRAFT"
-                              ? "bg-slate-900 border border-slate-800 text-slate-600 cursor-not-allowed opacity-40"
-                              : "bg-slate-800 hover:bg-slate-700 text-teal-300 border border-teal-800/60"
-                          }`}
-                          title={item.status === "DRAFT" ? "Draft inspection cannot be downloaded. Please certify first." : "Download official PDF"}
-                        >
-                          <FileDown className="w-3.5 h-3.5 text-teal-400" />
-                          <span>PDF</span>
-                        </button>
+                      {/* Video Recording Bar */}
+                      <div className="pt-2 border-t border-slate-800/70 flex flex-wrap items-center justify-between gap-2">
+                        {item.videoInfo?.url ? (
+                          <>
+                            <div className="flex items-center gap-2">
+                              <a
+                                href={item.videoInfo.url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-cyan-950/80 hover:bg-cyan-900 text-cyan-300 hover:text-cyan-100 border border-cyan-800/80 rounded-lg text-xs font-semibold transition-all group shadow-sm"
+                                title="Open video in new tab"
+                              >
+                                <Play className="w-3.5 h-3.5 text-cyan-400 fill-cyan-400 group-hover:scale-110 transition-transform" />
+                                <span>Watch Video ↗</span>
+                                {item.videoInfo.bytes && (
+                                  <span className="text-[10px] text-cyan-400/90 font-mono ml-0.5">
+                                    ({(item.videoInfo.bytes / (1024 * 1024)).toFixed(1)} MB)
+                                  </span>
+                                )}
+                              </a>
+                              {item.videoInfo.duration && (
+                                <span className="text-[10px] text-slate-400 font-mono">
+                                  {Math.floor(item.videoInfo.duration / 60)}:{String(Math.floor(item.videoInfo.duration % 60)).padStart(2, "0")}
+                                </span>
+                              )}
+                              <span className="text-[10px] text-emerald-400 flex items-center gap-1">
+                                <CheckCircle2 className="w-3 h-3" />
+                                Attached
+                              </span>
+                            </div>
 
-                        <button
-                          type="button"
-                          onClick={() => handleLoadForEdit(item)}
-                          className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors"
-                          title="Edit checklist"
-                        >
-                          <Edit3 className="w-3.5 h-3.5 text-slate-400" />
-                          <span>Edit</span>
-                        </button>
-
-                        <button
-                          type="button"
-                          onClick={() => handleDelete(item.id, item.checklistNo)}
-                          className="p-1.5 bg-slate-800 hover:bg-rose-900/40 text-slate-400 hover:text-rose-300 border border-slate-700 rounded-lg transition-colors"
-                          title="Delete"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteVideo(item.id, item.checklistNo)}
+                              disabled={deletingVideoId === item.id}
+                              className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] text-rose-400 hover:text-rose-200 hover:bg-rose-950/50 rounded-lg border border-transparent hover:border-rose-900/60 transition-colors disabled:opacity-50"
+                              title="Delete video only (checklist parameters remain intact)"
+                            >
+                              {deletingVideoId === item.id ? (
+                                <Loader2 className="w-3 h-3 animate-spin text-rose-400" />
+                              ) : (
+                                <Trash2 className="w-3 h-3" />
+                              )}
+                              <span>Delete Video Only</span>
+                            </button>
+                          </>
+                        ) : (
+                          <>
+                            {uploadingChecklistId === item.id ? (
+                              <div className="w-full max-w-xs space-y-1 py-0.5">
+                                <div className="flex items-center justify-between text-xs">
+                                  <span className="text-teal-300 font-medium flex items-center gap-1.5 text-[11px]">
+                                    <Loader2 className="w-3 h-3 animate-spin text-teal-400" />
+                                    <span>
+                                      {itemUploadProgress?.id === item.id && itemUploadProgress.percent >= 100
+                                        ? "Processing on Cloudinary..."
+                                        : "Uploading video..."}
+                                    </span>
+                                  </span>
+                                  <span className="font-mono font-bold text-teal-400 text-xs">
+                                    {itemUploadProgress?.id === item.id ? itemUploadProgress.percent : 0}%
+                                  </span>
+                                </div>
+                                <div className="w-full bg-slate-950 rounded-full h-1.5 overflow-hidden border border-slate-800">
+                                  <div
+                                    className="bg-gradient-to-r from-teal-500 to-cyan-400 h-1.5 rounded-full transition-all duration-150"
+                                    style={{ width: `${itemUploadProgress?.id === item.id ? itemUploadProgress.percent : 0}%` }}
+                                  />
+                                </div>
+                              </div>
+                            ) : (
+                              <label className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-950 hover:bg-slate-800/80 text-slate-300 hover:text-teal-300 border border-slate-800 hover:border-teal-700/60 rounded-lg text-xs font-medium cursor-pointer transition-colors">
+                                <Video className="w-3.5 h-3.5 text-teal-400" />
+                                <span>+ Attach Test Video (Max 150MB)</span>
+                                <input
+                                  type="file"
+                                  accept="video/*"
+                                  className="hidden"
+                                  onChange={(e) => {
+                                    const f = e.target.files?.[0];
+                                    if (f) handleUploadVideo(item.id, f);
+                                    e.target.value = "";
+                                  }}
+                                />
+                              </label>
+                            )}
+                            <span className="text-[10px] text-slate-500 font-light">
+                              {uploadingChecklistId === item.id ? "Keep page open" : "No video attached"}
+                            </span>
+                          </>
+                        )}
                       </div>
                     </div>
                   );

@@ -644,9 +644,13 @@ const formatPreparedBy = (u: UserListItem) => {
     }
   };
 
-  // Download PDF
+  // Download PDF (Automatically saves changes to database first)
   const handleDownloadPdf = async () => {
     if (!validateForm()) return;
+
+    // Automatically save/update changes to database first!
+    const updated = await handleUpdateQuotation();
+    if (!updated) return;
 
     setIsGeneratingPdf(true);
     try {
@@ -684,7 +688,7 @@ const formatPreparedBy = (u: UserListItem) => {
         items: pdfItems,
       });
 
-      setSuccessMessage("PDF downloaded successfully!");
+      setSuccessMessage(`Quotation ${quotationNo} saved and PDF downloaded successfully!`);
     } catch (err: any) {
       console.error("PDF generation error:", err);
       setErrorMessage("Failed to generate PDF. Please check details and try again.");

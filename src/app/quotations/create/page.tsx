@@ -98,6 +98,7 @@ export default function CreateQuotationPage() {
   // UI state
   const [isSaving, setIsSaving] = useState(false);
   const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
+  const [savedQuotationId, setSavedQuotationId] = useState<number | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
@@ -587,8 +588,11 @@ const formatPreparedBy = (u: UserListItem) => {
           })),
       };
 
-      const res = await fetch("/api/quotations", {
-        method: "POST",
+      const url = savedQuotationId ? `/api/quotations/${savedQuotationId}` : "/api/quotations";
+      const method = savedQuotationId ? "PUT" : "POST";
+
+      const res = await fetch(url, {
+        method,
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
@@ -599,7 +603,11 @@ const formatPreparedBy = (u: UserListItem) => {
         throw new Error(data.error || "Failed to save quotation");
       }
 
-      setSuccessMessage(`Quotation ${quotationNo} successfully created and saved!`);
+      if (data.quotation?.id) {
+        setSavedQuotationId(data.quotation.id);
+      }
+
+      setSuccessMessage(`Quotation ${quotationNo} successfully saved!`);
       return data.quotation;
     } catch (err: any) {
       setErrorMessage(err.message || "An unexpected error occurred while saving.");
@@ -609,9 +617,13 @@ const formatPreparedBy = (u: UserListItem) => {
     }
   };
 
-  // Download PDF
+  // Download PDF (Automatically saves quotation to database first)
   const handleDownloadPdf = async () => {
     if (!validateForm()) return;
+
+    // Automatically save quotation to database first!
+    const saved = await handleSaveQuotation();
+    if (!saved) return;
 
     setIsGeneratingPdf(true);
     try {
@@ -649,7 +661,7 @@ const formatPreparedBy = (u: UserListItem) => {
         items: pdfItems,
       });
 
-      setSuccessMessage("PDF downloaded successfully!");
+      setSuccessMessage(`Quotation ${quotationNo} saved and PDF downloaded successfully!`);
     } catch (err: any) {
       console.error("PDF generation error:", err);
       setErrorMessage("Failed to generate PDF. Please check details and try again.");

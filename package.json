@@ -22,6 +22,7 @@
     "@next/swc-wasm-nodejs": "16.4.6",
     "@prisma/client": "^5.22.0",
     "bcryptjs": "^3.0.3",
+    "cloudinary": "^2.11.0",
     "exceljs": "^4.4.0",
     "jspdf": "^4.2.1",
     "jspdf-autotable": "^5.0.9",
