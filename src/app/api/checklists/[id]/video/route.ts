@@ -19,7 +19,7 @@ export const revalidate = 0;
 export const maxDuration = 300;
 
 interface RouteContext {
-  params: Promise<{ id: string }> | { id: string };
+  params: Promise<{ id: string }>;
 }
 
 /**
