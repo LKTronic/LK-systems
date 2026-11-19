@@ -2117,10 +2117,11 @@ async function generateUniQuotationPdf(
     }
   }
 
-  // Pre-load component images for Table 1
+  // Pre-load component images for Table 1 (max 4 components)
+  const componentsToRender = data.items.slice(0, 4);
   const itemImages: (string | null)[] = [];
-  for (let i = 0; i < data.items.length; i++) {
-    const item = data.items[i];
+  for (let i = 0; i < componentsToRender.length; i++) {
+    const item = componentsToRender[i];
     let imgCandidate: string | null = item.image || null;
     if (!imgCandidate && item.notes) {
       try {
@@ -2243,7 +2244,7 @@ async function generateUniQuotationPdf(
     completionY
   );
 
-  // --- TABLE 1: COMPONENTS UTILIZED IN THIS PROJECT ---
+  // --- TABLE 1: COMPONENTS UTILIZED IN THIS PROJECT (Max 4 items) ---
   const t1IntroY = completionY + 6.0;
   doc.setFont("times", "normal");
   doc.setFontSize(10.5);
@@ -2255,7 +2256,7 @@ async function generateUniQuotationPdf(
   );
 
   const t1Body: any[][] = [];
-  data.items.forEach((item, i) => {
+  componentsToRender.forEach((item, i) => {
     t1Body.push([
       (i + 1).toString(),
       "", // Image column rendered via didDrawCell
@@ -2324,10 +2325,11 @@ async function generateUniQuotationPdf(
     },
   });
 
-  let curY = (doc as any).lastAutoTable.finalY + 7.0;
-
-  // --- TABLE 2: KEY COST ELEMENTS ASSOCIATED WITH THIS PROJECT ---
-  curY = ensureSpace(45.0, curY);
+  // --- PAGE 2: TABLE 2 (KEY COST ELEMENTS) & GENERAL TERMS ---
+  // Table 2 explicitly starts at the top of Page 2 ("The Next Page Table")
+  doc.addPage("a4", "portrait");
+  drawLetterheadBackground();
+  let curY = 62.0;
 
   doc.setFont("times", "normal");
   doc.setFontSize(10.5);
@@ -2340,8 +2342,11 @@ async function generateUniQuotationPdf(
 
   let componentsTotal = Number(parsedSpecs?.componentsTotal);
   if (!componentsTotal || isNaN(componentsTotal) || componentsTotal <= 0) {
-    componentsTotal = data.items.reduce(
-      (acc, it) => acc + (Number(it.totalPrice) || 0),
+    componentsTotal = componentsToRender.reduce(
+      (acc, it) =>
+        acc +
+        (Number(it.totalPrice) ||
+          (Number(it.quantity) || 0) * (Number(it.unitPrice) || 0)),
       0
     );
   }
@@ -2370,29 +2375,27 @@ async function generateUniQuotationPdf(
       "-",
       formatLKR(engineeringCharges).replace("LKR", "").trim(),
     ],
-  ];
-
-  if (discount > 0) {
-    t2Body.push([
+    [
       "",
       "Discount",
       "",
       "",
-      `-${formatLKR(discount).replace("LKR", "").trim()}`,
-    ]);
-  }
-
-  t2Body.push([
-    "",
-    "Total Project Cost",
-    "",
-    "",
-    formatLKR(grandTotal).replace("LKR", "").trim(),
-  ]);
+      discount > 0
+        ? `-${formatLKR(discount).replace("LKR", "").trim()}`
+        : formatLKR(0).replace("LKR", "").trim(),
+    ],
+    [
+      "",
+      "Total Project Cost",
+      "",
+      "",
+      formatLKR(grandTotal).replace("LKR", "").trim(),
+    ],
+  ];
 
   autoTable(doc, {
-    startY: curY + 2.5,
-    margin: { left: 25.4, right: 25.4 },
+    startY: curY + 3.0,
+    margin: { left: 25.4, right: 25.4, top: 62.0, bottom: 35.0 },
     head: [["No.", "Description", "Quantity", "Unit Cost", "Total Cost"]],
     body: t2Body,
     theme: "plain",
@@ -2429,10 +2432,24 @@ async function generateUniQuotationPdf(
     didParseCell: (dataHook) => {
       dataHook.cell.styles.font = "times";
       const rowIndex = dataHook.row.index;
-      const isDiscountRow = discount > 0 && rowIndex === t2Body.length - 2;
-      const isTotalRow = rowIndex === t2Body.length - 1;
-      if (isDiscountRow || isTotalRow) {
+      if (rowIndex === 2) {
+        // Discount row in bold red (#EE0000) matching Doc/20161014PQV1.docx
         dataHook.cell.styles.fontStyle = "bold";
+        dataHook.cell.styles.textColor = [238, 0, 0];
+      } else if (rowIndex === 3) {
+        // Total Project Cost in bold
+        dataHook.cell.styles.fontStyle = "bold";
+      }
+    },
+    didDrawCell: (hook) => {
+      // Double underline under Total Project Cost in column 4 (Total Cost)
+      if (hook.section === "body" && hook.row.index === 3 && hook.column.index === 4) {
+        const cell = hook.cell;
+        const lineY = cell.y + cell.height - 1.2;
+        doc.setDrawColor(0, 0, 0);
+        doc.setLineWidth(0.3);
+        doc.line(cell.x + 3.0, lineY - 0.7, cell.x + cell.width - 2.0, lineY - 0.7);
+        doc.line(cell.x + 3.0, lineY, cell.x + cell.width - 2.0, lineY);
       }
     },
     willDrawPage: () => {
