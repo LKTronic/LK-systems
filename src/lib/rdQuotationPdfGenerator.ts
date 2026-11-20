@@ -2355,18 +2355,18 @@ async function generateProjectProposalPdf(
   for (let p = 2; p <= totalPages; p++) {
     doc.setPage(p);
 
-    // Defensively mask any baked static footer text in case older cached images were loaded
+    // Defensively mask strictly below Line 1 in case older cached images were loaded (Line 1 ends at 273.44mm)
     doc.setFillColor(248, 250, 252);
-    doc.rect(380.0, 270.5, 115.0, 8.5, "F");
+    doc.rect(360.0, 274.8, 135.0, 6.5, "F");
 
-    // Draw dynamic right-aligned slide footer: Turnkey IoT & Automation Proposal • Slide X of Y
+    // Draw dynamic right-aligned slide footer: Turnkey IoT & Automation Proposal • Slide X of Y (prominent 11.0pt font size)
     doc.setFont("helvetica", "normal");
-    doc.setFontSize(8.0);
+    doc.setFontSize(11.0);
     doc.setTextColor(LK_MUTED[0], LK_MUTED[1], LK_MUTED[2]);
     doc.text(
       `Turnkey IoT & Automation Proposal • Slide ${p} of ${totalPages}`,
       490.0,
-      275.0,
+      278.2,
       { align: "right" }
     );
   }
@@ -3125,14 +3125,14 @@ export async function generateRdQuotationPdf(
       bgPartners,
       warrantyBadge,
     ] = await Promise.all([
-      loadImageAsBase64("/template_assets/pptx_slides/brand_slide1_cover.png?v=3"),
-      loadImageAsBase64("/template_assets/pptx_slides/brand_slide2_intro.png?v=3"),
-      loadImageAsBase64("/template_assets/pptx_slides/brand_slide3_design.png?v=3"),
-      loadImageAsBase64("/template_assets/pptx_slides/brand_slide4_pricing.png?v=3"),
-      loadImageAsBase64("/template_assets/pptx_slides/brand_slide5_bank.png?v=3"),
-      loadImageAsBase64("/template_assets/pptx_slides/brand_slide6_terms.png?v=3"),
-      loadImageAsBase64("/template_assets/pptx_slides/brand_slide7_clients.png?v=3"),
-      loadImageAsBase64("/template_assets/pptx_slides/brand_slide8_partners.png?v=3"),
+      loadImageAsBase64("/template_assets/pptx_slides/brand_slide1_cover.png?v=4"),
+      loadImageAsBase64("/template_assets/pptx_slides/brand_slide2_intro.png?v=4"),
+      loadImageAsBase64("/template_assets/pptx_slides/brand_slide3_design.png?v=4"),
+      loadImageAsBase64("/template_assets/pptx_slides/brand_slide4_pricing.png?v=4"),
+      loadImageAsBase64("/template_assets/pptx_slides/brand_slide5_bank.png?v=4"),
+      loadImageAsBase64("/template_assets/pptx_slides/brand_slide6_terms.png?v=4"),
+      loadImageAsBase64("/template_assets/pptx_slides/brand_slide7_clients.png?v=4"),
+      loadImageAsBase64("/template_assets/pptx_slides/brand_slide8_partners.png?v=4"),
       loadImageAsBase64("/template_assets/logos/warranty_badge.png"),
     ]);
     return await generateProjectProposalPdf(data, {
