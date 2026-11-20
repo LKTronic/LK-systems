@@ -1376,4 +1376,82 @@ describe("Unit Tests: Supply Excel Supplier Image Handling", () => {
     // 3 design slides + 2 BOM slides + Cover + Intro + Bank + Terms + Clients + Partners = 11 pages
     assert.equal(doc.getNumberOfPages(), 11);
   });
+
+  it("renders paired Slide 3 and Slide 4 sets in alternating sequence when proposalSets is provided", async () => {
+    const pairedSetsProposal: any = {
+      type: "PROJECT_PROPOSAL",
+      quotationNo: "20261120PQV5",
+      preparedDate: "2026-11-20",
+      expireDate: "2026-12-20",
+      paymentMethod: "Bank Transfer",
+      preparedBy: "Eng. Kasun",
+      quotationTo: "Apex Dynamics (Pvt) Ltd",
+      totalAmount: 600000,
+      proposalSets: [
+        {
+          id: "set-1",
+          title: "Set 1",
+          leadTime: "10 Working Days",
+          warranty: "1 Year",
+          systemDesignImages: [
+            "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==",
+          ],
+          hardwareItems: [
+            { productOrService: "Arduino Nano", quantity: 2, unitPrice: 2500, totalPrice: 5000, itemType: "HARDWARE" },
+          ],
+          serviceItems: [
+            { productOrService: "IoT Programming", quantity: 1, unitPrice: 50000, totalPrice: 50000, itemType: "SERVICE" },
+          ],
+          hardwareTotal: 5000,
+          servicesTotal: 50000,
+          commercialNote: "Special Note Set 1",
+        },
+        {
+          id: "set-2",
+          title: "Set 2",
+          leadTime: "14 Working Days",
+          warranty: "2 Years",
+          systemDesignImages: [
+            "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==",
+          ],
+          hardwareItems: [
+            { productOrService: "Modbus RTU Module", quantity: 1, unitPrice: 15000, totalPrice: 15000, itemType: "HARDWARE" },
+          ],
+          serviceItems: [
+            { productOrService: "Field Calibration", quantity: 1, unitPrice: 30000, totalPrice: 30000, itemType: "SERVICE" },
+          ],
+          hardwareTotal: 15000,
+          servicesTotal: 30000,
+          commercialNote: "Special Note Set 2",
+        },
+      ],
+      items: [],
+    };
+
+    const doc = await generateRdQuotationPdf(pairedSetsProposal);
+    // 2 sets * 2 slides (Slide 3 + Slide 4) + Cover (1) + Intro (1) + Bank (1) + Terms (1) + Clients (1) + Partners (1) = 10 pages total
+    assert.equal(doc.getNumberOfPages(), 10);
+
+    // Verify alternating pages:
+    // Page 1: Cover
+    // Page 2: System Overview
+    // Page 3: Set 1 Slide 3 (Design) -> Badge has "SET 1 OF 2"
+    // Page 4: Set 1 Slide 4 (BOM) -> Hardware header has "SET 1" and intermediate total bar has "COMMERCIAL SCHEDULE - SET 1"
+    // Page 5: Set 2 Slide 3 (Design) -> Badge has "SET 2 OF 2"
+    // Page 6: Set 2 Slide 4 (BOM) -> Hardware header has "SET 2" and final total bar has "TOTAL PROJECT INVESTMENT"
+    // Page 7: Bank Details
+    // Page 8: Terms
+    // Page 9: Clients
+    // Page 10: Partners
+    const page3Text = (doc as any).internal.pages[3].join("\n");
+    const page4Text = (doc as any).internal.pages[4].join("\n");
+    const page5Text = (doc as any).internal.pages[5].join("\n");
+    const page6Text = (doc as any).internal.pages[6].join("\n");
+
+    assert.ok(page3Text.includes("SET 1 OF 2"), "Page 3 must be Set 1 Slide 3 (Design)");
+    assert.ok(page4Text.includes("SET 1"), "Page 4 must be Set 1 Slide 4 (BOM)");
+    assert.ok(page5Text.includes("SET 2 OF 2"), "Page 5 must be Set 2 Slide 3 (Design)");
+    assert.ok(page6Text.includes("SET 2"), "Page 6 must be Set 2 Slide 4 (BOM)");
+    assert.ok(page6Text.includes("TOTAL PROJECT INVESTMENT"), "Page 6 must be the final BOM slide with TOTAL PROJECT INVESTMENT");
+  });
 });

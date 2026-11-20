@@ -73,9 +73,32 @@ import {
   Landmark,
   Calculator,
   Edit3,
+  Copy,
 } from "lucide-react";
 import { BankAccountsModal } from "@/components/rad/BankAccountsModal";
 import { BankAccount } from "@/lib/bankAccounts";
+
+export interface ProposalSetItem {
+  id: string;
+  productOrService: string;
+  quantity: number;
+  unitPrice?: number;
+  totalPrice?: number;
+  itemType: "HARDWARE" | "SERVICE";
+}
+
+export interface ProposalSetData {
+  id: string;
+  title: string;
+  leadTime: string;
+  warranty: string;
+  systemDesignImages: string[];
+  hardwareItems: ProposalSetItem[];
+  serviceItems: ProposalSetItem[];
+  hardwareTotal: string;
+  servicesTotal: string;
+  commercialNote: string;
+}
 
 interface ItemRow {
   id: string;
@@ -155,7 +178,7 @@ function CreateRadQuotationContent() {
   const [preparedBy, setPreparedBy] = useState("");
   const [quotationTo, setQuotationTo] = useState("");
 
-  // Project Proposal Specific Fields
+  // Project Proposal Specific Fields & Paired Sets (Slides 3 & 4 Repeater)
   const [activeProposalTab, setActiveProposalTab] = useState<number>(1);
   const [projectTitle, setProjectTitle] = useState("");
   const [overview, setOverview] = useState("");
@@ -163,12 +186,39 @@ function CreateRadQuotationContent() {
   const [overviewFontSize, setOverviewFontSize] = useState<string>("22.0");
   const [termsFontSize, setTermsFontSize] = useState<string>("22.0");
   const [termsTab, setTermsTab] = useState<"write" | "preview">("write");
-  const [commercialNote, setCommercialNote] = useState<string>("");
   const [commercialNoteTab, setCommercialNoteTab] = useState<"write" | "preview">("write");
+  const [isUploadingDesignImages, setIsUploadingDesignImages] = useState(false);
+  const [targetSetItemId, setTargetSetItemId] = useState<string | null>(null);
+
+  const [proposalSets, setProposalSets] = useState<ProposalSetData[]>([
+    {
+      id: "set-1",
+      title: "Set 1",
+      leadTime: "10 Working Days",
+      warranty: "1 Year",
+      systemDesignImages: [],
+      hardwareItems: DEFAULT_PROJECT_PROPOSAL_HARDWARE.map((it, idx) => ({
+        ...it,
+        id: `hw-init-${idx}`,
+        itemType: "HARDWARE" as const,
+      })),
+      serviceItems: DEFAULT_PROJECT_PROPOSAL_SERVICES.map((it, idx) => ({
+        ...it,
+        id: `srv-init-${idx}`,
+        itemType: "SERVICE" as const,
+      })),
+      hardwareTotal: "286440.00",
+      servicesTotal: "65160.00",
+      commercialNote: "",
+    },
+  ]);
+  const [activeSetIndex, setActiveSetIndex] = useState<number>(0);
+
+  // Fallback state variables for backward compatibility
+  const [commercialNote, setCommercialNote] = useState<string>("");
   const [leadTime, setLeadTime] = useState("10 Working Days");
   const [warranty, setWarranty] = useState("1 Year");
   const [systemDesignImages, setSystemDesignImages] = useState<string[]>([]);
-  const [isUploadingDesignImages, setIsUploadingDesignImages] = useState(false);
   const [customHardwareTotal, setCustomHardwareTotal] = useState<string>("");
   const [customServicesTotal, setCustomServicesTotal] = useState<string>("");
 
@@ -562,20 +612,104 @@ function CreateRadQuotationContent() {
     setPcbImages((prev) => prev.filter((_, idx) => idx !== indexToRemove));
   };
 
-  // System Design Images Upload for Project Proposal (Slide 3 Repeater: 8 Images per slide)
-  const handleDesignImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  // Set updater helper
+  const updateActiveSet = (updater: (prevSet: ProposalSetData) => ProposalSetData) => {
+    setProposalSets((prev) => {
+      const updated = [...prev];
+      if (updated[activeSetIndex]) {
+        updated[activeSetIndex] = updater(updated[activeSetIndex]);
+      }
+      return updated;
+    });
+  };
+
+  const handleAddSet = () => {
+    const newSetNumber = proposalSets.length + 1;
+    const newSet: ProposalSetData = {
+      id: `set-${Date.now()}`,
+      title: `Set ${newSetNumber}`,
+      leadTime: "10 Working Days",
+      warranty: "1 Year",
+      systemDesignImages: [],
+      hardwareItems: [
+        {
+          id: `hw-${Date.now()}-1`,
+          productOrService: "",
+          quantity: 1,
+          unitPrice: 0,
+          totalPrice: 0,
+          itemType: "HARDWARE",
+        },
+      ],
+      serviceItems: [
+        {
+          id: `srv-${Date.now()}-1`,
+          productOrService: "",
+          quantity: 1,
+          unitPrice: 0,
+          totalPrice: 0,
+          itemType: "SERVICE",
+        },
+      ],
+      hardwareTotal: "",
+      servicesTotal: "",
+      commercialNote: "",
+    };
+    setProposalSets((prev) => [...prev, newSet]);
+    setActiveSetIndex(proposalSets.length);
+  };
+
+  const handleDuplicateSet = (indexToDuplicate: number) => {
+    const source = proposalSets[indexToDuplicate];
+    if (!source) return;
+    const newSetNumber = proposalSets.length + 1;
+    const duplicated: ProposalSetData = {
+      ...source,
+      id: `set-${Date.now()}`,
+      title: `Set ${newSetNumber}`,
+      hardwareItems: source.hardwareItems.map((it, idx) => ({
+        ...it,
+        id: `hw-dup-${Date.now()}-${idx}`,
+      })),
+      serviceItems: source.serviceItems.map((it, idx) => ({
+        ...it,
+        id: `srv-dup-${Date.now()}-${idx}`,
+      })),
+      systemDesignImages: [...source.systemDesignImages],
+    };
+    setProposalSets((prev) => [...prev, duplicated]);
+    setActiveSetIndex(proposalSets.length);
+  };
+
+  const handleDeleteSet = (indexToDelete: number) => {
+    if (proposalSets.length <= 1) {
+      alert("At least one proposal set (Slides 3 & 4) is required.");
+      return;
+    }
+    if (!confirm(`Are you sure you want to delete Set ${indexToDelete + 1}?`)) {
+      return;
+    }
+    setProposalSets((prev) => prev.filter((_, idx) => idx !== indexToDelete));
+    setActiveSetIndex((prev) => (prev >= indexToDelete ? Math.max(0, prev - 1) : prev));
+  };
+
+  // Active Set Image Upload
+  const handleActiveSetDesignImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files || files.length === 0) return;
-    const MAX_DESIGN_IMAGES = 32;
-    const remaining = MAX_DESIGN_IMAGES - systemDesignImages.length;
+    const curSet = proposalSets[activeSetIndex];
+    if (!curSet) return;
+    const MAX_SET_IMAGES = 8;
+    const remaining = MAX_SET_IMAGES - curSet.systemDesignImages.length;
     if (remaining <= 0) {
-      alert(`Maximum ${MAX_DESIGN_IMAGES} images allowed for System Design & Architecture (8 images per slide).`);
+      alert("Maximum 8 images allowed per Slide 3 in this set.");
       return;
     }
     const filesToUpload = Array.from(files).slice(0, remaining);
     setIsUploadingDesignImages(true);
 
     try {
+      const newUrls: string[] = [];
       for (const file of filesToUpload) {
         let uploaded = false;
         try {
@@ -588,7 +722,7 @@ function CreateRadQuotationContent() {
           if (res.ok) {
             const data = await res.json();
             if (data.url) {
-              setSystemDesignImages((prev) => [...prev, data.url]);
+              newUrls.push(data.url);
               uploaded = true;
             }
           }
@@ -600,7 +734,7 @@ function CreateRadQuotationContent() {
             reader.onload = (ev) => {
               const base64 = ev.target?.result as string;
               if (base64) {
-                setSystemDesignImages((prev) => [...prev, base64]);
+                newUrls.push(base64);
               }
               resolve();
             };
@@ -609,15 +743,127 @@ function CreateRadQuotationContent() {
           });
         }
       }
+
+      setProposalSets((prev) => {
+        const updated = [...prev];
+        if (updated[activeSetIndex]) {
+          updated[activeSetIndex] = {
+            ...updated[activeSetIndex],
+            systemDesignImages: [...updated[activeSetIndex].systemDesignImages, ...newUrls].slice(0, 8),
+          };
+        }
+        return updated;
+      });
     } finally {
       setIsUploadingDesignImages(false);
       if (e.target) e.target.value = "";
     }
   };
 
-  const handleRemoveDesignImage = (indexToRemove: number) => {
-    setSystemDesignImages((prev) => prev.filter((_, idx) => idx !== indexToRemove));
+  const handleActiveSetRemoveDesignImage = (indexToRemove: number) => {
+    setProposalSets((prev) => {
+      const updated = [...prev];
+      if (updated[activeSetIndex]) {
+        updated[activeSetIndex] = {
+          ...updated[activeSetIndex],
+          systemDesignImages: updated[activeSetIndex].systemDesignImages.filter((_, idx) => idx !== indexToRemove),
+        };
+      }
+      return updated;
+    });
   };
+
+  const handleActiveSetAddItem = (type: "HARDWARE" | "SERVICE") => {
+    const curSet = proposalSets[activeSetIndex];
+    if (!curSet) return;
+    if (type === "HARDWARE") {
+      if (curSet.hardwareItems.length >= 4) {
+        alert("Maximum 4 Hardware Components allowed per slide in this set.");
+        return;
+      }
+      const newItem: ProposalSetItem = {
+        id: `hw-${Date.now()}-${curSet.hardwareItems.length + 1}`,
+        productOrService: "",
+        quantity: 1,
+        unitPrice: 0,
+        totalPrice: 0,
+        itemType: "HARDWARE",
+      };
+      setProposalSets((prev) => {
+        const updated = [...prev];
+        if (updated[activeSetIndex]) {
+          updated[activeSetIndex] = {
+            ...updated[activeSetIndex],
+            hardwareItems: [...updated[activeSetIndex].hardwareItems, newItem],
+          };
+        }
+        return updated;
+      });
+    } else {
+      if (curSet.serviceItems.length >= 2) {
+        alert("Maximum 2 Engineering Services allowed per slide in this set.");
+        return;
+      }
+      const newItem: ProposalSetItem = {
+        id: `srv-${Date.now()}-${curSet.serviceItems.length + 1}`,
+        productOrService: "",
+        quantity: 1,
+        unitPrice: 0,
+        totalPrice: 0,
+        itemType: "SERVICE",
+      };
+      setProposalSets((prev) => {
+        const updated = [...prev];
+        if (updated[activeSetIndex]) {
+          updated[activeSetIndex] = {
+            ...updated[activeSetIndex],
+            serviceItems: [...updated[activeSetIndex].serviceItems, newItem],
+          };
+        }
+        return updated;
+      });
+    }
+  };
+
+  const handleActiveSetItemChange = (
+    itemId: string,
+    field: "productOrService" | "quantity",
+    val: any
+  ) => {
+    setProposalSets((prev) => {
+      const updated = [...prev];
+      if (updated[activeSetIndex]) {
+        updated[activeSetIndex] = {
+          ...updated[activeSetIndex],
+          hardwareItems: updated[activeSetIndex].hardwareItems.map((it) =>
+            it.id === itemId ? { ...it, [field]: val } : it
+          ),
+          serviceItems: updated[activeSetIndex].serviceItems.map((it) =>
+            it.id === itemId ? { ...it, [field]: val } : it
+          ),
+        };
+      }
+      return updated;
+    });
+  };
+
+  const handleActiveSetRemoveItem = (itemId: string) => {
+    setProposalSets((prev) => {
+      const updated = [...prev];
+      if (updated[activeSetIndex]) {
+        updated[activeSetIndex] = {
+          ...updated[activeSetIndex],
+          hardwareItems: updated[activeSetIndex].hardwareItems.filter((it) => it.id !== itemId),
+          serviceItems: updated[activeSetIndex].serviceItems.filter((it) => it.id !== itemId),
+        };
+      }
+      return updated;
+    });
+  };
+
+  // Legacy design image upload handlers for compatibility
+  const handleDesignImageUpload = handleActiveSetDesignImageUpload;
+  const handleRemoveDesignImage = handleActiveSetRemoveDesignImage;
 
   // Terms & Conditions
   const [terms, setTerms] = useState("");
@@ -901,8 +1147,36 @@ function CreateRadQuotationContent() {
   }, [productSearchQuery]);
 
   // Calculations
-  const hardwareItems = items.filter((i) => i.itemType === "HARDWARE");
-  const serviceItems = items.filter((i) => i.itemType === "SERVICE");
+  const setsHardwareTotal = proposalSets.reduce((sum, s) => {
+    if (s.hardwareTotal !== "" && !isNaN(Number(s.hardwareTotal))) {
+      return sum + Number(s.hardwareTotal);
+    }
+    const calc = s.hardwareItems.reduce(
+      (hSum, it) => hSum + (Number(it.quantity) || 0) * (Number(it.unitPrice) || 0),
+      0
+    );
+    return sum + calc;
+  }, 0);
+
+  const setsServicesTotal = proposalSets.reduce((sum, s) => {
+    if (s.servicesTotal !== "" && !isNaN(Number(s.servicesTotal))) {
+      return sum + Number(s.servicesTotal);
+    }
+    const calc = s.serviceItems.reduce(
+      (sSum, it) => sSum + (Number(it.quantity) || 0) * (Number(it.unitPrice) || 0),
+      0
+    );
+    return sum + calc;
+  }, 0);
+
+  const hardwareItems =
+    quotationType === "PROJECT_PROPOSAL"
+      ? (proposalSets[activeSetIndex]?.hardwareItems || [])
+      : items.filter((i) => i.itemType === "HARDWARE");
+  const serviceItems =
+    quotationType === "PROJECT_PROPOSAL"
+      ? (proposalSets[activeSetIndex]?.serviceItems || [])
+      : items.filter((i) => i.itemType === "SERVICE");
 
   const computedHardwareTotal = hardwareItems.reduce(
     (sum, i) => sum + (Number(i.quantity) || 0) * (Number(i.unitPrice) || 0),
@@ -914,12 +1188,16 @@ function CreateRadQuotationContent() {
   );
 
   const hardwareTotal =
-    customHardwareTotal !== "" && !isNaN(Number(customHardwareTotal))
+    quotationType === "PROJECT_PROPOSAL"
+      ? setsHardwareTotal
+      : customHardwareTotal !== "" && !isNaN(Number(customHardwareTotal))
       ? Number(customHardwareTotal)
       : computedHardwareTotal;
 
   const servicesTotal =
-    customServicesTotal !== "" && !isNaN(Number(customServicesTotal))
+    quotationType === "PROJECT_PROPOSAL"
+      ? setsServicesTotal
+      : customServicesTotal !== "" && !isNaN(Number(customServicesTotal))
       ? Number(customServicesTotal)
       : computedServicesTotal;
 
@@ -941,16 +1219,21 @@ function CreateRadQuotationContent() {
         )
       : componentsTotal;
 
-  // Step completion indicators for Project Proposal wizard
+  // Step completion indicators for Project Proposal wizard (4 steps: 3 & 4 combined)
   const isStep1Complete = Boolean(
     quotationNo.trim() && quotationTo.trim() && projectTitle.trim()
   );
   const isStep2Complete = Boolean(overview.trim().length > 0);
   const isStep3Complete = Boolean(
-    hardwareItems.length > 0 || serviceItems.length > 0 || items.some((it) => it.productOrService.trim().length > 0)
+    proposalSets.length > 0 &&
+      proposalSets.some(
+        (s) =>
+          s.hardwareItems.length > 0 ||
+          s.serviceItems.length > 0 ||
+          s.systemDesignImages.length > 0
+      )
   );
-  const isStep4Complete = Boolean(leadTime.trim().length > 0 && warranty.trim().length > 0);
-  const isStep5Complete = Boolean(terms !== undefined && terms.trim().length >= 0);
+  const isStep4Complete = Boolean(terms !== undefined && terms.trim().length >= 0);
 
   const PROPOSAL_STEPS = [
     {
@@ -968,20 +1251,14 @@ function CreateRadQuotationContent() {
     {
       step: 3,
       title: "3. Design & BOM",
-      sub: "Images, hardware & services",
+      sub: `${proposalSets.length} Set(s) (Slides 3 & 4)`,
       isComplete: isStep3Complete,
     },
     {
       step: 4,
-      title: "4. Warranty & Notes",
-      sub: "Lead time, warranty & notes",
-      isComplete: isStep4Complete,
-    },
-    {
-      step: 5,
-      title: "5. Terms & Conditions",
+      title: "4. Terms & Conditions",
       sub: "Slide 5 terms & sign-off",
-      isComplete: isStep5Complete,
+      isComplete: isStep4Complete,
     },
   ];
 
@@ -1080,7 +1357,30 @@ function CreateRadQuotationContent() {
 
   // Select Product from Modal
   const handleSelectProduct = (prod: ProductSearchResult) => {
-    if (targetItemIndex !== null && items[targetItemIndex]) {
+    if (targetSetItemId) {
+      setProposalSets((prev) => {
+        const updated = [...prev];
+        if (updated[activeSetIndex]) {
+          updated[activeSetIndex] = {
+            ...updated[activeSetIndex],
+            hardwareItems: updated[activeSetIndex].hardwareItems.map((it) =>
+              it.id === targetSetItemId
+                ? {
+                    ...it,
+                    productOrService: prod.productName,
+                    unitPrice:
+                      typeof prod.priceLKR === "number"
+                        ? prod.priceLKR
+                        : parseFloat(String(prod.priceLKR || 0)) || 0,
+                  }
+                : it
+            ),
+          };
+        }
+        return updated;
+      });
+      setTargetSetItemId(null);
+    } else if (targetItemIndex !== null && items[targetItemIndex]) {
       const targetId = items[targetItemIndex].id;
       const price =
         typeof prod.priceLKR === "number"
@@ -1098,10 +1398,10 @@ function CreateRadQuotationContent() {
             : it
         )
       );
+      setTargetItemIndex(null);
     }
     setIsProductModalOpen(false);
     setProductSearchQuery("");
-    setTargetItemIndex(null);
   };
 
   // Prepare Payload
@@ -1149,11 +1449,23 @@ function CreateRadQuotationContent() {
             bankAccountId: activeBank?.id,
           }
         : {
-            systemDesignImages,
-            advancePercent: Number(advancePercent) || 80,
+            systemDesignImages: proposalSets.flatMap((s) => s.systemDesignImages),
+            proposalSets: proposalSets.map((s) => ({
+              id: s.id,
+              title: s.title,
+              leadTime: s.leadTime,
+              warranty: s.warranty,
+              systemDesignImages: s.systemDesignImages,
+              hardwareItems: s.hardwareItems,
+              serviceItems: s.serviceItems,
+              hardwareTotal: s.hardwareTotal ? Number(s.hardwareTotal) : null,
+              servicesTotal: s.servicesTotal ? Number(s.servicesTotal) : null,
+              commercialNote: s.commercialNote || null,
+            })),
+            advancePercent: Number(advancePercent) || 60,
             overviewFontSize: Number(overviewFontSize) || 22.0,
             termsFontSize: Number(termsFontSize) || 22.0,
-            commercialNote: commercialNote.trim() || null,
+            commercialNote: proposalSets[0]?.commercialNote || commercialNote.trim() || null,
             bankDetails: activeBank,
             bankAccountId: activeBank?.id,
           };
@@ -1172,11 +1484,13 @@ function CreateRadQuotationContent() {
       validityDays: Number(validityDays) || 5,
       paymentMethod,
       advancePercent:
-        paymentMethod === "ADVANCE_PAYMENT" ? Number(advancePercent) || 80 : null,
+        paymentMethod === "ADVANCE_PAYMENT" ? Number(advancePercent) || 60 : null,
       preparedBy,
       quotationTo,
       leadTime:
-        quotationType === "THREE_D_PRINT"
+        quotationType === "PROJECT_PROPOSAL"
+          ? proposalSets[0]?.leadTime || leadTime
+          : quotationType === "THREE_D_PRINT"
           ? printSpecs.leadTime
           : quotationType === "PCB"
           ? pcbLeadTime
@@ -1184,7 +1498,9 @@ function CreateRadQuotationContent() {
           ? uniCompletionTime || leadTime
           : leadTime,
       warranty:
-        quotationType === "PROJECT_PROPOSAL" || quotationType === "UNI_QUOTATION"
+        quotationType === "PROJECT_PROPOSAL"
+          ? proposalSets[0]?.warranty || warranty
+          : quotationType === "UNI_QUOTATION"
           ? warranty
           : null,
       hardwareTotal:
@@ -1206,26 +1522,39 @@ function CreateRadQuotationContent() {
         quotationType === "PROJECT_PROPOSAL" || quotationType === "UNI_QUOTATION"
           ? terms
           : null,
-      items: items.map((it, idx) => ({
-        itemIndex: idx + 1,
-        itemType: it.itemType,
-        productOrService: it.productOrService || "Item",
-        quantity: Number(it.quantity) || 1,
-        unitPrice: Number(it.unitPrice) || 0,
-        totalPrice:
-          (Number(it.quantity) || 1) * (Number(it.unitPrice) || 0),
-        notes:
-          quotationType === "THREE_D_PRINT"
-            ? `3D_CALC:${JSON.stringify({
-                material: it.material || printSpecs.material || "PLA",
-                filamentLengthM: it.filamentLengthM !== undefined && it.filamentLengthM !== "" ? Number(it.filamentLengthM) : "",
-                printTimeMinutes: it.printTimeMinutes !== undefined && it.printTimeMinutes !== "" ? Number(it.printTimeMinutes) : (it.printTimeHours ? Number(it.printTimeHours) * 60 : ""),
-                calcMode: it.calcMode || printSpecs.pricingMode || "AUTO",
-              })}`
-            : quotationType === "UNI_QUOTATION" && it.image
-            ? JSON.stringify({ image: it.image, note: it.notes || "" })
-            : (it.notes || null),
-      })),
+      items:
+        quotationType === "PROJECT_PROPOSAL"
+          ? proposalSets
+              .flatMap((s) => [...s.hardwareItems, ...s.serviceItems])
+              .map((it, idx) => ({
+                itemIndex: idx + 1,
+                itemType: it.itemType,
+                productOrService: it.productOrService || "Item",
+                quantity: Number(it.quantity) || 1,
+                unitPrice: Number(it.unitPrice) || 0,
+                totalPrice: (Number(it.quantity) || 1) * (Number(it.unitPrice) || 0),
+                notes: null,
+              }))
+          : items.map((it, idx) => ({
+              itemIndex: idx + 1,
+              itemType: it.itemType,
+              productOrService: it.productOrService || "Item",
+              quantity: Number(it.quantity) || 1,
+              unitPrice: Number(it.unitPrice) || 0,
+              totalPrice:
+                (Number(it.quantity) || 1) * (Number(it.unitPrice) || 0),
+              notes:
+                quotationType === "THREE_D_PRINT"
+                  ? `3D_CALC:${JSON.stringify({
+                      material: it.material || printSpecs.material || "PLA",
+                      filamentLengthM: it.filamentLengthM !== undefined && it.filamentLengthM !== "" ? Number(it.filamentLengthM) : "",
+                      printTimeMinutes: it.printTimeMinutes !== undefined && it.printTimeMinutes !== "" ? Number(it.printTimeMinutes) : (it.printTimeHours ? Number(it.printTimeHours) * 60 : ""),
+                      calcMode: it.calcMode || printSpecs.pricingMode || "AUTO",
+                    })}`
+                  : quotationType === "UNI_QUOTATION" && it.image
+                  ? JSON.stringify({ image: it.image, note: it.notes || "" })
+                  : (it.notes || null),
+            })),
     };
   };
 
@@ -1350,14 +1679,14 @@ function CreateRadQuotationContent() {
         setActiveProposalTab(2);
       } else if (
         firstKey.startsWith("item_") ||
+        firstKey.startsWith("set_") ||
         firstKey === "hardwareItems" ||
-        firstKey === "serviceItems"
+        firstKey === "serviceItems" ||
+        ["leadTime", "warranty", "commercialNote"].includes(firstKey)
       ) {
         setActiveProposalTab(3);
-      } else if (["leadTime", "warranty", "commercialNote"].includes(firstKey)) {
-        setActiveProposalTab(4);
       } else if (firstKey === "terms") {
-        setActiveProposalTab(5);
+        setActiveProposalTab(4);
       }
     }
     setTimeout(() => {
@@ -1512,9 +1841,44 @@ function CreateRadQuotationContent() {
         overview: payload.overview,
         overviewFontSize: Number(overviewFontSize) || 22.0,
         termsFontSize: Number(termsFontSize) || 22.0,
-        commercialNote: commercialNote.trim() || null,
+        commercialNote:
+          quotationType === "PROJECT_PROPOSAL"
+            ? proposalSets[0]?.commercialNote || null
+            : commercialNote.trim() || null,
         technicalSpecs: payload.technicalSpecs,
-        systemDesignImages,
+        proposalSets:
+          quotationType === "PROJECT_PROPOSAL"
+            ? proposalSets.map((s) => ({
+                id: s.id,
+                title: s.title,
+                leadTime: s.leadTime,
+                warranty: s.warranty,
+                systemDesignImages: s.systemDesignImages,
+                hardwareItems: s.hardwareItems.map((h, i) => ({
+                  itemIndex: i + 1,
+                  itemType: "HARDWARE" as const,
+                  productOrService: h.productOrService || "Component",
+                  quantity: Number(h.quantity) || 1,
+                  unitPrice: Number(h.unitPrice) || 0,
+                  totalPrice: (Number(h.quantity) || 1) * (Number(h.unitPrice) || 0),
+                })),
+                serviceItems: s.serviceItems.map((srv, i) => ({
+                  itemIndex: i + 1,
+                  itemType: "SERVICE" as const,
+                  productOrService: srv.productOrService || "Service",
+                  quantity: Number(srv.quantity) || 1,
+                  unitPrice: Number(srv.unitPrice) || 0,
+                  totalPrice: (Number(srv.quantity) || 1) * (Number(srv.unitPrice) || 0),
+                })),
+                hardwareTotal: s.hardwareTotal ? Number(s.hardwareTotal) : null,
+                servicesTotal: s.servicesTotal ? Number(s.servicesTotal) : null,
+                commercialNote: s.commercialNote || null,
+              }))
+            : null,
+        systemDesignImages:
+          quotationType === "PROJECT_PROPOSAL"
+            ? proposalSets.flatMap((s) => s.systemDesignImages)
+            : systemDesignImages,
         termsAndConditions: payload.termsAndConditions,
         bankDetails:
           bankAccounts.find((b) => b.id === selectedBankAccountId) ||
@@ -2870,605 +3234,618 @@ function CreateRadQuotationContent() {
           {/* Bill of Materials & Services Section */}
           {quotationType === "PROJECT_PROPOSAL" ? (
             <>
-              {/* Tab 3: Slide 3 Design Images + Hardware Components BOM + Engineering Services */}
-              {activeProposalTab === 3 && (
-                <div className="space-y-5">
-                  {/* Slide 3: System Design & Architecture Images (Repeater: 8 Images per slide) */}
-                  <div className="bg-slate-900/80 border border-slate-800 rounded-xl p-5 shadow-sm space-y-4">
-                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-                      <div>
-                        <h2 className="text-sm font-bold text-teal-400 uppercase tracking-wider flex items-center gap-2">
-                          <ImageIcon className="w-4 h-4" />
-                          Slide 3: System Design &amp; Architecture Images
-                        </h2>
-                        <p className="text-xs text-slate-400">
-                          Upload hardware, module, or architecture diagram images (8 images per slide, auto-repeats Slide 3 for additional images)
-                        </p>
-                      </div>
-                      <span className="text-xs font-mono font-semibold px-2.5 py-1 rounded bg-slate-800 text-teal-300 border border-slate-700 w-fit">
-                        {systemDesignImages.length} Uploaded ({Math.ceil(systemDesignImages.length / 8) || 1} Slide{Math.ceil(systemDesignImages.length / 8) > 1 ? "s" : ""})
-                      </span>
-                    </div>
+              {/* Tab 3: Slide 3 Design Images + Slide 4 BOM, Services, Lead Time, Warranty & Notes (Paired Sets Repeater) */}
+              {activeProposalTab === 3 && (() => {
+                const currentSet = proposalSets[activeSetIndex] || proposalSets[0];
+                const setHwTotalNum = Number(currentSet.hardwareTotal) || 0;
+                const setSrvTotalNum = Number(currentSet.servicesTotal) || 0;
+                const setSubtotal = setHwTotalNum + setSrvTotalNum;
 
-                    {/* Upload Drop Zone / Button */}
-                    {systemDesignImages.length < 32 && (
-                      <label className="border-2 border-dashed border-slate-700 hover:border-teal-500/70 bg-slate-950/50 hover:bg-slate-950 rounded-xl p-6 flex flex-col items-center justify-center gap-2 cursor-pointer transition-colors">
-                        <input
-                          type="file"
-                          accept="image/*"
-                          multiple
-                          onChange={handleDesignImageUpload}
-                          disabled={isUploadingDesignImages}
-                          className="hidden"
-                        />
-                        {isUploadingDesignImages ? (
-                          <div className="flex items-center gap-2 text-xs text-teal-400">
-                            <Loader2 className="w-5 h-5 animate-spin" />
-                            <span>Uploading design image...</span>
-                          </div>
-                        ) : (
-                          <>
-                            <Upload className="w-6 h-6 text-teal-400" />
-                            <span className="text-xs font-semibold text-slate-300">
-                              Click or drag images to upload for Slide 3
-                            </span>
-                            <span className="text-[11px] text-slate-500">
-                              Supports PNG, JPG, WebP. 8 images per slide (auto-repeater).
-                            </span>
-                          </>
-                        )}
-                      </label>
-                    )}
-
-                    {/* Thumbnails Grid */}
-                    {systemDesignImages.length > 0 && (
-                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-2">
-                        {systemDesignImages.map((imgUrl, idx) => (
-                          <div
-                            key={idx}
-                            className="group relative rounded-lg overflow-hidden border border-slate-700 bg-slate-950 h-28 flex items-center justify-center p-2"
+                return (
+                  <div className="space-y-5">
+                    {/* Top Proposal Set Selector Sub-Bar */}
+                    <div className="bg-slate-900/90 border border-slate-800 rounded-xl p-3 flex flex-wrap items-center justify-between gap-2.5 shadow-sm">
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mr-1 flex items-center gap-1.5">
+                          <Layers className="w-3.5 h-3.5 text-teal-400" />
+                          Proposal Sets:
+                        </span>
+                        {proposalSets.map((s, idx) => (
+                          <button
+                            key={s.id}
+                            type="button"
+                            onClick={() => setActiveSetIndex(idx)}
+                            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 ${
+                              activeSetIndex === idx
+                                ? "bg-teal-500 text-slate-950 shadow-md shadow-teal-500/20 ring-1 ring-teal-300 font-black"
+                                : "bg-slate-800 text-slate-300 hover:bg-slate-700 border border-slate-700/60"
+                            }`}
                           >
-                            {/* eslint-disable-next-line @next/next/no-img-element */}
-                            <img
-                              src={imgUrl}
-                              alt={`Design image ${idx + 1}`}
-                              className="max-h-full max-w-full object-contain"
-                            />
-                            <span className="absolute bottom-1 left-1.5 px-1.5 py-0.5 rounded text-[10px] font-bold bg-slate-900/80 text-teal-300 border border-slate-700">
-                              #{idx + 1} • Slide 3.{Math.floor(idx / 8) + 1}
+                            <span>Set {idx + 1}</span>
+                            <span className="text-[10px] opacity-80 font-normal">
+                              ({s.systemDesignImages.length} img, {s.hardwareItems.length} HW, {s.serviceItems.length} Srv)
                             </span>
-                            <button
-                              type="button"
-                              onClick={() => handleRemoveDesignImage(idx)}
-                              className="absolute top-1 right-1 p-1 rounded-full bg-slate-900/90 text-slate-400 hover:text-red-400 hover:bg-slate-800 transition-colors"
-                              title="Remove image"
-                            >
-                              <X className="w-3.5 h-3.5" />
-                            </button>
-                          </div>
+                          </button>
                         ))}
                       </div>
-                    )}
-                  </div>
 
-                  {/* 1. Hardware BOM List */}
-                  <div className="bg-slate-900/80 border border-slate-800 rounded-xl p-5 shadow-sm space-y-4">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800 pb-3">
-                  <div>
-                    <h2 className="text-sm font-bold text-teal-400 uppercase tracking-wider flex items-center gap-2">
-                      <Package className="w-4 h-4 text-teal-400" />
-                      1. Hardware Components (BOM)
-                      <span className="text-[11px] font-semibold px-2 py-0.5 rounded border bg-teal-950/70 text-teal-300 border-teal-800/60">
-                        {hardwareItems.length} {hardwareItems.length === 1 ? "item" : "items"} ({Math.ceil(hardwareItems.length / 4) || 1} Slide{Math.ceil(hardwareItems.length / 4) > 1 ? "s" : ""})
-                      </span>
-                    </h2>
-                    <p className="text-xs text-slate-400">
-                      Physical components and modules (4 items per slide, auto-repeats Slide 4).
-                    </p>
-                  </div>
-
-                  <button
-                    type="button"
-                    onClick={() => handleAddItem("HARDWARE")}
-                    title="Add Hardware Component (4 items per slide)"
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors self-start sm:self-auto bg-teal-950/70 border border-teal-800/80 hover:bg-teal-900/60 text-teal-300"
-                  >
-                    <Plus className="w-3.5 h-3.5" />
-                    + Add Hardware
-                  </button>
-                </div>
-
-                {/* Hardware Items List (Description & Qty only) */}
-                <div className="space-y-2.5">
-                  {hardwareItems.length === 0 ? (
-                    <div className="p-4 text-center text-xs text-slate-500 border border-dashed border-slate-800 rounded-lg">
-                      No hardware components added yet. Click &ldquo;+ Add Hardware&rdquo; to add components.
-                    </div>
-                  ) : (
-                    hardwareItems.map((item, hIdx) => {
-                      const globalIndex = items.findIndex((it) => it.id === item.id);
-                      return (
-                        <div
-                          key={item.id}
-                          className="p-3 rounded-lg border bg-slate-950/60 border-slate-800 flex flex-col sm:flex-row items-start sm:items-center gap-3"
+                      <div className="flex items-center gap-2 ml-auto">
+                        <button
+                          type="button"
+                          onClick={handleAddSet}
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-teal-950/80 border border-teal-800/80 hover:bg-teal-900 text-teal-300 transition-colors"
+                          title="Add a new paired Slide 3 & 4 set"
                         >
-                          <div className="flex items-center gap-1.5 shrink-0">
-                            <span className="w-6 h-6 rounded-full bg-slate-800 text-teal-300 text-xs font-bold flex items-center justify-center">
-                              {hIdx + 1}
-                            </span>
-                            <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-teal-950/60 text-teal-400 border border-teal-800/50">
-                              Slide 4.{Math.floor(hIdx / 4) + 1}
-                            </span>
-                          </div>
+                          <Plus className="w-3.5 h-3.5" />
+                          <span>+ Add Set (Slides 3 &amp; 4)</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleDuplicateSet(activeSetIndex)}
+                          className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition-colors"
+                          title="Duplicate active set"
+                        >
+                          <Copy className="w-3.5 h-3.5 text-teal-400" />
+                          <span>Duplicate Set</span>
+                        </button>
+                        {proposalSets.length > 1 && (
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteSet(activeSetIndex)}
+                            className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-red-950/40 hover:bg-red-900/60 text-red-400 border border-red-800/60 transition-colors"
+                            title="Delete active set"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                            <span>Delete Set</span>
+                          </button>
+                        )}
+                      </div>
+                    </div>
 
-                          {/* Component Description */}
-                          <div className="flex-1 w-full">
-                            <input
-                              id={`field-item_${globalIndex}_productOrService`}
-                              type="text"
-                              value={item.productOrService}
-                              onChange={(e) => {
-                                handleItemChange(item.id, "productOrService", e.target.value);
-                                if (e.target.value.trim()) clearFieldError(`item_${globalIndex}_productOrService`);
-                              }}
-                              placeholder="Component description (e.g. Arduino Nano, Modbus Converter...)"
-                              className={`w-full rounded-lg px-3 py-2 text-xs text-white focus:outline-none transition-colors ${
-                                unfilledFields[`item_${globalIndex}_productOrService`]
-                                  ? "border-2 border-red-500 ring-2 ring-red-500/50 bg-red-950/30"
-                                  : "bg-slate-900 border border-slate-700 focus:border-teal-500"
-                              }`}
-                            />
-                            {unfilledFields[`item_${globalIndex}_productOrService`] && (
-                              <p className="text-[10px] text-red-400 font-medium mt-1 flex items-center gap-1">
-                                <AlertCircle className="w-3 h-3 text-red-400 shrink-0" />
-                                <span>Component description is required</span>
-                              </p>
-                            )}
-                          </div>
+                    {/* Set Title & Header Banner */}
+                    <div className="bg-slate-900/50 border border-slate-800/80 rounded-xl px-4 py-2.5 flex flex-wrap items-center justify-between gap-2">
+                      <div className="flex items-center gap-2">
+                        <span className="px-2 py-0.5 rounded text-[11px] font-mono font-bold bg-teal-950 text-teal-300 border border-teal-800/60">
+                          Set {activeSetIndex + 1} of {proposalSets.length}
+                        </span>
+                        <span className="text-xs text-slate-300 font-medium">
+                          Configuring Slide 3 (Design) &amp; Slide 4 (BOM, Pricing, Lead Time, Warranty &amp; Note)
+                        </span>
+                      </div>
+                      <span className="text-[11px] font-mono text-teal-400 font-semibold">
+                        Set Subtotal: LKR {setSubtotal.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      </span>
+                    </div>
 
-                          {/* Quantity */}
-                          <div className="w-28 shrink-0 flex flex-col items-center">
-                            <div className="flex items-center gap-1.5 w-full">
-                              <span className="text-[11px] text-slate-400">Qty:</span>
-                              <input
-                                id={`field-item_${globalIndex}_quantity`}
-                                type="number"
-                                min="1"
-                                value={item.quantity}
-                                onChange={(e) => {
-                                  const val = parseFloat(e.target.value) || 0;
-                                  handleItemChange(item.id, "quantity", val);
-                                  if (val >= 1) clearFieldError(`item_${globalIndex}_quantity`);
-                                }}
-                                className={`w-full rounded-lg px-2.5 py-2 text-xs font-bold font-mono focus:outline-none text-center transition-colors ${
-                                  unfilledFields[`item_${globalIndex}_quantity`]
-                                    ? "border-2 border-red-500 ring-2 ring-red-500/50 bg-red-950/30 text-white"
-                                    : "bg-slate-900 border border-slate-700 text-teal-400 focus:border-teal-500"
-                                }`}
-                              />
+                    {/* Estimated Lead Time & Warranty */}
+                    <div className="bg-slate-900/80 border border-slate-800 rounded-xl p-5 shadow-sm space-y-4">
+                      <h2 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2 border-b border-slate-800 pb-3">
+                        <Clock className="w-4 h-4 text-teal-400" />
+                        Estimated Lead Time &amp; Warranty (Set {activeSetIndex + 1})
+                      </h2>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div>
+                          <label className="block text-xs font-semibold text-slate-300 mb-1 flex items-center gap-1.5">
+                            <Clock className="w-3.5 h-3.5 text-teal-400" />
+                            Estimated Lead Time *
+                          </label>
+                          <input
+                            type="text"
+                            value={currentSet.leadTime}
+                            onChange={(e) => updateActiveSet((s) => ({ ...s, leadTime: e.target.value }))}
+                            placeholder="e.g. 10 Working Days"
+                            className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-teal-500"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="block text-xs font-semibold text-slate-300 mb-1 flex items-center gap-1.5">
+                            <Shield className="w-3.5 h-3.5 text-teal-400" />
+                            Warranty &amp; Support *
+                          </label>
+                          <input
+                            type="text"
+                            value={currentSet.warranty}
+                            onChange={(e) => updateActiveSet((s) => ({ ...s, warranty: e.target.value }))}
+                            placeholder="e.g. 1 Year"
+                            className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-teal-500"
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Slide 3: System Design & Architecture Images */}
+                    <div className="bg-slate-900/80 border border-slate-800 rounded-xl p-5 shadow-sm space-y-4">
+                      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                        <div>
+                          <h2 className="text-sm font-bold text-teal-400 uppercase tracking-wider flex items-center gap-2">
+                            <ImageIcon className="w-4 h-4" />
+                            Slide 3: System Design &amp; Architecture Images
+                          </h2>
+                          <p className="text-xs text-slate-400">
+                            Upload hardware, module, or architecture diagram images (Maximum of 8 images, auto-resized into clean rows on Slide 3)
+                          </p>
+                        </div>
+                        <span className="text-xs font-mono font-semibold px-2.5 py-1 rounded bg-slate-800 text-teal-300 border border-slate-700 w-fit">
+                          {currentSet.systemDesignImages.length} / 8 Uploaded
+                        </span>
+                      </div>
+
+                      {/* Upload Drop Zone / Button */}
+                      {currentSet.systemDesignImages.length < 8 && (
+                        <label className="border-2 border-dashed border-slate-700 hover:border-teal-500/70 bg-slate-950/50 hover:bg-slate-950 rounded-xl p-6 flex flex-col items-center justify-center gap-2 cursor-pointer transition-colors">
+                          <input
+                            type="file"
+                            accept="image/*"
+                            multiple
+                            onChange={handleActiveSetDesignImageUpload}
+                            disabled={isUploadingDesignImages}
+                            className="hidden"
+                          />
+                          {isUploadingDesignImages ? (
+                            <div className="flex items-center gap-2 text-xs text-teal-400">
+                              <Loader2 className="w-5 h-5 animate-spin" />
+                              <span>Uploading design image...</span>
                             </div>
-                          </div>
+                          ) : (
+                            <>
+                              <Upload className="w-6 h-6 text-teal-400" />
+                              <span className="text-xs font-semibold text-slate-300">
+                                Click or drag images to upload for Slide 3
+                              </span>
+                              <span className="text-[11px] text-slate-500">
+                                Supports PNG, JPG, WebP. Maximum 8 images total.
+                              </span>
+                            </>
+                          )}
+                        </label>
+                      )}
 
-                          {/* Actions: PMS & Delete */}
-                          <div className="flex items-center gap-1.5 shrink-0 self-end sm:self-auto">
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setTargetItemIndex(globalIndex);
-                                setIsProductModalOpen(true);
-                              }}
-                              className="px-2 py-1.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs flex items-center gap-1 transition-colors"
-                              title="Import from PMS inventory"
+                      {/* Thumbnails Grid */}
+                      {currentSet.systemDesignImages.length > 0 && (
+                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-2">
+                          {currentSet.systemDesignImages.map((imgUrl, idx) => (
+                            <div
+                              key={idx}
+                              className="group relative rounded-lg overflow-hidden border border-slate-700 bg-slate-950 h-28 flex items-center justify-center p-2"
                             >
-                              <Search className="w-3 h-3 text-teal-400" />
-                              <span className="hidden md:inline">PMS</span>
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => handleRemoveItem(item.id)}
-                              className="p-1.5 rounded text-slate-500 hover:text-red-400 hover:bg-slate-800 transition-colors"
-                              title="Delete hardware component"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
-                          </div>
+                              {/* eslint-disable-next-line @next/next/no-img-element */}
+                              <img
+                                src={imgUrl}
+                                alt={`Design image ${idx + 1}`}
+                                className="max-h-full max-w-full object-contain"
+                              />
+                              <span className="absolute bottom-1 left-1.5 px-1.5 py-0.5 rounded text-[10px] font-bold bg-slate-900/80 text-teal-300 border border-slate-700">
+                                #{idx + 1} • Slide 3
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => handleActiveSetRemoveDesignImage(idx)}
+                                className="absolute top-1 right-1 p-1 rounded-full bg-slate-900/90 text-slate-400 hover:text-red-400 hover:bg-slate-800 transition-colors"
+                                title="Remove image"
+                              >
+                                <X className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          ))}
                         </div>
-                      );
-                    })
-                  )}
-                </div>
-
-                {/* Hardware Full Price / Subtotal */}
-                <div className="bg-slate-950/80 p-4 rounded-xl border border-teal-800/40 flex flex-col sm:flex-row sm:items-center justify-between gap-3 mt-3">
-                  <div>
-                    <label className="block text-xs font-bold text-teal-400 uppercase tracking-wider">
-                      Slide 4: Hardware Components Full Price (LKR) *
-                    </label>
-                    <span className="text-[11px] text-slate-400">
-                      Total hardware BOM price printed on Slide 4.
-                    </span>
-                  </div>
-                  <div className="w-full sm:w-64">
-                    <div className="relative">
-                      <span className="absolute left-3 top-2 text-xs text-slate-500 font-mono">Rs.</span>
-                      <input
-                        type="number"
-                        min="0"
-                        step="0.01"
-                        value={customHardwareTotal}
-                        onChange={(e) => setCustomHardwareTotal(e.target.value)}
-                        placeholder="e.g. 286440.00"
-                        className="w-full bg-slate-900 border border-teal-600/60 rounded-lg pl-9 pr-3 py-2 text-sm text-white font-mono font-bold text-right focus:outline-none focus:border-teal-400"
-                      />
+                      )}
                     </div>
-                  </div>
-                </div>
-              </div>
 
-              {/* 2. Engineering Services List */}
-              <div className="bg-slate-900/80 border border-slate-800 rounded-xl p-5 shadow-sm space-y-4">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800 pb-3">
-                  <div>
-                    <h2 className="text-sm font-bold text-indigo-400 uppercase tracking-wider flex items-center gap-2">
-                      <Wrench className="w-4 h-4 text-indigo-400" />
-                      2. Engineering &amp; Professional Services
-                      <span className="text-[11px] font-semibold px-2 py-0.5 rounded border bg-indigo-950/70 text-indigo-300 border-indigo-800/60">
-                        {serviceItems.length} {serviceItems.length === 1 ? "item" : "items"} ({Math.ceil(serviceItems.length / 2) || 1} Slide{Math.ceil(serviceItems.length / 2) > 1 ? "s" : ""})
-                      </span>
-                    </h2>
-                    <p className="text-xs text-slate-400">
-                      Engineering charges, installation, programming, testing &amp; calibration services (2 services per slide, auto-repeats Slide 4).
-                    </p>
-                  </div>
+                    {/* 1. Hardware BOM List */}
+                    <div className="bg-slate-900/80 border border-slate-800 rounded-xl p-5 shadow-sm space-y-4">
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800 pb-3">
+                        <div>
+                          <h2 className="text-sm font-bold text-teal-400 uppercase tracking-wider flex items-center gap-2">
+                            <Package className="w-4 h-4 text-teal-400" />
+                            1. Hardware Components (BOM)
+                            <span className="text-[11px] font-semibold px-2 py-0.5 rounded border bg-teal-950/70 text-teal-300 border-teal-800/60">
+                              {currentSet.hardwareItems.length}/4 (Max 4)
+                            </span>
+                          </h2>
+                          <p className="text-xs text-slate-400">
+                            Physical components and modules (Max 4 items on Slide 4).
+                          </p>
+                        </div>
 
-                  <button
-                    type="button"
-                    onClick={() => handleAddItem("SERVICE")}
-                    title="Add Engineering Service (2 services per slide)"
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors self-start sm:self-auto bg-indigo-950/70 border border-indigo-800/80 hover:bg-indigo-900/60 text-indigo-300"
-                  >
-                    <Plus className="w-3.5 h-3.5" />
-                    + Add Service
-                  </button>
-                </div>
-
-                {/* Services Items List (Description & Qty only) */}
-                <div className="space-y-2.5">
-                  {serviceItems.length === 0 ? (
-                    <div className="p-4 text-center text-xs text-slate-500 border border-dashed border-slate-800 rounded-lg">
-                      No engineering services added yet. Click &ldquo;+ Add Service&rdquo; to add service charges.
-                    </div>
-                  ) : (
-                    serviceItems.map((item, sIdx) => {
-                      const globalIndex = items.findIndex((it) => it.id === item.id);
-                      return (
-                        <div
-                          key={item.id}
-                          className="p-3 rounded-lg border bg-indigo-950/20 border-indigo-900/50 flex flex-col sm:flex-row items-start sm:items-center gap-3"
+                        <button
+                          type="button"
+                          onClick={() => handleActiveSetAddItem("HARDWARE")}
+                          disabled={currentSet.hardwareItems.length >= 4}
+                          className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors self-start sm:self-auto ${
+                            currentSet.hardwareItems.length >= 4
+                              ? "bg-slate-800 text-slate-500 cursor-not-allowed border border-slate-700"
+                              : "bg-teal-950/70 border border-teal-800/80 hover:bg-teal-900/60 text-teal-300"
+                          }`}
                         >
-                          <div className="flex items-center gap-1.5 shrink-0">
-                            <span className="w-6 h-6 rounded-full bg-slate-800 text-indigo-300 text-xs font-bold flex items-center justify-center">
-                              {sIdx + 1}
-                            </span>
-                            <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-indigo-950/60 text-indigo-400 border border-indigo-800/50">
-                              Slide 4.{Math.floor(sIdx / 2) + 1}
-                            </span>
-                          </div>
+                          <Plus className="w-3.5 h-3.5" />
+                          + Add Hardware
+                        </button>
+                      </div>
 
-                          {/* Service Scope Description */}
-                          <div className="flex-1 w-full">
-                            <input
-                              id={`field-item_${globalIndex}_productOrService`}
-                              type="text"
-                              value={item.productOrService}
-                              onChange={(e) => {
-                                handleItemChange(item.id, "productOrService", e.target.value);
-                                if (e.target.value.trim()) clearFieldError(`item_${globalIndex}_productOrService`);
-                              }}
-                              placeholder="Service description (e.g. Testing / Engineering Charges, IoT Installation...)"
-                              className={`w-full rounded-lg px-3 py-2 text-xs text-white focus:outline-none transition-colors ${
-                                unfilledFields[`item_${globalIndex}_productOrService`]
-                                  ? "border-2 border-red-500 ring-2 ring-red-500/50 bg-red-950/30"
-                                  : "bg-slate-900 border border-slate-700 focus:border-indigo-500"
-                              }`}
-                            />
-                            {unfilledFields[`item_${globalIndex}_productOrService`] && (
-                              <p className="text-[10px] text-red-400 font-medium mt-1 flex items-center gap-1">
-                                <AlertCircle className="w-3 h-3 text-red-400 shrink-0" />
-                                <span>Service description is required</span>
-                              </p>
-                            )}
+                      {/* Hardware Items List */}
+                      <div className="space-y-2.5">
+                        {currentSet.hardwareItems.length === 0 ? (
+                          <div className="p-4 text-center text-xs text-slate-500 border border-dashed border-slate-800 rounded-lg">
+                            No hardware components added yet. Click &ldquo;+ Add Hardware&rdquo; to add components.
                           </div>
-
-                          {/* Actions: Delete */}
-                          <div className="flex items-center gap-1.5 shrink-0 self-end sm:self-auto">
-                            <button
-                              type="button"
-                              onClick={() => handleRemoveItem(item.id)}
-                              className="p-1.5 rounded text-slate-500 hover:text-red-400 hover:bg-slate-800 transition-colors"
-                              title="Delete service"
+                        ) : (
+                          currentSet.hardwareItems.map((item, hIdx) => (
+                            <div
+                              key={item.id}
+                              className="p-3 rounded-lg border bg-slate-950/60 border-slate-800 flex flex-col sm:flex-row items-start sm:items-center gap-3"
                             >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
+                              <div className="flex items-center gap-1.5 shrink-0">
+                                <span className="w-6 h-6 rounded-full bg-slate-800 text-teal-300 text-xs font-bold flex items-center justify-center">
+                                  {hIdx + 1}
+                                </span>
+                              </div>
+
+                              <div className="flex-1 w-full">
+                                <input
+                                  type="text"
+                                  value={item.productOrService}
+                                  onChange={(e) => handleActiveSetItemChange(item.id, "productOrService", e.target.value)}
+                                  placeholder="Component description (e.g. Arduino Nano, Modbus Converter...)"
+                                  className="w-full rounded-lg px-3 py-2 text-xs text-white bg-slate-900 border border-slate-700 focus:outline-none focus:border-teal-500 transition-colors"
+                                />
+                              </div>
+
+                              <div className="w-28 shrink-0 flex flex-col items-center">
+                                <div className="flex items-center gap-1.5 w-full">
+                                  <span className="text-[11px] text-slate-400">Qty:</span>
+                                  <input
+                                    type="number"
+                                    min="1"
+                                    value={item.quantity}
+                                    onChange={(e) => {
+                                      const val = parseFloat(e.target.value) || 0;
+                                      handleActiveSetItemChange(item.id, "quantity", val);
+                                    }}
+                                    className="w-full rounded-lg px-2.5 py-2 text-xs font-bold font-mono focus:outline-none text-center bg-slate-900 border border-slate-700 text-teal-400 focus:border-teal-500 transition-colors"
+                                  />
+                                </div>
+                              </div>
+
+                              <div className="flex items-center gap-1.5 shrink-0 self-end sm:self-auto">
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setTargetSetItemId(item.id);
+                                    setIsProductModalOpen(true);
+                                  }}
+                                  className="px-2 py-1.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs flex items-center gap-1 transition-colors"
+                                  title="Import from PMS inventory"
+                                >
+                                  <Search className="w-3 h-3 text-teal-400" />
+                                  <span>PMS</span>
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleActiveSetRemoveItem(item.id)}
+                                  className="p-1.5 rounded text-slate-500 hover:text-red-400 hover:bg-slate-800 transition-colors"
+                                  title="Delete hardware component"
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </button>
+                              </div>
+                            </div>
+                          ))
+                        )}
+                      </div>
+
+                      {/* Hardware Full Price Box */}
+                      <div className="bg-slate-950/80 p-4 rounded-xl border border-teal-800/40 flex flex-col sm:flex-row sm:items-center justify-between gap-3 mt-3">
+                        <div>
+                          <label className="block text-xs font-bold text-teal-400 uppercase tracking-wider">
+                            Slide 4: Hardware Components Full Price (LKR) *
+                          </label>
+                          <span className="text-[11px] text-slate-400">
+                            Total hardware BOM price printed on Slide 4.
+                          </span>
+                        </div>
+                        <div className="w-full sm:w-64">
+                          <div className="relative">
+                            <span className="absolute left-3 top-2 text-xs text-slate-500 font-mono">Rs.</span>
+                            <input
+                              type="number"
+                              min="0"
+                              step="0.01"
+                              value={currentSet.hardwareTotal}
+                              onChange={(e) => updateActiveSet((s) => ({ ...s, hardwareTotal: e.target.value }))}
+                              placeholder="e.g. 286440.00"
+                              className="w-full bg-slate-900 border border-teal-600/60 rounded-lg pl-9 pr-3 py-2 text-sm text-white font-mono font-bold text-right focus:outline-none focus:border-teal-400"
+                            />
                           </div>
                         </div>
-                      );
-                    })
-                  )}
-                </div>
+                      </div>
+                    </div>
 
-                {/* Services Full Price / Subtotal */}
-                <div className="bg-slate-950/80 p-4 rounded-xl border border-indigo-800/40 flex flex-col sm:flex-row sm:items-center justify-between gap-3 mt-3">
-                  <div>
-                    <label className="block text-xs font-bold text-indigo-400 uppercase tracking-wider">
-                      Slide 4: Engineering Services Full Price (LKR) *
-                    </label>
-                    <span className="text-[11px] text-slate-400">
-                      Total services charge printed on Slide 4.
-                    </span>
-                  </div>
-                  <div className="w-full sm:w-64">
-                    <div className="relative">
-                      <span className="absolute left-3 top-2 text-xs text-slate-500 font-mono">Rs.</span>
-                      <input
-                        type="number"
-                        min="0"
-                        step="0.01"
-                        value={customServicesTotal}
-                        onChange={(e) => setCustomServicesTotal(e.target.value)}
-                        placeholder="e.g. 65160.00"
-                        className="w-full bg-slate-900 border border-indigo-600/60 rounded-lg pl-9 pr-3 py-2 text-sm text-white font-mono font-bold text-right focus:outline-none focus:border-indigo-400"
-                      />
+                    {/* 2. Engineering Services List */}
+                    <div className="bg-slate-900/80 border border-slate-800 rounded-xl p-5 shadow-sm space-y-4">
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800 pb-3">
+                        <div>
+                          <h2 className="text-sm font-bold text-indigo-400 uppercase tracking-wider flex items-center gap-2">
+                            <Wrench className="w-4 h-4 text-indigo-400" />
+                            2. Engineering &amp; Professional Services
+                            <span className="text-[11px] font-semibold px-2 py-0.5 rounded border bg-indigo-950/70 text-indigo-300 border-indigo-800/60">
+                              {currentSet.serviceItems.length}/2 (Max 2)
+                            </span>
+                          </h2>
+                          <p className="text-xs text-slate-400">
+                            Engineering charges, installation, programming, testing &amp; calibration services (Max 2 services on Slide 4).
+                          </p>
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={() => handleActiveSetAddItem("SERVICE")}
+                          disabled={currentSet.serviceItems.length >= 2}
+                          className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors self-start sm:self-auto ${
+                            currentSet.serviceItems.length >= 2
+                              ? "bg-slate-800 text-slate-500 cursor-not-allowed border border-slate-700"
+                              : "bg-indigo-950/70 border border-indigo-800/80 hover:bg-indigo-900/60 text-indigo-300"
+                          }`}
+                        >
+                          <Plus className="w-3.5 h-3.5" />
+                          + Add Service
+                        </button>
+                      </div>
+
+                      {/* Services List */}
+                      <div className="space-y-2.5">
+                        {currentSet.serviceItems.length === 0 ? (
+                          <div className="p-4 text-center text-xs text-slate-500 border border-dashed border-slate-800 rounded-lg">
+                            No engineering services added yet. Click &ldquo;+ Add Service&rdquo; to add service charges.
+                          </div>
+                        ) : (
+                          currentSet.serviceItems.map((item, sIdx) => (
+                            <div
+                              key={item.id}
+                              className="p-3 rounded-lg border bg-indigo-950/20 border-indigo-900/50 flex flex-col sm:flex-row items-start sm:items-center gap-3"
+                            >
+                              <div className="flex items-center gap-1.5 shrink-0">
+                                <span className="w-6 h-6 rounded-full bg-slate-800 text-indigo-300 text-xs font-bold flex items-center justify-center">
+                                  {sIdx + 1}
+                                </span>
+                              </div>
+
+                              <div className="flex-1 w-full">
+                                <input
+                                  type="text"
+                                  value={item.productOrService}
+                                  onChange={(e) => handleActiveSetItemChange(item.id, "productOrService", e.target.value)}
+                                  placeholder="Service description (e.g. Testing / Engineering Charges, IoT Installation...)"
+                                  className="w-full rounded-lg px-3 py-2 text-xs text-white bg-slate-900 border border-slate-700 focus:outline-none focus:border-indigo-500 transition-colors"
+                                />
+                              </div>
+
+                              <div className="flex items-center gap-1.5 shrink-0 self-end sm:self-auto">
+                                <button
+                                  type="button"
+                                  onClick={() => handleActiveSetRemoveItem(item.id)}
+                                  className="p-1.5 rounded text-slate-500 hover:text-red-400 hover:bg-slate-800 transition-colors"
+                                  title="Delete service"
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </button>
+                              </div>
+                            </div>
+                          ))
+                        )}
+                      </div>
+
+                      {/* Services Full Price Box */}
+                      <div className="bg-slate-950/80 p-4 rounded-xl border border-indigo-800/40 flex flex-col sm:flex-row sm:items-center justify-between gap-3 mt-3">
+                        <div>
+                          <label className="block text-xs font-bold text-indigo-400 uppercase tracking-wider">
+                            Slide 4: Engineering Services Full Price (LKR) *
+                          </label>
+                          <span className="text-[11px] text-slate-400">
+                            Total services charge printed on Slide 4.
+                          </span>
+                        </div>
+                        <div className="w-full sm:w-64">
+                          <div className="relative">
+                            <span className="absolute left-3 top-2 text-xs text-slate-500 font-mono">Rs.</span>
+                            <input
+                              type="number"
+                              min="0"
+                              step="0.01"
+                              value={currentSet.servicesTotal}
+                              onChange={(e) => updateActiveSet((s) => ({ ...s, servicesTotal: e.target.value }))}
+                              placeholder="e.g. 65160.00"
+                              className="w-full bg-slate-900 border border-indigo-600/60 rounded-lg pl-9 pr-3 py-2 text-sm text-white font-mono font-bold text-right focus:outline-none focus:border-indigo-400"
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* 5. Slide 4: Special Note / Warranty Exclusion (Optional) */}
+                    <div className="bg-slate-900/80 border border-slate-800 rounded-xl p-5 shadow-sm space-y-4">
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-800 pb-3">
+                        <div>
+                          <h2 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2">
+                            <AlertTriangle className="w-4 h-4 text-amber-400" />
+                            Slide 4: Special Note / Warranty Exclusion (Optional)
+                          </h2>
+                          <p className="text-xs text-slate-400 mt-0.5">
+                            Renders an alert box on Slide 4. Leave blank to omit the box entirely.
+                          </p>
+                        </div>
+                        <div className="flex items-center gap-1 bg-slate-950 p-0.5 rounded-lg border border-slate-800 text-[11px] self-start sm:self-auto">
+                          <button
+                            type="button"
+                            onClick={() => setCommercialNoteTab("write")}
+                            className={`px-2 py-0.5 rounded font-medium transition-colors ${
+                              commercialNoteTab === "write"
+                                ? "bg-amber-600 text-white"
+                                : "text-slate-400 hover:text-slate-200"
+                            }`}
+                          >
+                            Write
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setCommercialNoteTab("preview")}
+                            className={`px-2 py-0.5 rounded font-medium transition-colors ${
+                              commercialNoteTab === "preview"
+                                ? "bg-amber-600 text-white"
+                                : "text-slate-400 hover:text-slate-200"
+                            }`}
+                          >
+                            Formatted Preview
+                          </button>
+                        </div>
+                      </div>
+
+                      {commercialNoteTab === "write" ? (
+                        <div className="space-y-1.5">
+                          {/* Formatting Toolbar */}
+                          <div className="flex flex-wrap items-center gap-1.5 p-1.5 bg-slate-950/80 border border-slate-800 rounded-t-lg">
+                            <button
+                              type="button"
+                              onClick={() => insertCommercialNoteFormat("**", "**", "Important Note:")}
+                              title="Bold (**text**)"
+                              className="px-2 py-1 rounded bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-white border border-slate-700/80 text-xs font-bold flex items-center gap-1 transition-colors"
+                            >
+                              <Bold className="w-3.5 h-3.5" />
+                              <span>Bold</span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => insertCommercialNoteFormat("<u>", "</u>", "Underlined Note")}
+                              title="Underline (<u>text</u>)"
+                              className="px-2 py-1 rounded bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-white border border-slate-700/80 text-xs underline flex items-center gap-1 transition-colors"
+                            >
+                              <Underline className="w-3.5 h-3.5" />
+                              <span>Underline</span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => insertCommercialNoteFormat("==", "==", "highlighted note")}
+                              title="Highlight (==text==)"
+                              className="px-2 py-1 rounded bg-yellow-950/70 hover:bg-yellow-900/80 text-yellow-300 border border-yellow-800/80 text-xs font-semibold flex items-center gap-1 transition-colors"
+                            >
+                              <Highlighter className="w-3.5 h-3.5" />
+                              <span>Highlight</span>
+                            </button>
+                            {/* Color buttons */}
+                            <button
+                              type="button"
+                              onClick={() => insertCommercialNoteFormat("[red]", "[/red]", "Warranty Void Condition")}
+                              title="Red Text ([red]text[/red])"
+                              className="px-2 py-1 rounded bg-red-950/60 hover:bg-red-900/80 text-red-300 border border-red-800/80 text-xs font-semibold flex items-center gap-1 transition-colors"
+                            >
+                              <span className="w-2 h-2 rounded-full bg-red-500 inline-block"></span>
+                              <span>Red</span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => insertCommercialNoteFormat("[orange]", "[/orange]", "Operating Requirement")}
+                              title="Orange Text ([orange]text[/orange])"
+                              className="px-2 py-1 rounded bg-orange-950/60 hover:bg-orange-900/80 text-orange-300 border border-orange-800/80 text-xs font-semibold flex items-center gap-1 transition-colors"
+                            >
+                              <span className="w-2 h-2 rounded-full bg-orange-500 inline-block"></span>
+                              <span>Orange</span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => insertCommercialNoteFormat("[teal]", "[/teal]", "Standard Condition")}
+                              title="Teal Text ([teal]text[/teal])"
+                              className="px-2 py-1 rounded bg-teal-950/60 hover:bg-teal-900/80 text-teal-300 border border-teal-800/80 text-xs font-semibold flex items-center gap-1 transition-colors"
+                            >
+                              <span className="w-2 h-2 rounded-full bg-teal-500 inline-block"></span>
+                              <span>Teal</span>
+                            </button>
+
+                            {/* Template Insert */}
+                            <button
+                              type="button"
+                              onClick={() =>
+                                updateActiveSet((s) => ({
+                                  ...s,
+                                  commercialNote:
+                                    "**Warranty Exclusion:** The machine room environment is currently unsuitable for electronic equipment. The [red]warranty will remain void[/red] until the environmental conditions are corrected to meet the required operating standards.",
+                                }))
+                              }
+                              title="Insert standard warranty exclusion note"
+                              className="ml-auto px-2 py-1 rounded bg-amber-950/60 hover:bg-amber-900/80 text-amber-300 border border-amber-800/80 text-xs font-medium flex items-center gap-1 transition-colors"
+                            >
+                              <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+                              <span>Insert Warranty Exclusion Template</span>
+                            </button>
+                          </div>
+
+                          <textarea
+                            id="slide4-note-textarea"
+                            rows={3}
+                            value={currentSet.commercialNote}
+                            onChange={(e) => updateActiveSet((s) => ({ ...s, commercialNote: e.target.value }))}
+                            placeholder="e.g. Warranty Exclusion: The machine room environment is currently unsuitable for electronic equipment. The warranty will remain void until the environmental conditions are corrected to meet the required operating standards..."
+                            className="w-full bg-slate-950 border border-slate-700 border-t-0 rounded-b-lg px-3 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-amber-500 font-mono leading-relaxed"
+                          />
+
+                          {/* Limits counter */}
+                          <div className="flex flex-wrap items-center justify-between text-[11px] text-slate-400 px-1 pt-1">
+                            <span>
+                              <span className="text-amber-400 font-semibold">Slide 4 Boundary:</span> Max ~350 characters | Max 4–5 lines recommended for optimal presentation fit.
+                            </span>
+                            <span
+                              className={`font-mono font-semibold ${
+                                currentSet.commercialNote.length > 350 || currentSet.commercialNote.split("\n").filter((l) => l.trim()).length > 5
+                                  ? "text-amber-400"
+                                  : "text-slate-400"
+                              }`}
+                            >
+                              {currentSet.commercialNote.length}/350 chars | {currentSet.commercialNote.split("\n").filter((l) => l.trim()).length}/5 lines
+                            </span>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="bg-slate-950 border border-slate-700 rounded-lg p-3.5 text-xs text-slate-200 min-h-[90px] space-y-2">
+                          <div className="text-[11px] font-bold text-amber-400 uppercase tracking-wider mb-2 pb-1.5 border-b border-slate-800 flex items-center gap-1.5">
+                            <AlertTriangle className="w-3.5 h-3.5 text-amber-400" />
+                            Live Slide 4 Note Preview (Warranty Exclusion)
+                          </div>
+                          {currentSet.commercialNote.trim() ? (
+                            <div className="p-3 bg-amber-950/20 border border-amber-800/40 rounded-lg">
+                              {renderTokensWithFormatting(currentSet.commercialNote)}
+                            </div>
+                          ) : (
+                            <span className="text-slate-500 italic">No special note entered. The box will be omitted on Slide 4.</span>
+                          )}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Step 3 Navigation Footer */}
+                    <div className="flex items-center justify-between pt-2">
+                      <button
+                        type="button"
+                        onClick={() => setActiveProposalTab(2)}
+                        className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold border border-slate-700 transition-all"
+                      >
+                        <ArrowLeft className="w-4 h-4" />
+                        <span>Back: Slide 2 Overview</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setActiveProposalTab(4)}
+                        className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-teal-600 hover:bg-teal-500 text-white text-xs font-bold shadow-lg shadow-teal-950/40 transition-all hover:translate-x-0.5"
+                      >
+                        <span>Next: Slide 5 Terms &amp; Conditions</span>
+                        <ArrowRight className="w-4 h-4" />
+                      </button>
                     </div>
                   </div>
-                </div>
-              </div>
+                );
+              })()}
 
-                  {/* Step 3 Navigation Footer */}
-                  <div className="flex items-center justify-between pt-2">
-                    <button
-                      type="button"
-                      onClick={() => setActiveProposalTab(2)}
-                      className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold border border-slate-700 transition-all"
-                    >
-                      <ArrowLeft className="w-4 h-4" />
-                      <span>Back: Slide 2 Overview</span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setActiveProposalTab(4)}
-                      className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-teal-600 hover:bg-teal-500 text-white text-xs font-bold shadow-lg shadow-teal-950/40 transition-all hover:translate-x-0.5"
-                    >
-                      <span>Next: Slide 4 Warranty &amp; Notes</span>
-                      <ArrowRight className="w-4 h-4" />
-                    </button>
-                  </div>
-                </div>
-              )}
-
-              {/* Tab 4: Estimated Lead Time & Warranty + Slide 4 Special Note */}
+              {/* Tab 4: Slide 5 Terms & Conditions */}
               {activeProposalTab === 4 && (
-                <div className="space-y-5">
-                  {/* Estimated Lead Time & Warranty */}
-                  <div className="bg-slate-900/80 border border-slate-800 rounded-xl p-5 shadow-sm space-y-4">
-                    <h2 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2 border-b border-slate-800 pb-3">
-                      <Clock className="w-4 h-4 text-teal-400" />
-                      Estimated Lead Time &amp; Warranty
-                    </h2>
-
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                      {/* Estimated Lead Time */}
-                      <div>
-                        <label className="block text-xs font-semibold text-slate-300 mb-1 flex items-center gap-1.5">
-                          <Clock className="w-3.5 h-3.5 text-teal-400" />
-                          Estimated Lead Time *
-                        </label>
-                        <input
-                          type="text"
-                          value={leadTime}
-                          onChange={(e) => setLeadTime(e.target.value)}
-                          placeholder="e.g. 10 Working Days"
-                          className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-teal-500"
-                        />
-                      </div>
-
-                      {/* Warranty & Support */}
-                      <div>
-                        <label className="block text-xs font-semibold text-slate-300 mb-1 flex items-center gap-1.5">
-                          <Shield className="w-3.5 h-3.5 text-teal-400" />
-                          Warranty &amp; Support *
-                        </label>
-                        <input
-                          type="text"
-                          value={warranty}
-                          onChange={(e) => setWarranty(e.target.value)}
-                          placeholder="e.g. 1 Year"
-                          className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-teal-500"
-                        />
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Slide 4: Special Operational Note / Warranty Exclusion (Optional) */}
-                  <div className="bg-slate-900/80 border border-slate-800 rounded-xl p-5 shadow-sm space-y-4">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-800 pb-3">
-                  <div>
-                    <h2 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2">
-                      <AlertTriangle className="w-4 h-4 text-amber-400" />
-                      Slide 4: Special Note / Warranty Exclusion (Optional)
-                    </h2>
-                    <p className="text-xs text-slate-400 mt-0.5">
-                      Renders an alert box on Slide 4. Leave blank to omit the box entirely.
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-1 bg-slate-950 p-0.5 rounded-lg border border-slate-800 text-[11px] self-start sm:self-auto">
-                    <button
-                      type="button"
-                      onClick={() => setCommercialNoteTab("write")}
-                      className={`px-2 py-0.5 rounded font-medium transition-colors ${
-                        commercialNoteTab === "write"
-                          ? "bg-amber-600 text-white"
-                          : "text-slate-400 hover:text-slate-200"
-                      }`}
-                    >
-                      Write
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setCommercialNoteTab("preview")}
-                      className={`px-2 py-0.5 rounded font-medium transition-colors ${
-                        commercialNoteTab === "preview"
-                          ? "bg-amber-600 text-white"
-                          : "text-slate-400 hover:text-slate-200"
-                      }`}
-                    >
-                      Formatted Preview
-                    </button>
-                  </div>
-                </div>
-
-                {commercialNoteTab === "write" ? (
-                  <div className="space-y-1.5">
-                    {/* Formatting Toolbar */}
-                    <div className="flex flex-wrap items-center gap-1.5 p-1.5 bg-slate-950/80 border border-slate-800 rounded-t-lg">
-                      <button
-                        type="button"
-                        onClick={() => insertCommercialNoteFormat("**", "**", "Important Note:")}
-                        title="Bold (**text**)"
-                        className="px-2 py-1 rounded bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-white border border-slate-700/80 text-xs font-bold flex items-center gap-1 transition-colors"
-                      >
-                        <Bold className="w-3.5 h-3.5" />
-                        <span>Bold</span>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => insertCommercialNoteFormat("<u>", "</u>", "Underlined Note")}
-                        title="Underline (<u>text</u>)"
-                        className="px-2 py-1 rounded bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-white border border-slate-700/80 text-xs underline flex items-center gap-1 transition-colors"
-                      >
-                        <Underline className="w-3.5 h-3.5" />
-                        <span>Underline</span>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => insertCommercialNoteFormat("==", "==", "highlighted note")}
-                        title="Highlight (==text==)"
-                        className="px-2 py-1 rounded bg-yellow-950/70 hover:bg-yellow-900/80 text-yellow-300 border border-yellow-800/80 text-xs font-semibold flex items-center gap-1 transition-colors"
-                      >
-                        <Highlighter className="w-3.5 h-3.5" />
-                        <span>Highlight</span>
-                      </button>
-                      {/* Color buttons */}
-                      <button
-                        type="button"
-                        onClick={() => insertCommercialNoteFormat("[red]", "[/red]", "Warranty Void Condition")}
-                        title="Red Text ([red]text[/red])"
-                        className="px-2 py-1 rounded bg-red-950/60 hover:bg-red-900/80 text-red-300 border border-red-800/80 text-xs font-semibold flex items-center gap-1 transition-colors"
-                      >
-                        <span className="w-2 h-2 rounded-full bg-red-500 inline-block"></span>
-                        <span>Red</span>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => insertCommercialNoteFormat("[orange]", "[/orange]", "Operating Requirement")}
-                        title="Orange Text ([orange]text[/orange])"
-                        className="px-2 py-1 rounded bg-orange-950/60 hover:bg-orange-900/80 text-orange-300 border border-orange-800/80 text-xs font-semibold flex items-center gap-1 transition-colors"
-                      >
-                        <span className="w-2 h-2 rounded-full bg-orange-500 inline-block"></span>
-                        <span>Orange</span>
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => insertCommercialNoteFormat("[teal]", "[/teal]", "Standard Condition")}
-                        title="Teal Text ([teal]text[/teal])"
-                        className="px-2 py-1 rounded bg-teal-950/60 hover:bg-teal-900/80 text-teal-300 border border-teal-800/80 text-xs font-semibold flex items-center gap-1 transition-colors"
-                      >
-                        <span className="w-2 h-2 rounded-full bg-teal-500 inline-block"></span>
-                        <span>Teal</span>
-                      </button>
-
-                      {/* Template Insert */}
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setCommercialNote(
-                            "**Warranty Exclusion:** The machine room environment is currently unsuitable for electronic equipment. The [red]warranty will remain void[/red] until the environmental conditions are corrected to meet the required operating standards."
-                          )
-                        }
-                        title="Insert standard warranty exclusion note"
-                        className="ml-auto px-2 py-1 rounded bg-amber-950/60 hover:bg-amber-900/80 text-amber-300 border border-amber-800/80 text-xs font-medium flex items-center gap-1 transition-colors"
-                      >
-                        <Sparkles className="w-3.5 h-3.5 text-amber-400" />
-                        <span>Insert Warranty Exclusion Template</span>
-                      </button>
-                    </div>
-
-                    <textarea
-                      id="slide4-note-textarea"
-                      rows={3}
-                      value={commercialNote}
-                      onChange={(e) => setCommercialNote(e.target.value)}
-                      placeholder="e.g. Warranty Exclusion: The machine room environment is currently unsuitable for electronic equipment. The warranty will remain void until the environmental conditions are corrected to meet the required operating standards..."
-                      className="w-full bg-slate-950 border border-slate-700 border-t-0 rounded-b-lg px-3 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-amber-500 font-mono leading-relaxed"
-                    />
-
-                    {/* Limits counter */}
-                    <div className="flex flex-wrap items-center justify-between text-[11px] text-slate-400 px-1 pt-1">
-                      <span>
-                        <span className="text-amber-400 font-semibold">Slide 4 Boundary:</span> Max ~350 characters | Max 4–5 lines recommended for optimal presentation fit.
-                      </span>
-                      <span
-                        className={`font-mono font-semibold ${
-                          commercialNote.length > 350 || commercialNote.split("\n").filter((l) => l.trim()).length > 5
-                            ? "text-amber-400"
-                            : "text-slate-400"
-                        }`}
-                      >
-                        {commercialNote.length}/350 chars | {commercialNote.split("\n").filter((l) => l.trim()).length}/5 lines
-                      </span>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="bg-slate-950 border border-slate-700 rounded-lg p-3.5 text-xs text-slate-200 min-h-[90px] space-y-2">
-                    <div className="text-[11px] font-bold text-amber-400 uppercase tracking-wider mb-2 pb-1.5 border-b border-slate-800 flex items-center gap-1.5">
-                      <AlertTriangle className="w-3.5 h-3.5 text-amber-400" />
-                      Live Slide 4 Note Preview (Warranty Exclusion)
-                    </div>
-                    {commercialNote.trim() ? (
-                      <div className="p-3 bg-amber-950/20 border border-amber-800/40 rounded-lg">
-                        {renderTokensWithFormatting(commercialNote)}
-                      </div>
-                    ) : (
-                      <span className="text-slate-500 italic">No special note entered. The box will be omitted on Slide 4.</span>
-                    )}
-                  </div>
-                )}
-              </div>
-
-                  {/* Step 4 Navigation Footer */}
-                  <div className="flex items-center justify-between pt-2">
-                    <button
-                      type="button"
-                      onClick={() => setActiveProposalTab(3)}
-                      className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold border border-slate-700 transition-all"
-                    >
-                      <ArrowLeft className="w-4 h-4" />
-                      <span>Back: Slide 3 Design &amp; BOM</span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setActiveProposalTab(5)}
-                      className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-teal-600 hover:bg-teal-500 text-white text-xs font-bold shadow-lg shadow-teal-950/40 transition-all hover:translate-x-0.5"
-                    >
-                      <span>Next: Slide 5 Terms &amp; Conditions</span>
-                      <ArrowRight className="w-4 h-4" />
-                    </button>
-                  </div>
-                </div>
-              )}
-
-              {/* Tab 5: Slide 5 Terms & Conditions */}
-              {activeProposalTab === 5 && (
                 <div className="space-y-5">
                   <div className="bg-slate-900/80 border border-slate-800 rounded-xl p-5 shadow-sm space-y-4">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-800 pb-3">
@@ -3624,15 +4001,15 @@ function CreateRadQuotationContent() {
                 </div>
               </div>
 
-              {/* Step 5 Navigation Footer */}
+              {/* Step 4 Navigation Footer */}
               <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-2">
                 <button
                   type="button"
-                  onClick={() => setActiveProposalTab(4)}
+                  onClick={() => setActiveProposalTab(3)}
                   className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold border border-slate-700 transition-all w-full sm:w-auto justify-center"
                 >
                   <ArrowLeft className="w-4 h-4" />
-                  <span>Back: Slide 4 Warranty &amp; Notes</span>
+                  <span>Back: Slide 3 &amp; 4 Design &amp; BOM</span>
                 </button>
                 <div className="flex items-center gap-2.5 w-full sm:w-auto justify-end">
                   <button
@@ -4249,7 +4626,7 @@ function CreateRadQuotationContent() {
                   <div className="flex justify-between items-center text-slate-400 text-[10px] pt-1 border-t border-slate-800/50">
                     <span>Design / BOM Slides:</span>
                     <span className="font-mono text-teal-400 font-semibold">
-                      {Math.ceil(systemDesignImages.length / 8) || 1} Design / {Math.max(Math.ceil(hardwareItems.length / 4), Math.ceil(serviceItems.length / 2), 1)} BOM
+                      {proposalSets.length} Design / {proposalSets.length} BOM ({proposalSets.length * 2} Slides)
                     </span>
                   </div>
                   <div className="border-t border-slate-800 pt-2 flex justify-between items-center">
@@ -4354,11 +4731,19 @@ function CreateRadQuotationContent() {
                   )}
                   <div className="border-t border-slate-800/80 pt-2 flex justify-between items-center text-slate-400">
                     <span>{quotationType === "UNI_QUOTATION" ? "Completion Time:" : "Lead Time:"}</span>
-                    <span className="text-slate-200 font-medium">{uniCompletionTime || leadTime || "10 business working days"}</span>
+                    <span className="text-slate-200 font-medium">
+                      {quotationType === "PROJECT_PROPOSAL"
+                        ? proposalSets[activeSetIndex]?.leadTime || proposalSets[0]?.leadTime || leadTime || "10 Working Days"
+                        : uniCompletionTime || leadTime || "10 business working days"}
+                    </span>
                   </div>
                   <div className="flex justify-between items-center text-slate-400">
                     <span>Warranty:</span>
-                    <span className="text-slate-200 font-medium">{warranty || "As per manufacturer"}</span>
+                    <span className="text-slate-200 font-medium">
+                      {quotationType === "PROJECT_PROPOSAL"
+                        ? proposalSets[activeSetIndex]?.warranty || proposalSets[0]?.warranty || warranty || "1 Year"
+                        : warranty || "As per manufacturer"}
+                    </span>
                   </div>
                 </div>
               ) : (

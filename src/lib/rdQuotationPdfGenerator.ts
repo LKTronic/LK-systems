@@ -45,6 +45,19 @@ export interface RdQuotationBomSlide {
   commercialNote?: string;
 }
 
+export interface RdQuotationProposalSet {
+  id?: string;
+  title?: string;
+  leadTime?: string;
+  warranty?: string;
+  systemDesignImages?: string[];
+  hardwareItems?: RdQuotationPdfItem[];
+  serviceItems?: RdQuotationPdfItem[];
+  hardwareTotal?: number | string | null;
+  servicesTotal?: number | string | null;
+  commercialNote?: string | null;
+}
+
 export interface RdQuotationPdfData {
   type: RdQuotationType;
   quotationNo: string;
@@ -70,6 +83,7 @@ export interface RdQuotationPdfData {
   systemDesignImages?: string[] | null;
   designSlides?: RdQuotationDesignSlide[] | null;
   bomSlides?: RdQuotationBomSlide[] | null;
+  proposalSets?: RdQuotationProposalSet[] | null;
   termsAndConditions?: string | null;
   items: RdQuotationPdfItem[];
   bankDetails?: {
@@ -1278,7 +1292,9 @@ async function generateProjectProposalPdf(
   renderFormattedSlide2(introText, 58.0);
 
   // ==========================================
-  // SLIDE 3: SYSTEM DESIGN & ARCHITECTURE (REPEATER: UP TO 8 IMAGES PER SLIDE)
+  // SLIDE 3 & 4: SYSTEM DESIGN (SLIDE 3) & SPECIFICATIONS / PRICING (SLIDE 4)
+  // Supports both paired proposal sets (Set 1 Slide 3 -> Set 1 Slide 4 -> Set 2 Slide 3 -> Set 2 Slide 4)
+  // and legacy chunked slides for backward compatibility.
   // ==========================================
   // Parse technical specs if string or object
   let specsObj: any = null;
@@ -1292,182 +1308,14 @@ async function generateProjectProposalPdf(
     }
   }
 
-  let designSlidesToRender: Array<{ title?: string; images: string[] }> = [];
-  if (Array.isArray(data.designSlides) && data.designSlides.length > 0) {
-    designSlidesToRender = data.designSlides;
-  } else if (specsObj && Array.isArray(specsObj.designSlides) && specsObj.designSlides.length > 0) {
-    designSlidesToRender = specsObj.designSlides;
-  } else {
-    // Resolve flat list of images and chunk into 8 per slide
-    let resolvedImages: string[] = [];
-    if (Array.isArray(data.systemDesignImages) && data.systemDesignImages.length > 0) {
-      resolvedImages = data.systemDesignImages;
-    } else if (specsObj && Array.isArray(specsObj.systemDesignImages) && specsObj.systemDesignImages.length > 0) {
-      resolvedImages = specsObj.systemDesignImages;
-    }
-
-    if (resolvedImages.length === 0) {
-      const samplePaths = [
-        "/template_assets/pptx_slides/image5.png",
-        "/template_assets/pptx_slides/image6.png",
-        "/template_assets/pptx_slides/image7.png",
-        "/template_assets/pptx_slides/image8.png",
-        "/template_assets/pptx_slides/image9.png",
-        "/template_assets/pptx_slides/image10.png",
-        "/template_assets/pptx_slides/image11.png",
-        "/template_assets/pptx_slides/image12.png",
-      ];
-      const loadedSamples = await Promise.all(samplePaths.map((p) => loadImageAsBase64(p)));
-      resolvedImages = loadedSamples.filter(Boolean) as string[];
-    }
-
-    // Chunk into sets of up to 8 images per slide
-    if (resolvedImages.length === 0) {
-      designSlidesToRender = [{ images: [] }];
-    } else {
-      for (let i = 0; i < resolvedImages.length; i += 8) {
-        designSlidesToRender.push({ images: resolvedImages.slice(i, i + 8) });
-      }
-    }
-  }
-
-  for (let dIdx = 0; dIdx < designSlidesToRender.length; dIdx++) {
-    const slide = designSlidesToRender[dIdx];
-    const imagesToRender = (slide.images || []).slice(0, 8);
-    const totalImgCount = imagesToRender.length;
-
-    doc.addPage([SLIDE_W, SLIDE_H], "landscape");
-    if (bgs.bgDesign) {
-      try {
-        doc.addImage(bgs.bgDesign, "PNG", 0, 0, SLIDE_W, SLIDE_H, undefined, "FAST");
-      } catch (err) {
-        console.warn("Failed to render bgDesign:", err);
-      }
-    }
-
-    // If multiple design slides exist, render part indicator badge
-    if (designSlidesToRender.length > 1) {
-      doc.setFillColor(LK_TEAL[0], LK_TEAL[1], LK_TEAL[2]);
-      doc.roundedRect(386.0, 18.0, 88.0, 10.0, 2.0, 2.0, "F");
-      doc.setFont("helvetica", "bold");
-      doc.setFontSize(11.0);
-      doc.setTextColor(255, 255, 255);
-      doc.text(`PART ${dIdx + 1} OF ${designSlidesToRender.length}`, 430.0, 24.8, { align: "center" });
-    }
-
-    if (totalImgCount > 0) {
-      for (let i = 0; i < totalImgCount; i++) {
-        const { x, y, cardW, cardH } = getDesignImageLayout(totalImgCount, i);
-
-        // Draw sleek, modern engineering card frame with soft subtle border
-        doc.setFillColor(255, 255, 255);
-        doc.setDrawColor(226, 232, 240); // Slate-200 subtle modern card outline
-        doc.setLineWidth(0.3);
-        doc.roundedRect(x, y, cardW, cardH, 4.0, 4.0, "FD");
-
-        const imgData = imagesToRender[i];
-        if (imgData) {
-          try {
-            const imgBase64 = imgData.startsWith("data:")
-              ? imgData
-              : await loadImageAsBase64(imgData);
-            if (imgBase64) {
-              const pad = totalImgCount <= 2 ? 8.0 : 6.0;
-              const maxW = cardW - pad * 2;
-              const maxH = cardH - pad * 2;
-              let drawW = maxW;
-              let drawH = maxH;
-              let drawX = x + pad;
-              let drawY = y + pad;
-
-              try {
-                const props = doc.getImageProperties(imgBase64);
-                if (props && props.width > 0 && props.height > 0) {
-                  const imgAspect = props.width / props.height;
-                  const boxAspect = maxW / maxH;
-                  if (imgAspect > boxAspect) {
-                    drawW = maxW;
-                    drawH = maxW / imgAspect;
-                  } else {
-                    drawH = maxH;
-                    drawW = maxH * imgAspect;
-                  }
-                  drawX = x + pad + (maxW - drawW) / 2;
-                  drawY = y + pad + (maxH - drawH) / 2;
-                }
-              } catch {
-                // fallback to max dimensions
-              }
-
-              doc.addImage(
-                imgBase64,
-                "PNG",
-                drawX,
-                drawY,
-                drawW,
-                drawH,
-                undefined,
-                "FAST"
-              );
-            }
-          } catch (imgErr) {
-            console.warn(`Failed to render design image ${i + 1}:`, imgErr);
-          }
-        }
-      }
-    }
-  }
-
-  // ==========================================
-  // SLIDE 4: PRICE AND SYSTEM DESIGN (SPECIFICATIONS & PRICING - REPEATER: UP TO 4 HW + 2 SRV PER SLIDE)
-  // ==========================================
   const formatLkr = (num: number) =>
     `LKR ${num.toLocaleString("en-US", {
       minimumFractionDigits: 2,
       maximumFractionDigits: 2,
     })}`;
 
-  const allHwItems = data.items.filter((it) => it.itemType !== "SERVICE");
-  const allSrvItems = data.items.filter((it) => it.itemType === "SERVICE");
-
-  let bomSlidesToRender: Array<{
-    title?: string;
-    hardwareItems: RdQuotationPdfItem[];
-    serviceItems: RdQuotationPdfItem[];
-    hardwareTotal?: number;
-    servicesTotal?: number;
-    leadTime?: string;
-    warranty?: string;
-    commercialNote?: string;
-  }> = [];
-
-  if (Array.isArray(data.bomSlides) && data.bomSlides.length > 0) {
-    bomSlidesToRender = data.bomSlides.map((s) => ({
-      ...s,
-      hardwareItems: s.hardwareItems || [],
-      serviceItems: s.serviceItems || [],
-    }));
-  } else if (specsObj && Array.isArray(specsObj.bomSlides) && specsObj.bomSlides.length > 0) {
-    bomSlidesToRender = specsObj.bomSlides.map((s: any) => ({
-      ...s,
-      hardwareItems: s.hardwareItems || [],
-      serviceItems: s.serviceItems || [],
-    }));
-  } else {
-    // Automatic chunking: up to 4 HW items and up to 2 services per slide
-    const totalBomPages = Math.max(
-      Math.ceil(allHwItems.length / 4),
-      Math.ceil(allSrvItems.length / 2),
-      1
-    );
-
-    for (let i = 0; i < totalBomPages; i++) {
-      bomSlidesToRender.push({
-        hardwareItems: allHwItems.slice(i * 4, (i + 1) * 4),
-        serviceItems: allSrvItems.slice(i * 2, (i + 1) * 2),
-      });
-    }
-  }
+  const allHwItems = (data.items || []).filter((it) => it.itemType !== "SERVICE");
+  const allSrvItems = (data.items || []).filter((it) => it.itemType === "SERVICE");
 
   // Calculate overall grand total
   const calcAllHwTotal = allHwItems.reduce(
@@ -1502,11 +1350,137 @@ async function generateProjectProposalPdf(
     commercialNoteText = specsObj.commercialNote.trim();
   }
 
-  // Iterate through each BOM slide
-  for (let bIdx = 0; bIdx < bomSlidesToRender.length; bIdx++) {
-    const slide = bomSlidesToRender[bIdx];
-    const hwItems = slide.hardwareItems;
-    const srvItems = slide.serviceItems;
+  // --- REUSABLE HELPER: Render Single Slide 3 (System Design Images) ---
+  const renderDesignSlide = async (
+    rawImages: string[],
+    dIdx: number,
+    totalDesignCount: number,
+    badgeLabel?: string
+  ) => {
+    let imagesToRender = (rawImages || []).slice(0, 8);
+
+    // Fallback sample images if single slide and no images provided
+    if (imagesToRender.length === 0 && dIdx === 0 && totalDesignCount === 1) {
+      const samplePaths = [
+        "/template_assets/pptx_slides/image5.png",
+        "/template_assets/pptx_slides/image6.png",
+        "/template_assets/pptx_slides/image7.png",
+        "/template_assets/pptx_slides/image8.png",
+        "/template_assets/pptx_slides/image9.png",
+        "/template_assets/pptx_slides/image10.png",
+        "/template_assets/pptx_slides/image11.png",
+        "/template_assets/pptx_slides/image12.png",
+      ];
+      const loadedSamples = await Promise.all(samplePaths.map((p) => loadImageAsBase64(p)));
+      imagesToRender = (loadedSamples.filter(Boolean) as string[]).slice(0, 8);
+    }
+
+    const totalImgCount = imagesToRender.length;
+
+    doc.addPage([SLIDE_W, SLIDE_H], "landscape");
+    if (bgs.bgDesign) {
+      try {
+        doc.addImage(bgs.bgDesign, "PNG", 0, 0, SLIDE_W, SLIDE_H, undefined, "FAST");
+      } catch (err) {
+        console.warn("Failed to render bgDesign:", err);
+      }
+    }
+
+    // Top indicator badge
+    if (badgeLabel) {
+      doc.setFillColor(LK_TEAL[0], LK_TEAL[1], LK_TEAL[2]);
+      doc.roundedRect(386.0, 18.0, 88.0, 10.0, 2.0, 2.0, "F");
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(11.0);
+      doc.setTextColor(255, 255, 255);
+      doc.text(badgeLabel, 430.0, 24.8, { align: "center" });
+    }
+
+    if (totalImgCount > 0) {
+      for (let i = 0; i < totalImgCount; i++) {
+        const { x, y, cardW, cardH } = getDesignImageLayout(totalImgCount, i);
+
+        doc.setFillColor(255, 255, 255);
+        doc.setDrawColor(226, 232, 240);
+        doc.setLineWidth(0.3);
+        doc.roundedRect(x, y, cardW, cardH, 4.0, 4.0, "FD");
+
+        const imgData = imagesToRender[i];
+        if (imgData) {
+          try {
+            const imgBase64 = imgData.startsWith("data:")
+              ? imgData
+              : await loadImageAsBase64(imgData);
+            if (imgBase64) {
+              const pad = totalImgCount <= 2 ? 8.0 : 6.0;
+              const maxW = cardW - pad * 2;
+              const maxH = cardH - pad * 2;
+              let drawW = maxW;
+              let drawH = maxH;
+              let drawX = x + pad;
+              let drawY = y + pad;
+
+              try {
+                const props = doc.getImageProperties(imgBase64);
+                if (props && props.width > 0 && props.height > 0) {
+                  const imgAspect = props.width / props.height;
+                  const boxAspect = maxW / maxH;
+                  if (imgAspect > boxAspect) {
+                    drawW = maxW;
+                    drawH = maxW / imgAspect;
+                  } else {
+                    drawH = maxH;
+                    drawW = maxH * imgAspect;
+                  }
+                  drawX = x + pad + (maxW - drawW) / 2;
+                  drawY = y + pad + (maxH - drawH) / 2;
+                }
+              } catch {}
+
+              doc.addImage(imgBase64, "PNG", drawX, drawY, drawW, drawH, undefined, "FAST");
+            }
+          } catch (imgErr) {
+            console.warn(`Failed to render design image ${i + 1}:`, imgErr);
+          }
+        }
+      }
+    } else {
+      // Placeholder when no images in this set
+      doc.setFillColor(255, 255, 255);
+      doc.setDrawColor(226, 232, 240);
+      doc.setLineWidth(0.4);
+      doc.roundedRect(36.0, 36.0, 438.0, 150.0, 4.0, 4.0, "FD");
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(16.0);
+      doc.setTextColor(LK_MUTED[0], LK_MUTED[1], LK_MUTED[2]);
+      doc.text(
+        "[ System Design & Architecture Diagrams / Schematics ]",
+        255.0,
+        110.0,
+        { align: "center" }
+      );
+    }
+  };
+
+  // --- REUSABLE HELPER: Render Single Slide 4 (BOM & Pricing) ---
+  const renderBomSlide = (
+    slide: {
+      hardwareItems?: RdQuotationPdfItem[];
+      serviceItems?: RdQuotationPdfItem[];
+      hardwareTotal?: number | string | null;
+      servicesTotal?: number | string | null;
+      leadTime?: string;
+      warranty?: string;
+      commercialNote?: string | null;
+    },
+    bIdx: number,
+    totalBomPages: number,
+    isFinalBomSlide: boolean,
+    totalInvestment: number,
+    badgeSuffix?: string
+  ) => {
+    const hwItems = (slide.hardwareItems || []).slice(0, 4);
+    const srvItems = (slide.serviceItems || []).slice(0, 2);
 
     doc.addPage([SLIDE_W, SLIDE_H], "landscape");
     if (bgs.bgPricing) {
@@ -1521,41 +1495,36 @@ async function generateProjectProposalPdf(
     let hwTotal: number;
     let srvTotal: number;
 
-    if (bomSlidesToRender.length === 1) {
-      hwTotal = overallHwTotal;
-      srvTotal = overallSrvTotal;
+    if (slide.hardwareTotal != null && Number(slide.hardwareTotal) >= 0) {
+      hwTotal = Number(slide.hardwareTotal);
     } else {
-      if (slide.hardwareTotal != null && Number(slide.hardwareTotal) >= 0) {
-        hwTotal = Number(slide.hardwareTotal);
-      } else {
-        const itemSum = hwItems.reduce(
-          (s, it) => s + Number(it.totalPrice || it.quantity * it.unitPrice || 0),
-          0
-        );
-        hwTotal = itemSum > 0 ? itemSum : (bIdx === 0 && overallHwTotal > 0 ? overallHwTotal : 0);
-      }
+      const itemSum = hwItems.reduce(
+        (s, it) => s + Number(it.totalPrice || it.quantity * it.unitPrice || 0),
+        0
+      );
+      hwTotal = itemSum > 0 ? itemSum : (bIdx === 0 && overallHwTotal > 0 ? overallHwTotal : 0);
+    }
 
-      if (slide.servicesTotal != null && Number(slide.servicesTotal) >= 0) {
-        srvTotal = Number(slide.servicesTotal);
-      } else {
-        const itemSum = srvItems.reduce(
-          (s, it) => s + Number(it.totalPrice || it.quantity * it.unitPrice || 0),
-          0
-        );
-        srvTotal = itemSum > 0 ? itemSum : (bIdx === 0 && overallSrvTotal > 0 ? overallSrvTotal : 0);
-      }
+    if (slide.servicesTotal != null && Number(slide.servicesTotal) >= 0) {
+      srvTotal = Number(slide.servicesTotal);
+    } else {
+      const itemSum = srvItems.reduce(
+        (s, it) => s + Number(it.totalPrice || it.quantity * it.unitPrice || 0),
+        0
+      );
+      srvTotal = itemSum > 0 ? itemSum : (bIdx === 0 && overallSrvTotal > 0 ? overallSrvTotal : 0);
     }
 
     // --- 1. HARDWARE SECTION (Left Side - Max 4 items per slide) ---
     doc.setFillColor(LK_TEAL[0], LK_TEAL[1], LK_TEAL[2]);
-    const hwBadgeW = bomSlidesToRender.length > 1 ? 168.0 : 142.0;
+    const hwBadgeW = totalBomPages > 1 ? 168.0 : 142.0;
     doc.roundedRect(36.0, 34.0, hwBadgeW, 12.0, 2.0, 2.0, "F");
     doc.setFont("helvetica", "bold");
     doc.setFontSize(16.0);
     doc.setTextColor(255, 255, 255);
     const hwBadgeText =
-      bomSlidesToRender.length > 1
-        ? `1. HARDWARE COMPONENTS (BOM) - PART ${bIdx + 1}`
+      totalBomPages > 1
+        ? `1. HARDWARE COMPONENTS (BOM) - ${badgeSuffix || `PART ${bIdx + 1}`}`
         : "1. HARDWARE COMPONENTS (BOM)";
     doc.text(hwBadgeText, 41.0, 42.2);
 
@@ -1632,14 +1601,14 @@ async function generateProjectProposalPdf(
     // --- 2. SERVICES SECTION (Left Side - Max 2 items per slide) ---
     const srvHeaderY = 121.5;
     doc.setFillColor(LK_TEAL[0], LK_TEAL[1], LK_TEAL[2]);
-    const srvBadgeW = bomSlidesToRender.length > 1 ? 154.0 : 128.0;
+    const srvBadgeW = totalBomPages > 1 ? 154.0 : 128.0;
     doc.roundedRect(36.0, srvHeaderY, srvBadgeW, 12.0, 2.0, 2.0, "F");
     doc.setFont("helvetica", "bold");
     doc.setFontSize(16.0);
     doc.setTextColor(255, 255, 255);
     const srvBadgeText =
-      bomSlidesToRender.length > 1
-        ? `2. ENGINEERING SERVICES - PART ${bIdx + 1}`
+      totalBomPages > 1
+        ? `2. ENGINEERING SERVICES - ${badgeSuffix || `PART ${bIdx + 1}`}`
         : "2. ENGINEERING SERVICES";
     doc.text(srvBadgeText, 41.0, srvHeaderY + 8.2);
 
@@ -1659,13 +1628,11 @@ async function generateProjectProposalPdf(
         const name = srv.productOrService;
         const curSrvY = srvY + sIdx * 16.0;
 
-        // Bullet in Black (Normal weight, 18.5pt)
         doc.setFont("helvetica", "normal");
         doc.setFontSize(18.5);
         doc.setTextColor(0, 0, 0);
         doc.text("•", 38.0, curSrvY);
 
-        // Service name in Black (Normal font weight, 18.0pt)
         doc.setFontSize(18.0);
         doc.setTextColor(0, 0, 0);
         const maxSrvW = 202.0;
@@ -1772,7 +1739,7 @@ async function generateProjectProposalPdf(
 
     // Render note input text directly (no box frame, no header banner, no heading title)
     // Display on final BOM slide, or if slide-specific note is given
-    const currentSlideNote = slide.commercialNote || (bIdx === bomSlidesToRender.length - 1 ? commercialNoteText : null);
+    const currentSlideNote = slide.commercialNote || (isFinalBomSlide ? commercialNoteText : null);
     if (currentSlideNote) {
       const noteStartX = 266.0;
       const maxW = 208.0;
@@ -1844,8 +1811,7 @@ async function generateProjectProposalPdf(
     doc.setLineWidth(0.9);
     doc.roundedRect(36.0, totalBarY, 438.0, 34.0, 4.5, 4.5, "FD");
 
-    const isFinalBomSlide = bIdx === bomSlidesToRender.length - 1;
-    const barAmount = isFinalBomSlide ? grandTotal : (hwTotal + srvTotal);
+    const barAmount = isFinalBomSlide ? totalInvestment : (hwTotal + srvTotal);
 
     // Left Section of Total Bar
     doc.setFont("helvetica", "bold");
@@ -1854,7 +1820,7 @@ async function generateProjectProposalPdf(
     const subtitleText =
       isFinalBomSlide
         ? "COMMERCIAL INVESTMENT SCHEDULE"
-        : `COMMERCIAL SCHEDULE - SLIDE ${bIdx + 1} OF ${bomSlidesToRender.length}`;
+        : `COMMERCIAL SCHEDULE - ${badgeSuffix || `SLIDE ${bIdx + 1} OF ${totalBomPages}`}`;
     doc.text(subtitleText, 48.0, totalBarY + 11.5);
 
     doc.setFontSize(isFinalBomSlide ? 20.5 : 18.0);
@@ -1872,6 +1838,152 @@ async function generateProjectProposalPdf(
     doc.setFontSize(44.0);
     doc.setTextColor(LK_TEAL[0], LK_TEAL[1], LK_TEAL[2]);
     doc.text(formatLkr(barAmount), 325.0, totalBarY + 24.5, { align: "center" });
+  };
+
+  // Check if paired proposal sets are provided (Alternating Repeater: Set 1 Slide 3 -> Set 1 Slide 4 -> Set 2 Slide 3 -> Set 2 Slide 4)
+  let proposalSetsToRender: RdQuotationProposalSet[] | null = null;
+  if (Array.isArray(data.proposalSets) && data.proposalSets.length > 0) {
+    proposalSetsToRender = data.proposalSets;
+  } else if (specsObj && Array.isArray(specsObj.proposalSets) && specsObj.proposalSets.length > 0) {
+    proposalSetsToRender = specsObj.proposalSets;
+  }
+
+  if (proposalSetsToRender && proposalSetsToRender.length > 0) {
+    const totalSets = proposalSetsToRender.length;
+    let setsGrandTotal = 0;
+    proposalSetsToRender.forEach((s) => {
+      const sHw = s.hardwareTotal != null && Number(s.hardwareTotal) >= 0
+        ? Number(s.hardwareTotal)
+        : (s.hardwareItems || []).reduce((sum, it) => sum + Number(it.totalPrice || it.quantity * it.unitPrice || 0), 0);
+      const sSrv = s.servicesTotal != null && Number(s.servicesTotal) >= 0
+        ? Number(s.servicesTotal)
+        : (s.serviceItems || []).reduce((sum, it) => sum + Number(it.totalPrice || it.quantity * it.unitPrice || 0), 0);
+      setsGrandTotal += sHw + sSrv;
+    });
+    const finalSetsTotal = Number(data.totalAmount) > 0 ? Number(data.totalAmount) : (setsGrandTotal > 0 ? setsGrandTotal : grandTotal);
+
+    for (let sIdx = 0; sIdx < totalSets; sIdx++) {
+      const set = proposalSetsToRender[sIdx];
+      const isFinalSet = sIdx === totalSets - 1;
+
+      // 1. Render Slide 3 (Design) for this set
+      await renderDesignSlide(
+        set.systemDesignImages || [],
+        sIdx,
+        totalSets,
+        totalSets > 1 ? `SET ${sIdx + 1} OF ${totalSets}` : undefined
+      );
+
+      // 2. Render Slide 4 (BOM) for this set
+      renderBomSlide(
+        {
+          hardwareItems: set.hardwareItems || [],
+          serviceItems: set.serviceItems || [],
+          hardwareTotal: set.hardwareTotal,
+          servicesTotal: set.servicesTotal,
+          leadTime: set.leadTime,
+          warranty: set.warranty,
+          commercialNote: set.commercialNote,
+        },
+        sIdx,
+        totalSets,
+        isFinalSet,
+        finalSetsTotal,
+        totalSets > 1 ? `SET ${sIdx + 1}` : undefined
+      );
+    }
+  } else {
+    // Legacy fallback: chunked Slide 3s followed by chunked Slide 4s
+    let designSlidesToRender: Array<{ title?: string; images: string[] }> = [];
+    if (Array.isArray(data.designSlides) && data.designSlides.length > 0) {
+      designSlidesToRender = data.designSlides;
+    } else if (specsObj && Array.isArray(specsObj.designSlides) && specsObj.designSlides.length > 0) {
+      designSlidesToRender = specsObj.designSlides;
+    } else {
+      let resolvedImages: string[] = [];
+      if (Array.isArray(data.systemDesignImages) && data.systemDesignImages.length > 0) {
+        resolvedImages = data.systemDesignImages;
+      } else if (specsObj && Array.isArray(specsObj.systemDesignImages) && specsObj.systemDesignImages.length > 0) {
+        resolvedImages = specsObj.systemDesignImages;
+      }
+
+      if (resolvedImages.length === 0) {
+        const samplePaths = [
+          "/template_assets/pptx_slides/image5.png",
+          "/template_assets/pptx_slides/image6.png",
+          "/template_assets/pptx_slides/image7.png",
+          "/template_assets/pptx_slides/image8.png",
+          "/template_assets/pptx_slides/image9.png",
+          "/template_assets/pptx_slides/image10.png",
+          "/template_assets/pptx_slides/image11.png",
+          "/template_assets/pptx_slides/image12.png",
+        ];
+        const loadedSamples = await Promise.all(samplePaths.map((p) => loadImageAsBase64(p)));
+        resolvedImages = loadedSamples.filter(Boolean) as string[];
+      }
+
+      if (resolvedImages.length === 0) {
+        designSlidesToRender = [{ images: [] }];
+      } else {
+        for (let i = 0; i < resolvedImages.length; i += 8) {
+          designSlidesToRender.push({ images: resolvedImages.slice(i, i + 8) });
+        }
+      }
+    }
+
+    for (let dIdx = 0; dIdx < designSlidesToRender.length; dIdx++) {
+      const slide = designSlidesToRender[dIdx];
+      await renderDesignSlide(
+        slide.images || [],
+        dIdx,
+        designSlidesToRender.length,
+        designSlidesToRender.length > 1 ? `PART ${dIdx + 1} OF ${designSlidesToRender.length}` : undefined
+      );
+    }
+
+    let bomSlidesToRender: Array<{
+      title?: string;
+      hardwareItems: RdQuotationPdfItem[];
+      serviceItems: RdQuotationPdfItem[];
+      hardwareTotal?: number;
+      servicesTotal?: number;
+      leadTime?: string;
+      warranty?: string;
+      commercialNote?: string;
+    }> = [];
+
+    if (Array.isArray(data.bomSlides) && data.bomSlides.length > 0) {
+      bomSlidesToRender = data.bomSlides.map((s) => ({
+        ...s,
+        hardwareItems: s.hardwareItems || [],
+        serviceItems: s.serviceItems || [],
+      }));
+    } else if (specsObj && Array.isArray(specsObj.bomSlides) && specsObj.bomSlides.length > 0) {
+      bomSlidesToRender = specsObj.bomSlides.map((s: any) => ({
+        ...s,
+        hardwareItems: s.hardwareItems || [],
+        serviceItems: s.serviceItems || [],
+      }));
+    } else {
+      const totalBomPages = Math.max(
+        Math.ceil(allHwItems.length / 4),
+        Math.ceil(allSrvItems.length / 2),
+        1
+      );
+
+      for (let i = 0; i < totalBomPages; i++) {
+        bomSlidesToRender.push({
+          hardwareItems: allHwItems.slice(i * 4, (i + 1) * 4),
+          serviceItems: allSrvItems.slice(i * 2, (i + 1) * 2),
+        });
+      }
+    }
+
+    for (let bIdx = 0; bIdx < bomSlidesToRender.length; bIdx++) {
+      const slide = bomSlidesToRender[bIdx];
+      const isFinal = bIdx === bomSlidesToRender.length - 1;
+      renderBomSlide(slide, bIdx, bomSlidesToRender.length, isFinal, grandTotal);
+    }
   }
 
   // ==========================================
