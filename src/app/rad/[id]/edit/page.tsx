@@ -178,28 +178,10 @@ export default function EditRadQuotationPage({
       leadTime: "10 Working Days",
       warranty: "1 Year",
       systemDesignImages: [],
-      hardwareItems: [
-        {
-          id: "hw-1",
-          productOrService: "",
-          quantity: 1,
-          unitPrice: 0,
-          totalPrice: 0,
-          itemType: "HARDWARE",
-        },
-      ],
-      serviceItems: [
-        {
-          id: "srv-1",
-          productOrService: "",
-          quantity: 1,
-          unitPrice: 0,
-          totalPrice: 0,
-          itemType: "SERVICE",
-        },
-      ],
-      hardwareTotal: "286440.00",
-      servicesTotal: "65160.00",
+      hardwareItems: [],
+      serviceItems: [],
+      hardwareTotal: "",
+      servicesTotal: "",
       commercialNote: "",
     },
   ]);
@@ -604,26 +586,8 @@ export default function EditRadQuotationPage({
       leadTime: "10 Working Days",
       warranty: "1 Year",
       systemDesignImages: [],
-      hardwareItems: [
-        {
-          id: `hw-${Date.now()}-1`,
-          productOrService: "",
-          quantity: 1,
-          unitPrice: 0,
-          totalPrice: 0,
-          itemType: "HARDWARE",
-        },
-      ],
-      serviceItems: [
-        {
-          id: `srv-${Date.now()}-1`,
-          productOrService: "",
-          quantity: 1,
-          unitPrice: 0,
-          totalPrice: 0,
-          itemType: "SERVICE",
-        },
-      ],
+      hardwareItems: [],
+      serviceItems: [],
       hardwareTotal: "",
       servicesTotal: "",
       commercialNote: "",
@@ -1060,28 +1024,10 @@ export default function EditRadQuotationPage({
                 leadTime: q.leadTime || "10 Working Days",
                 warranty: q.warranty || "1 Year",
                 systemDesignImages: Array.isArray(parsedSpecs?.systemDesignImages) ? parsedSpecs.systemDesignImages : [],
-                hardwareItems: loadedHw.length > 0 ? loadedHw : [
-                  {
-                    id: "hw-1",
-                    productOrService: "",
-                    quantity: 1,
-                    unitPrice: 0,
-                    totalPrice: 0,
-                    itemType: "HARDWARE",
-                  },
-                ],
-                serviceItems: loadedSrv.length > 0 ? loadedSrv : [
-                  {
-                    id: "srv-1",
-                    productOrService: "",
-                    quantity: 1,
-                    unitPrice: 0,
-                    totalPrice: 0,
-                    itemType: "SERVICE",
-                  },
-                ],
-                hardwareTotal: q.hardwareTotal != null ? String(q.hardwareTotal) : "286440.00",
-                servicesTotal: q.servicesTotal != null ? String(q.servicesTotal) : "65160.00",
+                hardwareItems: loadedHw,
+                serviceItems: loadedSrv,
+                hardwareTotal: q.hardwareTotal != null ? String(q.hardwareTotal) : "",
+                servicesTotal: q.servicesTotal != null ? String(q.servicesTotal) : "",
                 commercialNote: parsedSpecs?.commercialNote || "",
               },
             ]);
@@ -1737,20 +1683,33 @@ export default function EditRadQuotationPage({
         missing["items"] = "University Quotation can have at most 4 items";
       }
     }
-    if (items.length === 0) {
-      missing["items"] = "Line Items (at least 1 item required)";
+    if (quotationType === "PROJECT_PROPOSAL") {
+      const allItems = proposalSets.flatMap((s) => [...s.hardwareItems, ...s.serviceItems]);
+      if (allItems.length === 0) {
+        missing["items"] = "Please add at least one hardware component or engineering service";
+      } else {
+        allItems.forEach((it, idx) => {
+          if (!it.productOrService || !it.productOrService.trim()) {
+            missing[`proposal_item_${idx}`] = `Item #${idx + 1} Description in BOM / Services`;
+          }
+        });
+      }
     } else {
-      items.forEach((it, idx) => {
-        if (!it.productOrService || !it.productOrService.trim()) {
-          missing[`item_${idx}_productOrService`] = `Item #${idx + 1} Description`;
-        }
-        if (Number(it.quantity) < 1) {
-          missing[`item_${idx}_quantity`] = `Item #${idx + 1} Quantity`;
-        }
-        if (Number(it.unitPrice) < 0) {
-          missing[`item_${idx}_unitPrice`] = `Item #${idx + 1} Unit Rate`;
-        }
-      });
+      if (items.length === 0) {
+        missing["items"] = "Line Items (at least 1 item required)";
+      } else {
+        items.forEach((it, idx) => {
+          if (!it.productOrService || !it.productOrService.trim()) {
+            missing[`item_${idx}_productOrService`] = `Item #${idx + 1} Description`;
+          }
+          if (Number(it.quantity) < 1) {
+            missing[`item_${idx}_quantity`] = `Item #${idx + 1} Quantity`;
+          }
+          if (Number(it.unitPrice) < 0) {
+            missing[`item_${idx}_unitPrice`] = `Item #${idx + 1} Unit Rate`;
+          }
+        });
+      }
     }
 
     return missing;
