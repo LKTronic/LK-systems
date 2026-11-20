@@ -22,6 +22,7 @@ import {
   Layers,
   ArrowDownToLine,
   HelpCircle,
+  Upload,
 } from "lucide-react";
 
 interface StorageData {
@@ -77,6 +78,8 @@ export default function StorageAndBackupAdminPage() {
   const [backingUp, setBackingUp] = useState(false);
   const [backupMsg, setBackupMsg] = useState<{ type: "success" | "error"; text: string } | null>(null);
   const [selectedBackupType, setSelectedBackupType] = useState<"DAILY" | "WEEKLY" | "MANUAL">("MANUAL");
+  const [migrating, setMigrating] = useState(false);
+  const [migrateResult, setMigrateResult] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
   const isSuperAdmin = (session?.user as any)?.role === "SUPERADMIN";
 
@@ -128,6 +131,34 @@ export default function StorageAndBackupAdminPage() {
       setBackupMsg({ type: "error", text: err?.message || "Backup failed to complete" });
     } finally {
       setBackingUp(false);
+    }
+  };
+
+  const handleMigrateImages = async () => {
+    if (
+      !confirm(
+        "This will safely back up all local & MySQL images to a server folder first, upload each image to Cloudinary, verify all links are live, update product URLs, and clean up the database bloat. Proceed?"
+      )
+    ) {
+      return;
+    }
+    setMigrating(true);
+    setMigrateResult(null);
+    try {
+      const res = await fetch("/api/admin/storage/migrate-images", { method: "POST" });
+      const json = await res.json();
+      if (!res.ok || !json.success) {
+        throw new Error(json.error || "Migration failed");
+      }
+      setMigrateResult({
+        type: "success",
+        text: json.message || "Images safely migrated and verified on Cloudinary!",
+      });
+      loadStorageData();
+    } catch (err: any) {
+      setMigrateResult({ type: "error", text: err?.message || "Migration failed" });
+    } finally {
+      setMigrating(false);
     }
   };
 
@@ -367,6 +398,56 @@ export default function StorageAndBackupAdminPage() {
               {data.database.tables.length} tables hosted on Hostinger MySQL (with index storage).
             </p>
           </div>
+        </div>
+      )}
+
+      {/* Hostinger Storage Optimization & Image Migration */}
+      {data && (
+        <div className="bg-gradient-to-r from-teal-950/40 via-slate-900 to-indigo-950/40 border border-teal-800/40 rounded-2xl p-6 shadow-sm space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div>
+              <div className="text-xs font-bold text-teal-400 uppercase tracking-wider flex items-center gap-2">
+                <Cloud className="w-4 h-4 text-teal-400" />
+                Hostinger Storage Optimization &amp; Image Migration
+              </div>
+              <h3 className="text-base font-bold text-white mt-1">
+                Migrate Local &amp; MySQL Images to Cloudinary
+              </h3>
+              <p className="text-xs text-slate-400 mt-1 max-w-2xl">
+                Safely creates a local server backup first, uploads each image to Cloudinary, verifies all URLs are live (HTTP 200), updates product image links, and cleans the 44MB Base64 bloat from MySQL so all your Hostinger websites stay fast and healthy.
+              </p>
+            </div>
+
+            <button
+              onClick={handleMigrateImages}
+              disabled={migrating}
+              className="px-4 py-2.5 bg-gradient-to-r from-teal-600 to-indigo-600 hover:from-teal-500 hover:to-indigo-500 disabled:opacity-50 text-white text-xs font-bold rounded-xl flex items-center gap-2 shadow-lg shadow-teal-900/30 transition shrink-0"
+            >
+              {migrating ? (
+                <>
+                  <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                  Backing up, Uploading &amp; Verifying...
+                </>
+              ) : (
+                <>
+                  <Upload className="w-3.5 h-3.5" />
+                  Migrate &amp; Verify Images on Cloudinary
+                </>
+              )}
+            </button>
+          </div>
+
+          {migrateResult && (
+            <div
+              className={`p-3 rounded-lg text-xs font-medium border ${
+                migrateResult.type === "success"
+                  ? "bg-emerald-950/60 border-emerald-800/60 text-emerald-300"
+                  : "bg-red-950/60 border-red-800/60 text-red-300"
+              }`}
+            >
+              {migrateResult.text}
+            </div>
+          )}
         </div>
       )}
 

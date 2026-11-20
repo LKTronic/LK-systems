@@ -78,7 +78,69 @@ export interface UploadQcVideoResult {
   thumbnailUrl?: string;
 }
 
+export interface UploadProductImageResult {
+  url: string;
+  publicId: string;
+  bytes: number;
+  format?: string;
+}
+
 export const MAX_VIDEO_SIZE_BYTES = 150 * 1024 * 1024; // 150 MB
+export const MAX_IMAGE_SIZE_BYTES = 10 * 1024 * 1024; // 10 MB
+
+/**
+ * Uploads a product image directly to Cloudinary into folder `pms_products/`
+ */
+export async function uploadProductImage(
+  buffer: Buffer,
+  originalFilename: string
+): Promise<UploadProductImageResult> {
+  if (!isCloudinaryConfigured()) {
+    throw new Error("Cloudinary is not configured.");
+  }
+
+  if (buffer.length > MAX_IMAGE_SIZE_BYTES) {
+    throw new Error(
+      `Image file size exceeds 10MB limit (uploaded: ${(buffer.length / (1024 * 1024)).toFixed(1)}MB).`
+    );
+  }
+
+  const client = getCloudinaryClient();
+  const safeName = originalFilename
+    .replace(/\.[^/.]+$/, "")
+    .replace(/[^a-zA-Z0-9_-]/g, "_")
+    .substring(0, 50);
+  const publicId = `prod_${Date.now()}_${safeName}`;
+
+  return new Promise((resolve, reject) => {
+    const uploadStream = client.uploader.upload_stream(
+      {
+        resource_type: "image",
+        folder: "pms_products",
+        public_id: publicId,
+        overwrite: true,
+      },
+      (error, result: UploadApiResponse | undefined) => {
+        if (error || !result) {
+          console.error("Cloudinary product image upload error:", error);
+          return reject(error || new Error("Failed to upload image to Cloudinary"));
+        }
+
+        resolve({
+          url: result.secure_url || result.url,
+          publicId: result.public_id,
+          bytes: result.bytes || buffer.length,
+          format: result.format,
+        });
+      }
+    );
+
+    const readable = new Readable();
+    readable.push(buffer);
+    readable.push(null);
+    readable.pipe(uploadStream);
+  });
+}
 
 /**
  * Uploads a QC test video to Cloudinary using chunked upload stream (supports up to 150MB)

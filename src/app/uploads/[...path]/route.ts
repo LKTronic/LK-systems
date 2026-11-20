@@ -72,6 +72,21 @@ export async function GET(
       });
     }
 
+    // 2.5. Check if matching product was migrated to Cloudinary
+    const cleanBaseName = path.basename(filename);
+    const cloudProduct = await prisma.product.findFirst({
+      where: {
+        OR: [
+          { imagePath: { contains: cleanBaseName } },
+          { supplierImage: { contains: cleanBaseName } },
+        ],
+      },
+      select: { imagePath: true, supplierImage: true },
+    });
+    if (cloudProduct?.imagePath && cloudProduct.imagePath.startsWith("http")) {
+      return NextResponse.redirect(cloudProduct.imagePath, 302);
+    }
+
     // 3. Check if matching product in database has a restored asset or known mapping (ONLY for legacy restored/excel requests)
     const cleanBase = path.basename(filename);
     const isLegacyRestoredRequest =
