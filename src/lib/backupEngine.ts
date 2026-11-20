@@ -143,9 +143,9 @@ export async function dumpDatabaseSnapshot(type: "DAILY" | "WEEKLY" | "MANUAL") 
     getHandoverLetters().catch(() => []),
   ]);
 
-  let imageBackups: any[] = [];
+  let imageBackupCount = 0;
   try {
-    imageBackups = await prisma.productImageBackup.findMany();
+    imageBackupCount = await prisma.productImageBackup.count();
   } catch (e) {
     // optional table
   }
@@ -165,7 +165,7 @@ export async function dumpDatabaseSnapshot(type: "DAILY" | "WEEKLY" | "MANUAL") 
     productChecklists: checklists.length,
     handoverLetters: handoverLetters.length,
     systemSettings: systemSettings.length,
-    imageBackups: imageBackups.length,
+    imageBackups: imageBackupCount,
   };
 
   const payload = {
@@ -189,7 +189,6 @@ export async function dumpDatabaseSnapshot(type: "DAILY" | "WEEKLY" | "MANUAL") 
       productChecklists: checklists,
       handoverLetters,
       systemSettings,
-      productImageBackups: imageBackups,
     },
   };
 

@@ -5,6 +5,7 @@ import { writeFile, mkdir } from "fs/promises";
 import path from "path";
 import crypto from "crypto";
 import { getClientIp, checkRateLimit, rateLimitResponse } from "@/lib/rateLimit";
+import { isCloudinaryConfigured, uploadProductImage } from "@/lib/cloudinary";
 
 const ALLOWED_MIME_TYPES = [
   "image/jpeg",
@@ -105,25 +106,25 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Generate random, collision-free storage filename with server-verified extension
-    const uniqueName = `${Date.now()}-${crypto.randomBytes(12).toString("hex")}${safeExt}`;
+    // 1. Direct Cloudinary Upload (Recommended: Zero disk usage, Zero MySQL database bloat)
+    if (isCloudinaryConfigured()) {
+      try {
+        const uploadResult = await uploadProductImage(buffer, file.name || "product_image");
+        return NextResponse.json({ url: uploadResult.url });
+      } catch (cloudErr) {
+        console.error("Direct Cloudinary upload failed, using local disk fallback:", cloudErr);
+      }
+    }
 
+    // 2. Local disk fallback (if Cloudinary is unavailable)
+    const uniqueName = `${Date.now()}-${crypto.randomBytes(12).toString("hex")}${safeExt}`;
     const uploadDir = path.join(process.cwd(), "public", "uploads", "products");
     await mkdir(uploadDir, { recursive: true });
 
     const filePath = path.join(uploadDir, uniqueName);
     await writeFile(filePath, buffer);
 
-    // Persist binary copy to MySQL database to prevent loss on git pull / server update
-    try {
-      const { backupImageToDatabase } = await import("@/lib/imageStorage");
-      await backupImageToDatabase(uniqueName, buffer, file.type || "image/png");
-    } catch (backupErr) {
-      console.warn("Database image backup non-fatal warning:", backupErr);
-    }
-
     const relativeUrl = `/uploads/products/${uniqueName}`;
-
     return NextResponse.json({ url: relativeUrl });
   } catch (error) {
     console.error("Upload error:", error);
