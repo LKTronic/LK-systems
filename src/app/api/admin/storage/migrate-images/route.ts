@@ -11,7 +11,7 @@ export const revalidate = 0;
 
 /**
  * GET /api/admin/storage/migrate-images
- * Returns live status of how many images are pending, already migrated, or stored in MySQL
+ * Returns live status of how many images are pending, already migrated, or stored on server/database
  */
 export async function GET(req: NextRequest) {
   try {
@@ -51,6 +51,14 @@ export async function GET(req: NextRequest) {
       } catch {}
     }
 
+    let serverBackupCount = 0;
+    const backupDir = path.join(process.cwd(), "backups", "product_images_backup");
+    if (fs.existsSync(backupDir)) {
+      try {
+        serverBackupCount = fs.readdirSync(backupDir).filter((f) => f !== ".gitkeep").length;
+      } catch {}
+    }
+
     const totalRemaining = pendingProducts + dbBackupCount;
 
     return NextResponse.json({
@@ -61,9 +69,11 @@ export async function GET(req: NextRequest) {
         pendingProducts,
         dbBackupCount,
         diskImagesCount,
+        serverBackupCount,
         totalRemainingToMigrate: totalRemaining,
         isFullyMigrated: totalRemaining === 0,
         canCleanDbBackup: dbBackupCount > 0,
+        hasServerBackups: serverBackupCount > 0 || diskImagesCount > 0 || dbBackupCount > 0,
       },
     });
   } catch (err: any) {
@@ -74,8 +84,10 @@ export async function GET(req: NextRequest) {
 
 /**
  * POST /api/admin/storage/migrate-images
- * Migrates images directly from MySQL ProductImageBackup table to Cloudinary `pms_products/`
- * in safe 5-image batches, then links product records and cleans database bloat.
+ * Supports:
+ * - action: "batch" &rarr; Batch migration of local MySQL/disk images to Cloudinary
+ * - action: "reupload_backup" &rarr; Restores and re-uploads images from `backups/product_images_backup/` to Cloudinary `pms_products`
+ * - action: "cleanup" &rarr; Purges MySQL Base64 backup bloat
  */
 export async function POST(req: NextRequest) {
   try {
@@ -88,11 +100,110 @@ export async function POST(req: NextRequest) {
     }
 
     const body = await req.json().catch(() => ({}));
-    const action = body.action || "batch"; // "batch" | "cleanup"
+    const action = body.action || "batch"; // "batch" | "reupload_backup" | "cleanup"
     const batchSize = Math.min(10, Math.max(1, Number(body.batchSize) || 5));
     const cursor = typeof body.cursor === "number" ? body.cursor : 0;
 
-    // Direct cleanup action: purge ProductImageBackup table and clear dead local paths
+    if (!isCloudinaryConfigured()) {
+      return NextResponse.json(
+        { success: false, error: "Cloudinary is not configured. Please check your credentials in .env." },
+        { status: 500 }
+      );
+    }
+
+    const backupDir = path.join(process.cwd(), "backups", "product_images_backup");
+    const uploadDir = path.join(process.cwd(), "public", "uploads", "products");
+    const { cloudName } = getCloudinaryCredentials();
+
+    // ACTION: REUPLOAD_BACKUP (Restores all server backup images back into Cloudinary pms_products)
+    if (action === "reupload_backup") {
+      const fileMap = new Map<string, Buffer>();
+
+      // 1. Collect from backups/product_images_backup/
+      if (fs.existsSync(backupDir)) {
+        try {
+          const files = fs.readdirSync(backupDir);
+          for (const f of files) {
+            if (f === ".gitkeep") continue;
+            try {
+              const buf = fs.readFileSync(path.join(backupDir, f));
+              if (buf && buf.length > 0) fileMap.set(f, buf);
+            } catch {}
+          }
+        } catch {}
+      }
+
+      // 2. Collect from public/uploads/products/
+      if (fs.existsSync(uploadDir)) {
+        try {
+          const files = fs.readdirSync(uploadDir);
+          for (const f of files) {
+            if (f === ".gitkeep" || fileMap.has(f)) continue;
+            try {
+              const buf = fs.readFileSync(path.join(uploadDir, f));
+              if (buf && buf.length > 0) fileMap.set(f, buf);
+            } catch {}
+          }
+        } catch {}
+      }
+
+      // 3. Collect from MySQL ProductImageBackup table if available
+      try {
+        const dbBackups = await prisma.productImageBackup.findMany();
+        for (const row of dbBackups) {
+          if (row.data && !fileMap.has(row.filename)) {
+            try {
+              fileMap.set(row.filename, Buffer.from(row.data, "base64"));
+            } catch {}
+          }
+        }
+      } catch {}
+
+      if (fileMap.size === 0) {
+        return NextResponse.json({
+          success: false,
+          error: "No server backup image files found in backups/product_images_backup/ or public/uploads/products/.",
+        });
+      }
+
+      let uploadedCount = 0;
+      let updatedProductsCount = 0;
+
+      for (const [filename, buffer] of fileMap.entries()) {
+        try {
+          const uploadResult = await uploadProductImage(buffer, filename);
+          uploadedCount++;
+
+          const nameWithoutExt = path.parse(filename).name;
+
+          // Update any products whose imagePath references this filename or old Cloudinary url
+          const updated = await prisma.product.updateMany({
+            where: {
+              OR: [
+                { imagePath: { contains: filename } },
+                { imagePath: { contains: nameWithoutExt } },
+                { supplierImage: { contains: filename } },
+              ],
+            },
+            data: {
+              imagePath: uploadResult.url,
+            },
+          });
+          updatedProductsCount += updated.count;
+        } catch (uploadErr: any) {
+          console.error(`Failed to re-upload ${filename}:`, uploadErr?.message);
+        }
+      }
+
+      return NextResponse.json({
+        success: true,
+        message: `Successfully restored and re-uploaded ${uploadedCount} images to Cloudinary (folder 'pms_products') and updated ${updatedProductsCount} product links!`,
+        uploadedCount,
+        updatedProductsCount,
+      });
+    }
+
+    // ACTION: CLEANUP
     if (action === "cleanup") {
       try {
         const deleted = await prisma.productImageBackup.deleteMany({});
@@ -118,26 +229,15 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    if (!isCloudinaryConfigured()) {
-      return NextResponse.json(
-        { success: false, error: "Cloudinary is not configured. Please check your credentials in .env." },
-        { status: 500 }
-      );
-    }
-
-    // 1. Prepare local backup directory on Hostinger server
-    const backupDir = path.join(process.cwd(), "backups", "product_images_backup");
+    // ACTION: BATCH MIGRATION
     if (!fs.existsSync(backupDir)) {
       fs.mkdirSync(backupDir, { recursive: true });
     }
 
-    const uploadDir = path.join(process.cwd(), "public", "uploads", "products");
-    const { cloudName } = getCloudinaryCredentials();
-
     let processedInBatch = 0;
     let nextCursor = cursor;
 
-    // PHASE 1: Migrate directly from ProductImageBackup table (where all 72 image files live!)
+    // PHASE 1: Migrate directly from ProductImageBackup table (where image files live)
     const backups = await prisma.productImageBackup.findMany({
       take: batchSize,
     });
@@ -152,10 +252,7 @@ export async function POST(req: NextRequest) {
           } catch {}
 
           try {
-            // Upload directly to Cloudinary into `pms_products/`
             const uploadResult = await uploadProductImage(buffer, row.filename);
-
-            // Update all products referencing this filename to Cloudinary URL
             await prisma.product.updateMany({
               where: {
                 OR: [
@@ -172,7 +269,6 @@ export async function POST(req: NextRequest) {
           }
         }
 
-        // Delete processed row from MySQL
         await prisma.productImageBackup.deleteMany({
           where: { filename: row.filename },
         }).catch(() => {});
@@ -180,7 +276,7 @@ export async function POST(req: NextRequest) {
         processedInBatch++;
       }
     } else {
-      // PHASE 2: All ProductImageBackup rows migrated! Now check remaining products with non-http paths
+      // PHASE 2: Check remaining products with non-http paths
       const remainingProducts = await prisma.product.findMany({
         where: {
           AND: [
@@ -216,7 +312,6 @@ export async function POST(req: NextRequest) {
           }
 
           if (!uploaded && cloudName) {
-            // Check if file already exists on Cloudinary
             const directCloudUrl = `https://res.cloudinary.com/${cloudName}/image/upload/pms_products/${encodeURIComponent(cleanFilename)}`;
             try {
               const headRes = await fetch(directCloudUrl, { method: "HEAD", signal: AbortSignal.timeout(3000) });
@@ -229,7 +324,6 @@ export async function POST(req: NextRequest) {
           }
 
           if (!uploaded) {
-            // Truly a missing ghost path (e.g. from deleted test product)
             await prisma.product.update({ where: { id: prod.id }, data: { imagePath: null } });
             processedInBatch++;
           }
@@ -237,7 +331,6 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // Check remaining totals
     const [remainingProductsCount, remainingDbBackupsCount] = await Promise.all([
       prisma.product.count({
         where: {
@@ -255,7 +348,6 @@ export async function POST(req: NextRequest) {
     const completed = totalRemaining === 0 || (backups.length === 0 && processedInBatch === 0);
 
     if (completed) {
-      // Final purge: ensure ProductImageBackup table is 100% empty
       await prisma.productImageBackup.deleteMany({}).catch(() => {});
     }
 

@@ -81,6 +81,7 @@ export default function StorageAndBackupAdminPage() {
   const [selectedBackupType, setSelectedBackupType] = useState<"DAILY" | "WEEKLY" | "MANUAL">("MANUAL");
   const [migrating, setMigrating] = useState(false);
   const [cleaningDb, setCleaningDb] = useState(false);
+  const [restoringBackup, setRestoringBackup] = useState(false);
   const [migrateResult, setMigrateResult] = useState<{ type: "success" | "error"; text: string } | null>(null);
   const [migrationProgress, setMigrationProgress] = useState<{
     total: number;
@@ -305,6 +306,44 @@ export default function StorageAndBackupAdminPage() {
       setMigrateResult({ type: "error", text: err?.message || "Clean failed" });
     } finally {
       setCleaningDb(false);
+    }
+  };
+
+  const handleReuploadBackup = async () => {
+    if (
+      !confirm(
+        "This will read all image files from the server backup folder (backups/product_images_backup/) and re-upload them to Cloudinary (folder 'pms_products/'), fixing any 404 broken product image links. Proceed?"
+      )
+    ) {
+      return;
+    }
+    setRestoringBackup(true);
+    setMigrateResult(null);
+    try {
+      const res = await fetch("/api/admin/storage/migrate-images", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "reupload_backup" }),
+      });
+      const rawText = await res.text();
+      let json: any = null;
+      try {
+        json = JSON.parse(rawText);
+      } catch {
+        throw new Error("Server returned non-JSON response during backup re-upload.");
+      }
+      if (!res.ok || !json.success) {
+        throw new Error(json.error || "Failed to re-upload backup images");
+      }
+      setMigrateResult({
+        type: "success",
+        text: json.message || "Images re-uploaded to Cloudinary successfully!",
+      });
+      loadStorageData();
+    } catch (err: any) {
+      setMigrateResult({ type: "error", text: err?.message || "Re-upload failed" });
+    } finally {
+      setRestoringBackup(false);
     }
   };
 
@@ -564,7 +603,17 @@ export default function StorageAndBackupAdminPage() {
               </p>
             </div>
 
-            <div className="flex items-center gap-2 shrink-0">
+            <div className="flex flex-wrap items-center gap-2 shrink-0">
+              <button
+                onClick={handleReuploadBackup}
+                disabled={restoringBackup || migrating || cleaningDb}
+                className="px-3.5 py-2.5 bg-amber-950/60 hover:bg-amber-900/60 border border-amber-700/60 disabled:opacity-50 text-amber-300 text-xs font-bold rounded-xl flex items-center gap-2 transition"
+                title="Re-upload all saved backup images to Cloudinary (folder 'pms_products') and fix broken links"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${restoringBackup ? "animate-spin" : ""}`} />
+                {restoringBackup ? "Re-uploading Server Backup..." : "Restore & Re-upload Server Backup Images"}
+              </button>
+
               {data.database.tables.some((t) => t.name === "ProductImageBackup" && t.rows > 0) && (
                 <button
                   onClick={handleCleanDatabase}
