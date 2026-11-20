@@ -290,9 +290,20 @@ export async function saveChecklist(checklist: ProductChecklist): Promise<Produc
 }
 
 /**
- * Delete a product checklist record
+ * Delete a product checklist record (and cleans up any attached Cloudinary video)
  */
 export async function deleteChecklist(id: string): Promise<boolean> {
+  // 0. Auto-delete attached video from Cloudinary if present
+  try {
+    const checklists = await getChecklists();
+    const target = checklists.find((c) => c.id === id || c.checklistNo === id);
+    if (target?.videoInfo?.publicId) {
+      await deleteQcVideo(target.videoInfo.publicId);
+    }
+  } catch (err: any) {
+    console.warn("Failed to delete video from Cloudinary during checklist deletion:", err?.message);
+  }
+
   // 1. Delete from ProductChecklist table
   try {
     if ((prisma as any).productChecklist?.deleteMany) {

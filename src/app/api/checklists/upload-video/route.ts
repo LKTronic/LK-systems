@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import {
   uploadQcVideo,
+  deleteQcVideo,
   MAX_VIDEO_SIZE_BYTES,
   isCloudinaryConfigured,
 } from "@/lib/cloudinary";
@@ -102,6 +103,41 @@ export async function POST(req: NextRequest) {
     console.error("POST /api/checklists/upload-video error:", err);
     return NextResponse.json(
       { error: err?.message || "Failed to upload video to Cloudinary" },
+      { status: 500 }
+    );
+  }
+}
+
+/**
+ * DELETE /api/checklists/upload-video?publicId=xxx
+ * Deletes a video directly from Cloudinary by its publicId
+ */
+export async function DELETE(req: NextRequest) {
+  try {
+    const session = await getServerSession(authOptions);
+    if (!session) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const { searchParams } = new URL(req.url);
+    const publicId = searchParams.get("publicId");
+
+    if (!publicId) {
+      return NextResponse.json(
+        { error: "publicId parameter is required" },
+        { status: 400 }
+      );
+    }
+
+    const success = await deleteQcVideo(publicId);
+    return NextResponse.json({
+      success,
+      message: "Video successfully deleted from Cloudinary",
+    });
+  } catch (err: any) {
+    console.error("DELETE /api/checklists/upload-video error:", err);
+    return NextResponse.json(
+      { error: err?.message || "Failed to delete video from Cloudinary" },
       { status: 500 }
     );
   }

@@ -1205,7 +1205,7 @@ function CreateRadQuotationContent() {
           s.systemDesignImages.length > 0
       )
   );
-  const isStep4Complete = Boolean(terms !== undefined && terms.trim().length >= 0);
+  const isStep4Complete = Boolean(terms && terms.trim().length > 0);
 
   const PROPOSAL_STEPS = [
     {
@@ -1229,7 +1229,7 @@ function CreateRadQuotationContent() {
     {
       step: 4,
       title: "4. Terms & Conditions",
-      sub: "Slide 5 terms & sign-off",
+      sub: "Slide 5 terms & sign-off (Optional)",
       isComplete: isStep4Complete,
     },
   ];

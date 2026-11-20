@@ -397,6 +397,18 @@ export default function ChecklistPage() {
       } catch (err) {
         console.error("Error deleting video:", err);
       }
+    } else if (formVideoInfo?.publicId) {
+      // Form not yet saved, delete video directly from Cloudinary using publicId
+      try {
+        await fetch(
+          `/api/checklists/upload-video?publicId=${encodeURIComponent(
+            formVideoInfo.publicId
+          )}`,
+          { method: "DELETE" }
+        );
+      } catch (err) {
+        console.error("Error deleting video from Cloudinary:", err);
+      }
     }
 
     setFormVideoInfo(null);
