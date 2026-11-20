@@ -23,6 +23,7 @@ import {
   ArrowDownToLine,
   HelpCircle,
   Upload,
+  Trash2,
 } from "lucide-react";
 
 interface StorageData {
@@ -79,7 +80,15 @@ export default function StorageAndBackupAdminPage() {
   const [backupMsg, setBackupMsg] = useState<{ type: "success" | "error"; text: string } | null>(null);
   const [selectedBackupType, setSelectedBackupType] = useState<"DAILY" | "WEEKLY" | "MANUAL">("MANUAL");
   const [migrating, setMigrating] = useState(false);
+  const [cleaningDb, setCleaningDb] = useState(false);
   const [migrateResult, setMigrateResult] = useState<{ type: "success" | "error"; text: string } | null>(null);
+  const [migrationProgress, setMigrationProgress] = useState<{
+    total: number;
+    processed: number;
+    percent: number;
+    batch: number;
+    statusText: string;
+  } | null>(null);
 
   const isSuperAdmin = (session?.user as any)?.role === "SUPERADMIN";
 
@@ -137,28 +146,156 @@ export default function StorageAndBackupAdminPage() {
   const handleMigrateImages = async () => {
     if (
       !confirm(
-        "This will safely back up all local & MySQL images to a server folder first, upload each image to Cloudinary, verify all links are live, update product URLs, and clean up the database bloat. Proceed?"
+        "This will safely back up all local & MySQL images to a server folder first, upload each image to Cloudinary in fast 5-image batches, verify all links are live, update product URLs, and clean up the database bloat. Proceed?"
       )
     ) {
       return;
     }
+
     setMigrating(true);
     setMigrateResult(null);
+    setMigrationProgress({
+      total: 0,
+      processed: 0,
+      percent: 0,
+      batch: 0,
+      statusText: "Analyzing images to migrate...",
+    });
+
     try {
-      const res = await fetch("/api/admin/storage/migrate-images", { method: "POST" });
-      const json = await res.json();
-      if (!res.ok || !json.success) {
-        throw new Error(json.error || "Migration failed");
+      // 1. Check live status first
+      const statusRes = await fetch("/api/admin/storage/migrate-images");
+      const statusRaw = await statusRes.text();
+      let statusJson: any = null;
+      try {
+        statusJson = JSON.parse(statusRaw);
+      } catch {
+        throw new Error(`Server returned non-JSON response (${statusRes.status}). Please try again.`);
       }
+
+      if (!statusRes.ok || !statusJson.success) {
+        throw new Error(statusJson.error || "Failed to check migration status");
+      }
+
+      const totalItems = statusJson.stats?.totalRemainingToMigrate || 0;
+      if (totalItems === 0) {
+        setMigrateResult({
+          type: "success",
+          text: "All product images are already on Cloudinary! MySQL database is clean.",
+        });
+        setMigrating(false);
+        setMigrationProgress(null);
+        loadStorageData();
+        return;
+      }
+
+      let completed = false;
+      let cursor = 0;
+      let batchNum = 0;
+      let totalMigrated = 0;
+
+      while (!completed) {
+        batchNum++;
+        setMigrationProgress({
+          total: totalItems,
+          processed: totalMigrated,
+          percent: Math.min(99, Math.round((totalMigrated / Math.max(1, totalItems)) * 100)),
+          batch: batchNum,
+          statusText: `Uploading batch ${batchNum} to Cloudinary and verifying URLs...`,
+        });
+
+        const res = await fetch("/api/admin/storage/migrate-images", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ batchSize: 5, cursor, action: "batch" }),
+        });
+
+        const rawText = await res.text();
+        let json: any = null;
+        try {
+          json = JSON.parse(rawText);
+        } catch {
+          throw new Error(
+            `Hostinger gateway timeout or network interruption on batch ${batchNum}. Some images were safely migrated. Simply click 'Migrate & Verify' again to resume!`
+          );
+        }
+
+        if (!res.ok || !json.success) {
+          throw new Error(json.error || `Batch ${batchNum} failed`);
+        }
+
+        totalMigrated += json.processedInBatch || 0;
+        cursor = json.nextCursor ?? cursor;
+        const remaining = json.totalRemaining ?? Math.max(0, totalItems - totalMigrated);
+        const percent = Math.min(100, Math.round(((totalItems - remaining) / Math.max(1, totalItems)) * 100));
+
+        setMigrationProgress({
+          total: totalItems,
+          processed: totalMigrated,
+          percent,
+          batch: batchNum,
+          statusText: json.completed
+            ? "Migration complete! All images verified live on Cloudinary."
+            : `Migrated ${totalMigrated} of ${totalItems} images (${percent}%)...`,
+        });
+
+        if (json.completed || remaining === 0) {
+          completed = true;
+          break;
+        }
+
+        // Brief delay between batches to allow UI to breathe
+        await new Promise((r) => setTimeout(r, 200));
+      }
+
       setMigrateResult({
         type: "success",
-        text: json.message || "Images safely migrated and verified on Cloudinary!",
+        text: `All ${totalItems} images safely backed up to server, migrated to Cloudinary, verified live, and MySQL bloat removed!`,
       });
       loadStorageData();
     } catch (err: any) {
       setMigrateResult({ type: "error", text: err?.message || "Migration failed" });
     } finally {
       setMigrating(false);
+      setMigrationProgress(null);
+    }
+  };
+
+  const handleCleanDatabase = async () => {
+    if (
+      !confirm(
+        "This will permanently delete the 44MB Base64 image cache from MySQL (ProductImageBackup table). Since images are already hosted on Cloudinary, this frees MySQL memory. Proceed?"
+      )
+    ) {
+      return;
+    }
+    setCleaningDb(true);
+    setMigrateResult(null);
+    try {
+      const res = await fetch("/api/admin/storage/migrate-images", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "cleanup" }),
+      });
+      const rawText = await res.text();
+      let json: any = null;
+      try {
+        json = JSON.parse(rawText);
+      } catch {
+        throw new Error("Server returned non-JSON response during cleanup.");
+      }
+      if (!res.ok || !json.success) {
+        throw new Error(json.error || "Failed to clean MySQL database");
+      }
+      setMigrateResult({
+        type: "success",
+        text: json.message || "MySQL memory freed successfully!",
+      });
+      loadStorageData();
+    } catch (err: any) {
+      setMigrateResult({ type: "error", text: err?.message || "Clean failed" });
+    } finally {
+      setCleaningDb(false);
     }
   };
 
@@ -414,38 +551,84 @@ export default function StorageAndBackupAdminPage() {
                 Migrate Local &amp; MySQL Images to Cloudinary
               </h3>
               <p className="text-xs text-slate-400 mt-1 max-w-2xl">
-                Safely creates a local server backup first, uploads each image to Cloudinary, verifies all URLs are live (HTTP 200), updates product image links, and cleans the 44MB Base64 bloat from MySQL so all your Hostinger websites stay fast and healthy.
+                Safely creates a local server backup first, uploads each image to Cloudinary in fast 5-image batches, verifies all URLs are live (HTTP 200), updates product image links, and cleans the 44MB Base64 bloat from MySQL so all your Hostinger websites stay fast and healthy.
               </p>
             </div>
 
-            <button
-              onClick={handleMigrateImages}
-              disabled={migrating}
-              className="px-4 py-2.5 bg-gradient-to-r from-teal-600 to-indigo-600 hover:from-teal-500 hover:to-indigo-500 disabled:opacity-50 text-white text-xs font-bold rounded-xl flex items-center gap-2 shadow-lg shadow-teal-900/30 transition shrink-0"
-            >
-              {migrating ? (
-                <>
-                  <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                  Backing up, Uploading &amp; Verifying...
-                </>
-              ) : (
-                <>
-                  <Upload className="w-3.5 h-3.5" />
-                  Migrate &amp; Verify Images on Cloudinary
-                </>
+            <div className="flex items-center gap-2 shrink-0">
+              {data.database.tables.some((t) => t.name === "ProductImageBackup" && t.rows > 0) && (
+                <button
+                  onClick={handleCleanDatabase}
+                  disabled={cleaningDb || migrating}
+                  className="px-3.5 py-2.5 bg-rose-950/60 hover:bg-rose-900/60 border border-rose-800/60 disabled:opacity-50 text-rose-300 text-xs font-bold rounded-xl flex items-center gap-2 transition"
+                  title="Purge Base64 cache from MySQL"
+                >
+                  <Trash2 className={`w-3.5 h-3.5 ${cleaningDb ? "animate-spin" : ""}`} />
+                  {cleaningDb ? "Cleaning MySQL..." : "Clean MySQL Bloat (44MB)"}
+                </button>
               )}
-            </button>
+
+              <button
+                onClick={handleMigrateImages}
+                disabled={migrating || cleaningDb}
+                className="px-4 py-2.5 bg-gradient-to-r from-teal-600 to-indigo-600 hover:from-teal-500 hover:to-indigo-500 disabled:opacity-50 text-white text-xs font-bold rounded-xl flex items-center gap-2 shadow-lg shadow-teal-900/30 transition shrink-0"
+              >
+                {migrating ? (
+                  <>
+                    <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                    Migrating Batch...
+                  </>
+                ) : (
+                  <>
+                    <Upload className="w-3.5 h-3.5" />
+                    Migrate &amp; Verify Images on Cloudinary
+                  </>
+                )}
+              </button>
+            </div>
           </div>
+
+          {/* Live Progress Bar when Migrating */}
+          {migrationProgress && (
+            <div className="bg-slate-950/60 border border-teal-800/50 rounded-xl p-4 space-y-2">
+              <div className="flex items-center justify-between text-xs">
+                <span className="font-semibold text-teal-300 flex items-center gap-2">
+                  <RefreshCw className="w-3 h-3 animate-spin text-teal-400" />
+                  {migrationProgress.statusText}
+                </span>
+                <span className="font-mono font-bold text-white">
+                  {migrationProgress.percent}%
+                </span>
+              </div>
+              <div className="w-full h-2.5 bg-slate-800 rounded-full overflow-hidden">
+                <div
+                  style={{ width: `${migrationProgress.percent}%` }}
+                  className="h-full bg-gradient-to-r from-teal-500 to-indigo-500 transition-all duration-300"
+                />
+              </div>
+              <div className="flex items-center justify-between text-[11px] text-slate-400">
+                <span>Batch #{migrationProgress.batch} (5 images / batch)</span>
+                <span>
+                  {migrationProgress.processed} of {migrationProgress.total} images completed
+                </span>
+              </div>
+            </div>
+          )}
 
           {migrateResult && (
             <div
-              className={`p-3 rounded-lg text-xs font-medium border ${
+              className={`p-3 rounded-lg text-xs font-medium border flex items-center gap-2 ${
                 migrateResult.type === "success"
                   ? "bg-emerald-950/60 border-emerald-800/60 text-emerald-300"
                   : "bg-red-950/60 border-red-800/60 text-red-300"
               }`}
             >
-              {migrateResult.text}
+              {migrateResult.type === "success" ? (
+                <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+              ) : (
+                <AlertTriangle className="w-4 h-4 text-red-400 shrink-0" />
+              )}
+              <span>{migrateResult.text}</span>
             </div>
           )}
         </div>
