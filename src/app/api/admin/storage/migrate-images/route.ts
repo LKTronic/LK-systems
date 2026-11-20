@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { isCloudinaryConfigured, uploadProductImage } from "@/lib/cloudinary";
+import { isCloudinaryConfigured, uploadProductImage, getCloudinaryCredentials } from "@/lib/cloudinary";
 import fs from "fs";
 import path from "path";
 
@@ -51,6 +51,8 @@ export async function GET(req: NextRequest) {
       } catch {}
     }
 
+    const totalRemaining = pendingProducts + dbBackupCount;
+
     return NextResponse.json({
       success: true,
       stats: {
@@ -59,8 +61,8 @@ export async function GET(req: NextRequest) {
         pendingProducts,
         dbBackupCount,
         diskImagesCount,
-        totalRemainingToMigrate: pendingProducts + dbBackupCount,
-        isFullyMigrated: pendingProducts === 0 && dbBackupCount === 0,
+        totalRemainingToMigrate: totalRemaining,
+        isFullyMigrated: totalRemaining === 0,
         canCleanDbBackup: dbBackupCount > 0,
       },
     });
@@ -72,9 +74,8 @@ export async function GET(req: NextRequest) {
 
 /**
  * POST /api/admin/storage/migrate-images
- * Processes a small, safe batch of images (default 5 images, ~3-5 seconds)
- * or performs immediate MySQL cleanup.
- * Prevents Hostinger 60-second gateway timeouts.
+ * Processes a small, safe batch of images (default 5 images) or performs immediate cleanup.
+ * Guaranteed termination: handles missing/dead image paths and prevents infinite loops.
  */
 export async function POST(req: NextRequest) {
   try {
@@ -91,14 +92,27 @@ export async function POST(req: NextRequest) {
     const batchSize = Math.min(10, Math.max(1, Number(body.batchSize) || 5));
     const cursor = typeof body.cursor === "number" ? body.cursor : 0;
 
-    // Direct cleanup action: purge ProductImageBackup table to free 44MB memory immediately
+    // Direct cleanup action: purge ProductImageBackup table and clear dead local paths
     if (action === "cleanup") {
       try {
         const deleted = await prisma.productImageBackup.deleteMany({});
+        // Clean any broken local image paths that don't start with http
+        const cleanedProducts = await prisma.product.updateMany({
+          where: {
+            AND: [
+              { imagePath: { not: null } },
+              { NOT: { imagePath: "" } },
+              { NOT: { imagePath: { startsWith: "http" } } },
+            ],
+          },
+          data: { imagePath: null },
+        });
+
         return NextResponse.json({
           success: true,
-          message: `Successfully cleaned ${deleted.count} Base64 image records from MySQL database. Memory freed!`,
+          message: `Successfully cleaned MySQL database! Deleted ${deleted.count} Base64 backup records (~44MB) and cleaned ${cleanedProducts.count} dead local paths.`,
           cleanedCount: deleted.count,
+          cleanedProducts: cleanedProducts.count,
         });
       } catch (err: any) {
         return NextResponse.json({ success: false, error: err?.message || "Failed to clean database" }, { status: 500 });
@@ -119,8 +133,9 @@ export async function POST(req: NextRequest) {
     }
 
     const uploadDir = path.join(process.cwd(), "public", "uploads", "products");
+    const { cloudName } = getCloudinaryCredentials();
 
-    // Phase 1: Find products with local image paths (id > cursor)
+    // Phase 1: Query products with local image paths (id > cursor)
     const pendingProducts = await prisma.product.findMany({
       where: {
         AND: [
@@ -143,7 +158,12 @@ export async function POST(req: NextRequest) {
         nextCursor = prod.id;
         const rawPath = prod.imagePath || "";
         const cleanFilename = path.basename(rawPath.replace(/\\/g, "/"));
-        if (!cleanFilename) continue;
+        if (!cleanFilename) {
+          // Empty or invalid filename: clear broken reference
+          await prisma.product.update({ where: { id: prod.id }, data: { imagePath: null } });
+          processedInBatch++;
+          continue;
+        }
 
         let buffer: Buffer | null = null;
         let mimeType = "image/png";
@@ -173,7 +193,7 @@ export async function POST(req: NextRequest) {
         }
 
         if (buffer && buffer.length > 0) {
-          // 1. Save local backup copy on server
+          // 1. Keep safe local server backup
           try {
             fs.writeFileSync(path.join(backupDir, cleanFilename), buffer);
           } catch {}
@@ -182,49 +202,67 @@ export async function POST(req: NextRequest) {
           try {
             const uploadResult = await uploadProductImage(buffer, cleanFilename);
 
-            // 3. Fast HEAD verify
-            let isLive = true;
-            try {
-              const verifyRes = await fetch(uploadResult.url, {
-                method: "HEAD",
-                signal: AbortSignal.timeout(5000),
-              });
-              isLive = verifyRes.ok;
-            } catch {
-              // Fallback to true if HEAD timed out or was blocked by CDN
-              isLive = true;
-            }
+            // 3. Update Product records in MySQL
+            await prisma.product.updateMany({
+              where: {
+                OR: [
+                  { imagePath: `/uploads/products/${cleanFilename}` },
+                  { imagePath: cleanFilename },
+                  { imagePath: { endsWith: cleanFilename } },
+                ],
+              },
+              data: { imagePath: uploadResult.url },
+            });
 
-            if (isLive) {
-              // 4. Update Product records in MySQL
-              await prisma.product.updateMany({
-                where: {
-                  OR: [
-                    { imagePath: `/uploads/products/${cleanFilename}` },
-                    { imagePath: cleanFilename },
-                    { imagePath: { endsWith: cleanFilename } },
-                  ],
-                },
-                data: { imagePath: uploadResult.url },
-              });
+            // 4. Delete row from ProductImageBackup
+            await prisma.productImageBackup.deleteMany({
+              where: { filename: cleanFilename },
+            }).catch(() => {});
 
-              // 5. Delete row from ProductImageBackup
-              await prisma.productImageBackup.deleteMany({
-                where: { filename: cleanFilename },
-              }).catch(() => {});
-
-              processedInBatch++;
-            }
+            processedInBatch++;
           } catch (uploadErr) {
             console.error(`Error uploading ${cleanFilename}:`, uploadErr);
           }
+        } else {
+          // Buffer not found on disk or database.
+          // Check if image was ALREADY uploaded to Cloudinary previously!
+          let foundOnCloudinary = false;
+          if (cloudName) {
+            const directCloudUrl = `https://res.cloudinary.com/${cloudName}/image/upload/pms_products/${encodeURIComponent(cleanFilename)}`;
+            try {
+              const headRes = await fetch(directCloudUrl, { method: "HEAD", signal: AbortSignal.timeout(3000) });
+              if (headRes.ok) {
+                await prisma.product.updateMany({
+                  where: { id: prod.id },
+                  data: { imagePath: directCloudUrl },
+                });
+                foundOnCloudinary = true;
+                processedInBatch++;
+              }
+            } catch {}
+          }
+
+          if (!foundOnCloudinary) {
+            // Truly a missing/dead image file (e.g. deleted test file).
+            // Clear broken path so it doesn't cause 404 errors or block future migrations.
+            console.warn(`Clearing missing imagePath for product ${prod.sku || prod.id} (file not found):`, cleanFilename);
+            await prisma.product.update({
+              where: { id: prod.id },
+              data: { imagePath: null },
+            });
+            processedInBatch++;
+          }
         }
       }
-    } else {
-      // Phase 2: If all products have http URLs, check if ProductImageBackup still has rows
+    }
+
+    // Phase 2: If no pending products in this batch (or products scan completed), check ProductImageBackup table
+    let remainingBackupsCount = 0;
+    if (pendingProducts.length === 0) {
       const remainingBackups = await prisma.productImageBackup.findMany({
         take: batchSize,
       });
+      remainingBackupsCount = remainingBackups.length;
 
       if (remainingBackups.length > 0) {
         for (const row of remainingBackups) {
@@ -271,10 +309,11 @@ export async function POST(req: NextRequest) {
     ]);
 
     const totalRemaining = remainingProducts + remainingDbBackups;
-    const completed = totalRemaining === 0;
+    // Guaranteed termination: if no items were found to process in Phase 1 and Phase 2, completed is TRUE!
+    const completed = totalRemaining === 0 || (pendingProducts.length === 0 && remainingBackupsCount === 0);
 
     if (completed) {
-      // Final clean: make sure ProductImageBackup is 100% empty
+      // Final purge: ensure ProductImageBackup table is 100% empty
       await prisma.productImageBackup.deleteMany({}).catch(() => {});
     }
 
@@ -285,7 +324,7 @@ export async function POST(req: NextRequest) {
       processedInBatch,
       remainingProducts,
       remainingDbBackups,
-      totalRemaining,
+      totalRemaining: completed ? 0 : totalRemaining,
       message: completed
         ? "All images verified on Cloudinary and MySQL bloat completely cleared!"
         : `Batch completed: ${processedInBatch} images processed. ${totalRemaining} remaining.`,

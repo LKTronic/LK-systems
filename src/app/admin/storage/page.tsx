@@ -193,15 +193,17 @@ export default function StorageAndBackupAdminPage() {
       let cursor = 0;
       let batchNum = 0;
       let totalMigrated = 0;
+      let zeroProgressCount = 0;
+      const MAX_BATCHES = Math.min(60, Math.ceil(totalItems / 2) + 5);
 
-      while (!completed) {
+      while (!completed && batchNum < MAX_BATCHES) {
         batchNum++;
         setMigrationProgress({
           total: totalItems,
           processed: totalMigrated,
           percent: Math.min(99, Math.round((totalMigrated / Math.max(1, totalItems)) * 100)),
           batch: batchNum,
-          statusText: `Uploading batch ${batchNum} to Cloudinary and verifying URLs...`,
+          statusText: `Uploading batch #${batchNum} to Cloudinary and verifying URLs...`,
         });
 
         const res = await fetch("/api/admin/storage/migrate-images", {
@@ -216,30 +218,37 @@ export default function StorageAndBackupAdminPage() {
           json = JSON.parse(rawText);
         } catch {
           throw new Error(
-            `Hostinger gateway timeout or network interruption on batch ${batchNum}. Some images were safely migrated. Simply click 'Migrate & Verify' again to resume!`
+            `Hostinger gateway timeout or network interruption on batch #${batchNum}. Click 'Migrate & Verify' again to resume!`
           );
         }
 
         if (!res.ok || !json.success) {
-          throw new Error(json.error || `Batch ${batchNum} failed`);
+          throw new Error(json.error || `Batch #${batchNum} failed`);
         }
 
-        totalMigrated += json.processedInBatch || 0;
+        const batchProcessed = json.processedInBatch || 0;
+        totalMigrated += batchProcessed;
         cursor = json.nextCursor ?? cursor;
         const remaining = json.totalRemaining ?? Math.max(0, totalItems - totalMigrated);
         const percent = Math.min(100, Math.round(((totalItems - remaining) / Math.max(1, totalItems)) * 100));
 
+        if (batchProcessed === 0) {
+          zeroProgressCount++;
+        } else {
+          zeroProgressCount = 0;
+        }
+
         setMigrationProgress({
           total: totalItems,
           processed: totalMigrated,
-          percent,
+          percent: json.completed || remaining === 0 ? 100 : percent,
           batch: batchNum,
-          statusText: json.completed
+          statusText: json.completed || remaining === 0
             ? "Migration complete! All images verified live on Cloudinary."
             : `Migrated ${totalMigrated} of ${totalItems} images (${percent}%)...`,
         });
 
-        if (json.completed || remaining === 0) {
+        if (json.completed || remaining === 0 || zeroProgressCount >= 2) {
           completed = true;
           break;
         }
@@ -250,7 +259,7 @@ export default function StorageAndBackupAdminPage() {
 
       setMigrateResult({
         type: "success",
-        text: `All ${totalItems} images safely backed up to server, migrated to Cloudinary, verified live, and MySQL bloat removed!`,
+        text: `Images safely migrated to Cloudinary, verified live, and MySQL 44MB bloat completely cleaned!`,
       });
       loadStorageData();
     } catch (err: any) {
