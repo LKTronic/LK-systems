@@ -93,7 +93,7 @@ export interface ProposalSetData {
   serviceItems: ProposalSetItem[];
   hardwareTotal: string;
   servicesTotal: string;
-  commercialNote?: string;
+  commercialNote: string;
 }
 
 interface ItemRow {
@@ -1914,6 +1914,10 @@ export default function EditRadQuotationPage({
         termsFontSize: Number(termsFontSize) || 22.0,
         commercialNote: commercialNote.trim() || null,
         technicalSpecs: payload.technicalSpecs,
+        systemDesignImages:
+          payload.type === "PROJECT_PROPOSAL"
+            ? proposalSets.flatMap((s) => s.systemDesignImages)
+            : systemDesignImages,
         proposalSets:
           payload.type === "PROJECT_PROPOSAL"
             ? proposalSets.map((s) => ({
