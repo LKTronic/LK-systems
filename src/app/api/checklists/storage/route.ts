@@ -10,6 +10,11 @@ export async function GET() {
     return NextResponse.json({
       success: true,
       isConfigured: usage.configured,
+      diagnostics: {
+        hasCloudName: Boolean(process.env.CLOUDINARY_CLOUD_NAME?.trim()),
+        hasApiKey: Boolean(process.env.CLOUDINARY_API_KEY?.trim()),
+        hasApiSecret: Boolean(process.env.CLOUDINARY_API_SECRET?.trim()),
+      },
       ...usage,
     });
   } catch (err: any) {
