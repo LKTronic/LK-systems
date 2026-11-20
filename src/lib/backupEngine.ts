@@ -93,7 +93,7 @@ export interface BackupMetadata {
   bytes: number;
   formattedSize: string;
   createdAt: string;
-  recordCounts: Record<string, number>;
+  recordCounts?: Record<string, number>;
 }
 
 export function formatBytes(bytes: number): string {
@@ -219,11 +219,12 @@ export async function createEncryptedBackup(
   const publicId = `${folder}/${filename.replace(/\.enc$/, "")}`;
 
   // Upload to Cloudinary as RAW asset
-  const uploadResult = await new Promise<{ url: string; bytes: number }>((resolve, reject) => {
+  const uploadResult = await new Promise<{ url: string; bytes: number; public_id?: string }>((resolve, reject) => {
     const uploadStream = client.uploader.upload_stream(
       {
         resource_type: "raw",
-        public_id: publicId,
+        folder: `pms_backups/${type.toLowerCase()}`,
+        public_id: filename.replace(/\.enc$/, ""),
         tags: ["pms_backup", type.toLowerCase()],
         overwrite: true,
       },
@@ -235,6 +236,7 @@ export async function createEncryptedBackup(
         resolve({
           url: res.secure_url || res.url,
           bytes: res.bytes || encryptedBuffer.length,
+          public_id: res.public_id,
         });
       }
     );
@@ -245,10 +247,12 @@ export async function createEncryptedBackup(
     stream.pipe(uploadStream);
   });
 
+  const finalPublicId = uploadResult.public_id || publicId;
+
   const metadata: BackupMetadata = {
     id: `bk-${timestamp}`,
     filename,
-    publicId,
+    publicId: finalPublicId,
     type,
     url: uploadResult.url,
     bytes: uploadResult.bytes,
@@ -303,17 +307,92 @@ async function recordBackupHistory(newBackup: BackupMetadata) {
 }
 
 /**
- * Gets recorded backup history
+ * Gets recorded backup history merging live Cloudinary files and SystemSetting records
  */
 export async function getBackupHistory(): Promise<BackupMetadata[]> {
+  const localMap = new Map<string, BackupMetadata>();
+
+  // 1. Read from SystemSetting
   try {
     const key = "pms_backup_history";
     const setting = await prisma.systemSetting.findUnique({ where: { key } });
     if (setting?.value) {
-      return JSON.parse(setting.value);
+      const parsed: BackupMetadata[] = JSON.parse(setting.value);
+      for (const b of parsed) {
+        localMap.set(b.publicId || b.id, b);
+      }
     }
   } catch {}
-  return [];
+
+  // 2. Query Cloudinary live API for any raw backup assets
+  if (isCloudinaryConfigured()) {
+    try {
+      const client = getCloudinaryClient();
+      const res = await client.api.resources({
+        resource_type: "raw",
+        prefix: "pms_backups",
+        max_results: 50,
+      });
+
+      const items = res.resources || [];
+      for (const item of items) {
+        const pId = item.public_id;
+        const cleanBase = pId.split("/").pop() || pId;
+        const baseFilename = cleanBase.endsWith(".enc") ? cleanBase : `${cleanBase}.enc`;
+        const isDaily = pId.toLowerCase().includes("daily");
+        const isWeekly = pId.toLowerCase().includes("weekly");
+        const type: "DAILY" | "WEEKLY" | "MANUAL" = isDaily ? "DAILY" : isWeekly ? "WEEKLY" : "MANUAL";
+
+        const existing = localMap.get(pId);
+        localMap.set(pId, {
+          id: existing?.id || pId,
+          filename: existing?.filename || baseFilename,
+          publicId: pId,
+          type: existing?.type || type,
+          url: item.secure_url || item.url || existing?.url || "",
+          bytes: Number(item.bytes) || existing?.bytes || 0,
+          formattedSize: formatBytes(Number(item.bytes) || existing?.bytes || 0),
+          createdAt: item.created_at || existing?.createdAt || new Date().toISOString(),
+          recordCounts: existing?.recordCounts,
+        });
+      }
+
+      // Also check root for any raw backup files that were uploaded without folder
+      const rootRes = await client.api.resources({
+        resource_type: "raw",
+        max_results: 20,
+      });
+      const rootItems = (rootRes.resources || []).filter(
+        (r: any) => r.public_id && (r.public_id.includes("backup") || r.public_id.includes("pms_"))
+      );
+      for (const item of rootItems) {
+        if (!localMap.has(item.public_id)) {
+          const pId = item.public_id;
+          const isDaily = pId.toLowerCase().includes("daily");
+          const isWeekly = pId.toLowerCase().includes("weekly");
+          const type: "DAILY" | "WEEKLY" | "MANUAL" = isDaily ? "DAILY" : isWeekly ? "WEEKLY" : "MANUAL";
+          const cleanBase = pId.split("/").pop() || pId;
+          const baseFilename = cleanBase.endsWith(".enc") ? cleanBase : `${cleanBase}.enc`;
+          localMap.set(pId, {
+            id: pId,
+            filename: baseFilename,
+            publicId: pId,
+            type,
+            url: item.secure_url || item.url,
+            bytes: Number(item.bytes) || 0,
+            formattedSize: formatBytes(Number(item.bytes) || 0),
+            createdAt: item.created_at || new Date().toISOString(),
+          });
+        }
+      }
+    } catch (cloudErr) {
+      console.warn("Could not query Cloudinary for live backups:", cloudErr);
+    }
+  }
+
+  const result = Array.from(localMap.values());
+  result.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  return result;
 }
 
 /**
@@ -370,6 +449,11 @@ export interface DetailedStorageBreakdown {
     usedFormatted: string;
     remainingFormatted: string;
     // Breakdown by folder/category
+    productImages: {
+      count: number;
+      bytes: number;
+      formatted: string;
+    };
     videos: {
       count: number;
       bytes: number;
@@ -402,6 +486,7 @@ export interface DetailedStorageBreakdown {
   automation: {
     lastDailyBackup: string | null;
     lastWeeklyBackup: string | null;
+    lastManualBackup?: string | null;
     encryption: string;
   };
   backupsList: BackupMetadata[];
@@ -465,14 +550,48 @@ export async function getCompleteStorageBreakdown(): Promise<DetailedStorageBrea
         max_results: 500,
       });
       const bList = rawRes.resources || [];
-      backupCount = bList.length;
-      backupBytes = bList.reduce((acc: number, r: any) => acc + (Number(r.bytes) || 0), 0);
+      const seenIds = new Set<string>();
+      for (const r of bList) {
+        seenIds.add(r.public_id);
+        backupCount++;
+        backupBytes += Number(r.bytes) || 0;
+      }
+      // Also check root for earlier backups
+      const rootRes = await client.api.resources({
+        resource_type: "raw",
+        max_results: 50,
+      });
+      for (const r of (rootRes.resources || [])) {
+        if (!seenIds.has(r.public_id) && r.public_id && (r.public_id.includes("backup") || r.public_id.includes("pms_"))) {
+          seenIds.add(r.public_id);
+          backupCount++;
+          backupBytes += Number(r.bytes) || 0;
+        }
+      }
     } catch (e) {
       console.warn("Could not fetch raw resources:", e);
     }
   }
 
-  const otherBytes = Math.max(0, usedBytes - videoBytes - backupBytes);
+  // 4. Cloudinary Product Images breakdown
+  let productImageCount = 0;
+  let productImageBytes = 0;
+  if (client) {
+    try {
+      const imgRes = await client.api.resources({
+        resource_type: "image",
+        prefix: "pms_products",
+        max_results: 500,
+      });
+      const iList = imgRes.resources || [];
+      productImageCount = iList.length;
+      productImageBytes = iList.reduce((acc: number, r: any) => acc + (Number(r.bytes) || 0), 0);
+    } catch (e) {
+      console.warn("Could not fetch product image resources:", e);
+    }
+  }
+
+  const otherBytes = Math.max(0, usedBytes - videoBytes - backupBytes - productImageBytes);
 
   // 4. MySQL database storage details
   let dbTables: any[] = [];
@@ -525,6 +644,18 @@ export async function getCompleteStorageBreakdown(): Promise<DetailedStorageBrea
 
   const history = await getBackupHistory();
 
+  if (!lastDailyBackup) {
+    const latestDaily = history.find((b) => b.type === "DAILY");
+    if (latestDaily) lastDailyBackup = latestDaily.createdAt;
+  }
+  if (!lastWeeklyBackup) {
+    const latestWeekly = history.find((b) => b.type === "WEEKLY");
+    if (latestWeekly) lastWeeklyBackup = latestWeekly.createdAt;
+  }
+  let lastManualBackup: string | null = null;
+  const latestManual = history.find((b) => b.type === "MANUAL");
+  if (latestManual) lastManualBackup = latestManual.createdAt;
+
   return {
     cloudinary: {
       configured: Boolean(client),
@@ -536,6 +667,11 @@ export async function getCompleteStorageBreakdown(): Promise<DetailedStorageBrea
       totalFormatted: formatBytes(totalBytes),
       usedFormatted: formatBytes(usedBytes),
       remainingFormatted: formatBytes(remainingBytes),
+      productImages: {
+        count: productImageCount,
+        bytes: productImageBytes,
+        formatted: formatBytes(productImageBytes),
+      },
       videos: {
         count: videoCount,
         bytes: videoBytes,
@@ -561,6 +697,7 @@ export async function getCompleteStorageBreakdown(): Promise<DetailedStorageBrea
     automation: {
       lastDailyBackup,
       lastWeeklyBackup,
+      lastManualBackup,
       encryption: "AES-256-GCM (Authenticated)",
     },
     backupsList: history,

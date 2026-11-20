@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { productSchema } from "@/lib/validations/product";
 import { fetchOriginalWebProduct } from "@/lib/webStoreAutoSync";
 import { resolveSafeProductImage } from "@/lib/imageResolver";
+import { deleteProductImage } from "@/lib/cloudinary";
 
 // GET /api/products/:id
 export async function GET(
@@ -208,6 +209,16 @@ export async function PUT(
 
       return updated;
     });
+
+    // Clean up old Cloudinary image if it was replaced or removed
+    if (
+      existingProduct.imagePath &&
+      existingProduct.imagePath.includes("res.cloudinary.com") &&
+      data.imagePath !== undefined &&
+      data.imagePath !== existingProduct.imagePath
+    ) {
+      deleteProductImage(existingProduct.imagePath).catch(() => {});
+    }
 
     return NextResponse.json(updatedProduct);
   } catch (error: any) {
@@ -442,6 +453,11 @@ export async function DELETE(
         where: { id },
       });
     });
+
+    // Clean up Cloudinary image if product had one (Zero Junk)
+    if (existingProduct.imagePath && existingProduct.imagePath.includes("res.cloudinary.com")) {
+      deleteProductImage(existingProduct.imagePath).catch(() => {});
+    }
 
     return NextResponse.json({
       message: "Product deleted successfully",

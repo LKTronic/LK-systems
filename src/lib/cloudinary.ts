@@ -217,6 +217,39 @@ export async function uploadQcVideo(
 }
 
 /**
+ * Extracts publicId from a Cloudinary URL (e.g. https://res.cloudinary.com/.../pms_products/prod_123.png -> pms_products/prod_123)
+ */
+export function extractCloudinaryPublicId(url: string): string | null {
+  if (!url || typeof url !== "string" || !url.includes("res.cloudinary.com")) return null;
+  const match = url.match(/\/upload\/(?:v\d+\/)?([^\.]+)/);
+  return match ? decodeURIComponent(match[1]) : null;
+}
+
+/**
+ * Deletes a product image from Cloudinary by its URL or public ID
+ */
+export async function deleteProductImage(urlOrPublicId: string): Promise<boolean> {
+  if (!isCloudinaryConfigured()) return false;
+  if (!urlOrPublicId) return false;
+
+  try {
+    const publicId = urlOrPublicId.includes("res.cloudinary.com")
+      ? extractCloudinaryPublicId(urlOrPublicId)
+      : urlOrPublicId;
+    if (!publicId) return false;
+
+    const client = getCloudinaryClient();
+    const result = await client.uploader.destroy(publicId, {
+      resource_type: "image",
+    });
+    return result?.result === "ok" || result?.result === "not found";
+  } catch (err) {
+    console.error("Failed to delete product image from Cloudinary:", err);
+    return false;
+  }
+}
+
+/**
  * Deletes a QC video from Cloudinary by its public ID
  */
 export async function deleteQcVideo(publicId: string): Promise<boolean> {
