@@ -558,13 +558,14 @@ function CreateRadQuotationContent() {
     setPcbImages((prev) => prev.filter((_, idx) => idx !== indexToRemove));
   };
 
-  // System Design Images Upload for Project Proposal (Slide 3, Max 8 Images)
+  // System Design Images Upload for Project Proposal (Slide 3 Repeater: 8 Images per slide)
   const handleDesignImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files || files.length === 0) return;
-    const remaining = 8 - systemDesignImages.length;
+    const MAX_DESIGN_IMAGES = 32;
+    const remaining = MAX_DESIGN_IMAGES - systemDesignImages.length;
     if (remaining <= 0) {
-      alert("Maximum 8 images allowed for System Design & Architecture.");
+      alert(`Maximum ${MAX_DESIGN_IMAGES} images allowed for System Design & Architecture (8 images per slide).`);
       return;
     }
     const filesToUpload = Array.from(files).slice(0, remaining);
@@ -939,12 +940,13 @@ function CreateRadQuotationContent() {
   // Add Item
   const handleAddItem = (type: "HARDWARE" | "SERVICE" = "HARDWARE") => {
     if (quotationType === "PROJECT_PROPOSAL") {
-      if (type === "HARDWARE" && hardwareItems.length >= 4) {
-        alert("Maximum 4 Hardware Components (BOM) items allowed for Slide 4 presentation.");
+      // Multi-slide repeater supports 4 hardware items and 2 service items per slide
+      if (type === "HARDWARE" && hardwareItems.length >= 32) {
+        alert("Maximum 32 Hardware Components allowed across repeater slides.");
         return;
       }
-      if (type === "SERVICE" && serviceItems.length >= 2) {
-        alert("Maximum 2 Engineering Services items allowed for Slide 4 presentation.");
+      if (type === "SERVICE" && serviceItems.length >= 16) {
+        alert("Maximum 16 Engineering Services allowed across repeater slides.");
         return;
       }
     }
@@ -2336,7 +2338,7 @@ function CreateRadQuotationContent() {
             </div>
           )}
 
-          {/* Slide 3: System Design & Architecture Images (Max 8 Images) */}
+          {/* Slide 3: System Design & Architecture Images (Repeater: 8 Images per slide) */}
           {quotationType === "PROJECT_PROPOSAL" && (
             <div className="bg-slate-900/80 border border-slate-800 rounded-xl p-5 shadow-sm space-y-4">
               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
@@ -2346,16 +2348,16 @@ function CreateRadQuotationContent() {
                     Slide 3: System Design & Architecture Images
                   </h2>
                   <p className="text-xs text-slate-400">
-                    Upload hardware, module, or architecture diagram images (Maximum of 8 images, auto-resized into clean rows on Slide 3)
+                    Upload hardware, module, or architecture diagram images (8 images per slide, auto-repeats Slide 3 for additional images)
                   </p>
                 </div>
                 <span className="text-xs font-mono font-semibold px-2.5 py-1 rounded bg-slate-800 text-teal-300 border border-slate-700 w-fit">
-                  {systemDesignImages.length} / 8 Uploaded
+                  {systemDesignImages.length} Uploaded ({Math.ceil(systemDesignImages.length / 8) || 1} Slide{Math.ceil(systemDesignImages.length / 8) > 1 ? "s" : ""})
                 </span>
               </div>
 
               {/* Upload Drop Zone / Button */}
-              {systemDesignImages.length < 8 && (
+              {systemDesignImages.length < 32 && (
                 <label className="border-2 border-dashed border-slate-700 hover:border-teal-500/70 bg-slate-950/50 hover:bg-slate-950 rounded-xl p-6 flex flex-col items-center justify-center gap-2 cursor-pointer transition-colors">
                   <input
                     type="file"
@@ -2377,7 +2379,7 @@ function CreateRadQuotationContent() {
                         Click or drag images to upload for Slide 3
                       </span>
                       <span className="text-[11px] text-slate-500">
-                        Supports PNG, JPG, WebP. Maximum 8 images total.
+                        Supports PNG, JPG, WebP. 8 images per slide (auto-repeater).
                       </span>
                     </>
                   )}
@@ -2399,7 +2401,7 @@ function CreateRadQuotationContent() {
                         className="max-h-full max-w-full object-contain"
                       />
                       <span className="absolute bottom-1 left-1.5 px-1.5 py-0.5 rounded text-[10px] font-bold bg-slate-900/80 text-teal-300 border border-slate-700">
-                        #{idx + 1}
+                        #{idx + 1} • Slide 3.{Math.floor(idx / 8) + 1}
                       </span>
                       <button
                         type="button"
@@ -2797,38 +2799,23 @@ function CreateRadQuotationContent() {
                     <h2 className="text-sm font-bold text-teal-400 uppercase tracking-wider flex items-center gap-2">
                       <Package className="w-4 h-4 text-teal-400" />
                       1. Hardware Components (BOM)
-                      <span
-                        className={`text-[11px] font-semibold px-2 py-0.5 rounded border ${
-                          hardwareItems.length >= 4
-                            ? "bg-amber-950/70 text-amber-300 border-amber-700/60"
-                            : "bg-teal-950/70 text-teal-300 border-teal-800/60"
-                        }`}
-                      >
-                        {hardwareItems.length}/4 (Max 4)
+                      <span className="text-[11px] font-semibold px-2 py-0.5 rounded border bg-teal-950/70 text-teal-300 border-teal-800/60">
+                        {hardwareItems.length} {hardwareItems.length === 1 ? "item" : "items"} ({Math.ceil(hardwareItems.length / 4) || 1} Slide{Math.ceil(hardwareItems.length / 4) > 1 ? "s" : ""})
                       </span>
                     </h2>
                     <p className="text-xs text-slate-400">
-                      Physical components and modules (Max 4 items on Slide 4).
+                      Physical components and modules (4 items per slide, auto-repeats Slide 4).
                     </p>
                   </div>
 
                   <button
                     type="button"
-                    disabled={hardwareItems.length >= 4}
                     onClick={() => handleAddItem("HARDWARE")}
-                    title={
-                      hardwareItems.length >= 4
-                        ? "Maximum 4 hardware items reached for Slide 4"
-                        : "Add Hardware Component"
-                    }
-                    className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors self-start sm:self-auto ${
-                      hardwareItems.length >= 4
-                        ? "bg-slate-800 text-slate-500 border border-slate-700 cursor-not-allowed opacity-60"
-                        : "bg-teal-950/70 border border-teal-800/80 hover:bg-teal-900/60 text-teal-300"
-                    }`}
+                    title="Add Hardware Component (4 items per slide)"
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors self-start sm:self-auto bg-teal-950/70 border border-teal-800/80 hover:bg-teal-900/60 text-teal-300"
                   >
                     <Plus className="w-3.5 h-3.5" />
-                    + Add Hardware {hardwareItems.length >= 4 ? "(Limit Reached)" : ""}
+                    + Add Hardware
                   </button>
                 </div>
 
@@ -2846,9 +2833,14 @@ function CreateRadQuotationContent() {
                           key={item.id}
                           className="p-3 rounded-lg border bg-slate-950/60 border-slate-800 flex flex-col sm:flex-row items-start sm:items-center gap-3"
                         >
-                          <span className="w-6 h-6 rounded-full bg-slate-800 text-teal-300 text-xs font-bold flex items-center justify-center shrink-0">
-                            {hIdx + 1}
-                          </span>
+                          <div className="flex items-center gap-1.5 shrink-0">
+                            <span className="w-6 h-6 rounded-full bg-slate-800 text-teal-300 text-xs font-bold flex items-center justify-center">
+                              {hIdx + 1}
+                            </span>
+                            <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-teal-950/60 text-teal-400 border border-teal-800/50">
+                              Slide 4.{Math.floor(hIdx / 4) + 1}
+                            </span>
+                          </div>
 
                           {/* Component Description */}
                           <div className="flex-1 w-full">
@@ -2961,38 +2953,23 @@ function CreateRadQuotationContent() {
                     <h2 className="text-sm font-bold text-indigo-400 uppercase tracking-wider flex items-center gap-2">
                       <Wrench className="w-4 h-4 text-indigo-400" />
                       2. Engineering &amp; Professional Services
-                      <span
-                        className={`text-[11px] font-semibold px-2 py-0.5 rounded border ${
-                          serviceItems.length >= 2
-                            ? "bg-amber-950/70 text-amber-300 border-amber-700/60"
-                            : "bg-indigo-950/70 text-indigo-300 border-indigo-800/60"
-                        }`}
-                      >
-                        {serviceItems.length}/2 (Max 2)
+                      <span className="text-[11px] font-semibold px-2 py-0.5 rounded border bg-indigo-950/70 text-indigo-300 border-indigo-800/60">
+                        {serviceItems.length} {serviceItems.length === 1 ? "item" : "items"} ({Math.ceil(serviceItems.length / 2) || 1} Slide{Math.ceil(serviceItems.length / 2) > 1 ? "s" : ""})
                       </span>
                     </h2>
                     <p className="text-xs text-slate-400">
-                      Engineering charges, installation, programming, testing &amp; calibration services (Max 2 services on Slide 4).
+                      Engineering charges, installation, programming, testing &amp; calibration services (2 services per slide, auto-repeats Slide 4).
                     </p>
                   </div>
 
                   <button
                     type="button"
-                    disabled={serviceItems.length >= 2}
                     onClick={() => handleAddItem("SERVICE")}
-                    title={
-                      serviceItems.length >= 2
-                        ? "Maximum 2 services reached for Slide 4"
-                        : "Add Engineering Service"
-                    }
-                    className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors self-start sm:self-auto ${
-                      serviceItems.length >= 2
-                        ? "bg-slate-800 text-slate-500 border border-slate-700 cursor-not-allowed opacity-60"
-                        : "bg-indigo-950/70 border border-indigo-800/80 hover:bg-indigo-900/60 text-indigo-300"
-                    }`}
+                    title="Add Engineering Service (2 services per slide)"
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors self-start sm:self-auto bg-indigo-950/70 border border-indigo-800/80 hover:bg-indigo-900/60 text-indigo-300"
                   >
                     <Plus className="w-3.5 h-3.5" />
-                    + Add Service {serviceItems.length >= 2 ? "(Limit Reached)" : ""}
+                    + Add Service
                   </button>
                 </div>
 
@@ -3010,9 +2987,14 @@ function CreateRadQuotationContent() {
                           key={item.id}
                           className="p-3 rounded-lg border bg-indigo-950/20 border-indigo-900/50 flex flex-col sm:flex-row items-start sm:items-center gap-3"
                         >
-                          <span className="w-6 h-6 rounded-full bg-slate-800 text-indigo-300 text-xs font-bold flex items-center justify-center shrink-0">
-                            {sIdx + 1}
-                          </span>
+                          <div className="flex items-center gap-1.5 shrink-0">
+                            <span className="w-6 h-6 rounded-full bg-slate-800 text-indigo-300 text-xs font-bold flex items-center justify-center">
+                              {sIdx + 1}
+                            </span>
+                            <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-indigo-950/60 text-indigo-400 border border-indigo-800/50">
+                              Slide 4.{Math.floor(sIdx / 2) + 1}
+                            </span>
+                          </div>
 
                           {/* Service Scope Description */}
                           <div className="flex-1 w-full">
@@ -3980,6 +3962,12 @@ function CreateRadQuotationContent() {
                     <span>Services Subtotal:</span>
                     <span className="font-mono text-slate-200 font-semibold">
                       {formatLKR(servicesTotal)}
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-center text-slate-400 text-[11px] pt-1 border-t border-slate-800/50">
+                    <span>Generated Slides (Design / BOM):</span>
+                    <span className="font-mono text-teal-400 font-semibold">
+                      {Math.ceil(systemDesignImages.length / 8) || 1} Design / {Math.max(Math.ceil(hardwareItems.length / 4), Math.ceil(serviceItems.length / 2), 1)} BOM Slide(s)
                     </span>
                   </div>
                   <div className="border-t border-slate-800 pt-2 flex justify-between items-center">

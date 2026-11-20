@@ -13,6 +13,7 @@ import {
   DEFAULT_GENERAL_TERMS_BULLETS,
   cleanProductDescription,
 } from "../src/lib/quotationPdfGenerator";
+import { generateRdQuotationPdf } from "../src/lib/rdQuotationPdfGenerator";
 import { getNextQuotationNo } from "../src/lib/quotationNo";
 import { getNextRdQuotationNo } from "../src/lib/rdQuotationNo";
 import {
@@ -1244,5 +1245,135 @@ describe("Unit Tests: Supply Excel Supplier Image Handling", () => {
     assert.equal(formatBytes(1024), "1.0 KB");
     assert.equal(formatBytes(5 * 1024 * 1024), "5.0 MB");
     assert.equal(formatBytes(25 * 1024 * 1024 * 1024), "25.00 GB");
+  });
+
+  it("generates single-page Slide 3 and Slide 4 when within standard caps (<=8 images, <=4 HW, <=2 SRV)", async () => {
+    const baseProposalData: any = {
+      type: "PROJECT_PROPOSAL",
+      quotationNo: "20261120PQV1",
+      preparedDate: "2026-11-20",
+      expireDate: "2026-12-20",
+      paymentMethod: "Bank Transfer",
+      preparedBy: "Eng. Kasun",
+      quotationTo: "ABC Tech (Pvt) Ltd",
+      projectTitle: "Smart Factory IoT System",
+      leadTime: "10 Working Days",
+      warranty: "1 Year",
+      hardwareTotal: 150000,
+      servicesTotal: 50000,
+      totalAmount: 200000,
+      systemDesignImages: ["data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=="],
+      items: [
+        { productOrService: "ESP32 Gateway", quantity: 2, unitPrice: 25000, totalPrice: 50000, itemType: "HARDWARE" },
+        { productOrService: "RS485 Sensor", quantity: 4, unitPrice: 25000, totalPrice: 100000, itemType: "HARDWARE" },
+        { productOrService: "Firmware Development", quantity: 1, unitPrice: 50000, totalPrice: 50000, itemType: "SERVICE" },
+      ],
+    };
+
+    const doc = await generateRdQuotationPdf(baseProposalData);
+    // Standard proposal has 8 pages (Cover, Scope, Design, BOM, Bank, Terms, Clients, Partners)
+    assert.equal(doc.getNumberOfPages(), 8);
+  });
+
+  it("automatically generates multiple repeater Slide 3s when images exceed 8", async () => {
+    const dummyImg = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==";
+    const multiImageProposal: any = {
+      type: "PROJECT_PROPOSAL",
+      quotationNo: "20261120PQV2",
+      preparedDate: "2026-11-20",
+      expireDate: "2026-12-20",
+      paymentMethod: "Bank Transfer",
+      preparedBy: "Eng. Kasun",
+      quotationTo: "ABC Tech (Pvt) Ltd",
+      projectTitle: "Smart Factory IoT System",
+      leadTime: "10 Working Days",
+      warranty: "1 Year",
+      totalAmount: 200000,
+      // 10 images -> 2 Design slides (8 on first, 2 on second)
+      systemDesignImages: Array(10).fill(dummyImg),
+      items: [
+        { productOrService: "ESP32 Gateway", quantity: 2, unitPrice: 25000, totalPrice: 50000, itemType: "HARDWARE" },
+        { productOrService: "Firmware Development", quantity: 1, unitPrice: 50000, totalPrice: 50000, itemType: "SERVICE" },
+      ],
+    };
+
+    const doc = await generateRdQuotationPdf(multiImageProposal);
+    // 8 base + 1 additional design slide = 9 pages
+    assert.equal(doc.getNumberOfPages(), 9);
+  });
+
+  it("automatically generates multiple repeater Slide 4s when hardware > 4 or services > 2", async () => {
+    const multiItemProposal: any = {
+      type: "PROJECT_PROPOSAL",
+      quotationNo: "20261120PQV3",
+      preparedDate: "2026-11-20",
+      expireDate: "2026-12-20",
+      paymentMethod: "Bank Transfer",
+      preparedBy: "Eng. Kasun",
+      quotationTo: "ABC Tech (Pvt) Ltd",
+      projectTitle: "Smart Factory IoT System",
+      leadTime: "10 Working Days",
+      warranty: "1 Year",
+      totalAmount: 350000,
+      systemDesignImages: ["data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=="],
+      // 6 hardware items (4 on slide 4.1, 2 on slide 4.2) + 3 service items (2 on slide 4.1, 1 on slide 4.2)
+      items: [
+        { productOrService: "ESP32 Gateway", quantity: 1, unitPrice: 20000, totalPrice: 20000, itemType: "HARDWARE" },
+        { productOrService: "RS485 Sensor A", quantity: 1, unitPrice: 15000, totalPrice: 15000, itemType: "HARDWARE" },
+        { productOrService: "RS485 Sensor B", quantity: 1, unitPrice: 15000, totalPrice: 15000, itemType: "HARDWARE" },
+        { productOrService: "Industrial 24V PSU", quantity: 1, unitPrice: 10000, totalPrice: 10000, itemType: "HARDWARE" },
+        { productOrService: "Relay Module 8CH", quantity: 1, unitPrice: 8000, totalPrice: 8000, itemType: "HARDWARE" },
+        { productOrService: "IP65 Enclosure", quantity: 1, unitPrice: 12000, totalPrice: 12000, itemType: "HARDWARE" },
+        { productOrService: "Firmware Development", quantity: 1, unitPrice: 120000, totalPrice: 120000, itemType: "SERVICE" },
+        { productOrService: "IoT Cloud Dashboard", quantity: 1, unitPrice: 100000, totalPrice: 100000, itemType: "SERVICE" },
+        { productOrService: "On-site Calibration & Testing", quantity: 1, unitPrice: 50000, totalPrice: 50000, itemType: "SERVICE" },
+      ],
+    };
+
+    const doc = await generateRdQuotationPdf(multiItemProposal);
+    // 8 base + 1 additional BOM slide = 9 pages
+    assert.equal(doc.getNumberOfPages(), 9);
+
+    // Verify intermediate BOM slide (page 4) contains Section Sub-Total, and final BOM slide (page 5) contains Total Project Investment
+    const page4Stream = (doc as any).internal.pages[4].join("\n");
+    const page5Stream = (doc as any).internal.pages[5].join("\n");
+
+    assert.ok(page4Stream.includes("SECTION INVESTMENT SUB-TOTAL") || page4Stream.includes("COMMERCIAL SCHEDULE - SLIDE 1 OF 2"));
+    assert.ok(page5Stream.includes("TOTAL PROJECT INVESTMENT"));
+    assert.ok(page4Stream.includes("PART 1"));
+    assert.ok(page5Stream.includes("PART 2"));
+  });
+
+  it("supports explicit designSlides and bomSlides repeater configuration", async () => {
+    const explicitProposal: any = {
+      type: "PROJECT_PROPOSAL",
+      quotationNo: "20261120PQV4",
+      preparedDate: "2026-11-20",
+      expireDate: "2026-12-20",
+      paymentMethod: "Bank Transfer",
+      preparedBy: "Eng. Kasun",
+      quotationTo: "ABC Tech (Pvt) Ltd",
+      totalAmount: 500000,
+      designSlides: [
+        { title: "Gateway Architecture", images: ["data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=="] },
+        { title: "Sensor Node Schematics", images: ["data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=="] },
+        { title: "Cloud Integration", images: ["data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=="] },
+      ],
+      bomSlides: [
+        {
+          hardwareItems: [{ productOrService: "HW Part 1", quantity: 1, unitPrice: 100000, totalPrice: 100000, itemType: "HARDWARE" }],
+          serviceItems: [{ productOrService: "Service Part 1", quantity: 1, unitPrice: 150000, totalPrice: 150000, itemType: "SERVICE" }],
+        },
+        {
+          hardwareItems: [{ productOrService: "HW Part 2", quantity: 1, unitPrice: 100000, totalPrice: 100000, itemType: "HARDWARE" }],
+          serviceItems: [{ productOrService: "Service Part 2", quantity: 1, unitPrice: 150000, totalPrice: 150000, itemType: "SERVICE" }],
+        },
+      ],
+      items: [],
+    };
+
+    const doc = await generateRdQuotationPdf(explicitProposal);
+    // 3 design slides + 2 BOM slides + Cover + Intro + Bank + Terms + Clients + Partners = 11 pages
+    assert.equal(doc.getNumberOfPages(), 11);
   });
 });

@@ -29,6 +29,22 @@ export interface RdQuotationPdfItem {
   image?: string | null;
 }
 
+export interface RdQuotationDesignSlide {
+  title?: string;
+  images: string[];
+}
+
+export interface RdQuotationBomSlide {
+  title?: string;
+  hardwareItems?: RdQuotationPdfItem[];
+  serviceItems?: RdQuotationPdfItem[];
+  hardwareTotal?: number;
+  servicesTotal?: number;
+  leadTime?: string;
+  warranty?: string;
+  commercialNote?: string;
+}
+
 export interface RdQuotationPdfData {
   type: RdQuotationType;
   quotationNo: string;
@@ -52,6 +68,8 @@ export interface RdQuotationPdfData {
   commercialNote?: string | null;
   technicalSpecs?: Record<string, any> | string | null;
   systemDesignImages?: string[] | null;
+  designSlides?: RdQuotationDesignSlide[] | null;
+  bomSlides?: RdQuotationBomSlide[] | null;
   termsAndConditions?: string | null;
   items: RdQuotationPdfItem[];
   bankDetails?: {
@@ -1260,23 +1278,11 @@ async function generateProjectProposalPdf(
   renderFormattedSlide2(introText, 58.0);
 
   // ==========================================
-  // SLIDE 3: SYSTEM DESIGN & ARCHITECTURE (UP TO 8 IMAGES)
+  // SLIDE 3: SYSTEM DESIGN & ARCHITECTURE (REPEATER: UP TO 8 IMAGES PER SLIDE)
   // ==========================================
-  doc.addPage([SLIDE_W, SLIDE_H], "landscape");
-  if (bgs.bgDesign) {
-    try {
-      doc.addImage(bgs.bgDesign, "PNG", 0, 0, SLIDE_W, SLIDE_H, undefined, "FAST");
-    } catch (err) {
-      console.warn("Failed to render bgDesign:", err);
-    }
-  }
-
-  // Resolve images: user-uploaded images or PPTX sample images
-  let resolvedImages: string[] = [];
-  if (Array.isArray(data.systemDesignImages) && data.systemDesignImages.length > 0) {
-    resolvedImages = data.systemDesignImages;
-  } else if (data.technicalSpecs) {
-    let specsObj: any = null;
+  // Parse technical specs if string or object
+  let specsObj: any = null;
+  if (data.technicalSpecs) {
     if (typeof data.technicalSpecs === "string") {
       try {
         specsObj = JSON.parse(data.technicalSpecs);
@@ -1284,431 +1290,589 @@ async function generateProjectProposalPdf(
     } else if (typeof data.technicalSpecs === "object") {
       specsObj = data.technicalSpecs;
     }
-    if (specsObj && Array.isArray(specsObj.systemDesignImages) && specsObj.systemDesignImages.length > 0) {
+  }
+
+  let designSlidesToRender: Array<{ title?: string; images: string[] }> = [];
+  if (Array.isArray(data.designSlides) && data.designSlides.length > 0) {
+    designSlidesToRender = data.designSlides;
+  } else if (specsObj && Array.isArray(specsObj.designSlides) && specsObj.designSlides.length > 0) {
+    designSlidesToRender = specsObj.designSlides;
+  } else {
+    // Resolve flat list of images and chunk into 8 per slide
+    let resolvedImages: string[] = [];
+    if (Array.isArray(data.systemDesignImages) && data.systemDesignImages.length > 0) {
+      resolvedImages = data.systemDesignImages;
+    } else if (specsObj && Array.isArray(specsObj.systemDesignImages) && specsObj.systemDesignImages.length > 0) {
       resolvedImages = specsObj.systemDesignImages;
+    }
+
+    if (resolvedImages.length === 0) {
+      const samplePaths = [
+        "/template_assets/pptx_slides/image5.png",
+        "/template_assets/pptx_slides/image6.png",
+        "/template_assets/pptx_slides/image7.png",
+        "/template_assets/pptx_slides/image8.png",
+        "/template_assets/pptx_slides/image9.png",
+        "/template_assets/pptx_slides/image10.png",
+        "/template_assets/pptx_slides/image11.png",
+        "/template_assets/pptx_slides/image12.png",
+      ];
+      const loadedSamples = await Promise.all(samplePaths.map((p) => loadImageAsBase64(p)));
+      resolvedImages = loadedSamples.filter(Boolean) as string[];
+    }
+
+    // Chunk into sets of up to 8 images per slide
+    if (resolvedImages.length === 0) {
+      designSlidesToRender = [{ images: [] }];
+    } else {
+      for (let i = 0; i < resolvedImages.length; i += 8) {
+        designSlidesToRender.push({ images: resolvedImages.slice(i, i + 8) });
+      }
     }
   }
 
-  // If no user images provided, load the PPTX 8 component images as sample
-  if (resolvedImages.length === 0) {
-    const samplePaths = [
-      "/template_assets/pptx_slides/image5.png",
-      "/template_assets/pptx_slides/image6.png",
-      "/template_assets/pptx_slides/image7.png",
-      "/template_assets/pptx_slides/image8.png",
-      "/template_assets/pptx_slides/image9.png",
-      "/template_assets/pptx_slides/image10.png",
-      "/template_assets/pptx_slides/image11.png",
-      "/template_assets/pptx_slides/image12.png",
-    ];
-    const loadedSamples = await Promise.all(samplePaths.map((p) => loadImageAsBase64(p)));
-    resolvedImages = loadedSamples.filter(Boolean) as string[];
-  }
+  for (let dIdx = 0; dIdx < designSlidesToRender.length; dIdx++) {
+    const slide = designSlidesToRender[dIdx];
+    const imagesToRender = (slide.images || []).slice(0, 8);
+    const totalImgCount = imagesToRender.length;
 
-  const imagesToRender = resolvedImages.slice(0, 8);
-  const totalImgCount = imagesToRender.length;
+    doc.addPage([SLIDE_W, SLIDE_H], "landscape");
+    if (bgs.bgDesign) {
+      try {
+        doc.addImage(bgs.bgDesign, "PNG", 0, 0, SLIDE_W, SLIDE_H, undefined, "FAST");
+      } catch (err) {
+        console.warn("Failed to render bgDesign:", err);
+      }
+    }
 
-  if (totalImgCount > 0) {
-    for (let i = 0; i < totalImgCount; i++) {
-      const { x, y, cardW, cardH } = getDesignImageLayout(totalImgCount, i);
+    // If multiple design slides exist, render part indicator badge
+    if (designSlidesToRender.length > 1) {
+      doc.setFillColor(LK_TEAL[0], LK_TEAL[1], LK_TEAL[2]);
+      doc.roundedRect(386.0, 18.0, 88.0, 10.0, 2.0, 2.0, "F");
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(11.0);
+      doc.setTextColor(255, 255, 255);
+      doc.text(`PART ${dIdx + 1} OF ${designSlidesToRender.length}`, 430.0, 24.8, { align: "center" });
+    }
 
-      // Draw sleek, modern engineering card frame with soft subtle border
-      doc.setFillColor(255, 255, 255);
-      doc.setDrawColor(226, 232, 240); // Slate-200 subtle modern card outline
-      doc.setLineWidth(0.3);
-      doc.roundedRect(x, y, cardW, cardH, 4.0, 4.0, "FD");
+    if (totalImgCount > 0) {
+      for (let i = 0; i < totalImgCount; i++) {
+        const { x, y, cardW, cardH } = getDesignImageLayout(totalImgCount, i);
 
-      const imgData = imagesToRender[i];
-      if (imgData) {
-        try {
-          const imgBase64 = imgData.startsWith("data:")
-            ? imgData
-            : await loadImageAsBase64(imgData);
-          if (imgBase64) {
-            const pad = totalImgCount <= 2 ? 8.0 : 6.0;
-            const maxW = cardW - pad * 2;
-            const maxH = cardH - pad * 2;
-            let drawW = maxW;
-            let drawH = maxH;
-            let drawX = x + pad;
-            let drawY = y + pad;
+        // Draw sleek, modern engineering card frame with soft subtle border
+        doc.setFillColor(255, 255, 255);
+        doc.setDrawColor(226, 232, 240); // Slate-200 subtle modern card outline
+        doc.setLineWidth(0.3);
+        doc.roundedRect(x, y, cardW, cardH, 4.0, 4.0, "FD");
 
-            try {
-              const props = doc.getImageProperties(imgBase64);
-              if (props && props.width > 0 && props.height > 0) {
-                const imgAspect = props.width / props.height;
-                const boxAspect = maxW / maxH;
-                if (imgAspect > boxAspect) {
-                  drawW = maxW;
-                  drawH = maxW / imgAspect;
-                } else {
-                  drawH = maxH;
-                  drawW = maxH * imgAspect;
+        const imgData = imagesToRender[i];
+        if (imgData) {
+          try {
+            const imgBase64 = imgData.startsWith("data:")
+              ? imgData
+              : await loadImageAsBase64(imgData);
+            if (imgBase64) {
+              const pad = totalImgCount <= 2 ? 8.0 : 6.0;
+              const maxW = cardW - pad * 2;
+              const maxH = cardH - pad * 2;
+              let drawW = maxW;
+              let drawH = maxH;
+              let drawX = x + pad;
+              let drawY = y + pad;
+
+              try {
+                const props = doc.getImageProperties(imgBase64);
+                if (props && props.width > 0 && props.height > 0) {
+                  const imgAspect = props.width / props.height;
+                  const boxAspect = maxW / maxH;
+                  if (imgAspect > boxAspect) {
+                    drawW = maxW;
+                    drawH = maxW / imgAspect;
+                  } else {
+                    drawH = maxH;
+                    drawW = maxH * imgAspect;
+                  }
+                  drawX = x + pad + (maxW - drawW) / 2;
+                  drawY = y + pad + (maxH - drawH) / 2;
                 }
-                drawX = x + pad + (maxW - drawW) / 2;
-                drawY = y + pad + (maxH - drawH) / 2;
+              } catch {
+                // fallback to max dimensions
               }
-            } catch {
-              // fallback to max dimensions
-            }
 
-            doc.addImage(
-              imgBase64,
-              "PNG",
-              drawX,
-              drawY,
-              drawW,
-              drawH,
-              undefined,
-              "FAST"
-            );
+              doc.addImage(
+                imgBase64,
+                "PNG",
+                drawX,
+                drawY,
+                drawW,
+                drawH,
+                undefined,
+                "FAST"
+              );
+            }
+          } catch (imgErr) {
+            console.warn(`Failed to render design image ${i + 1}:`, imgErr);
           }
-        } catch (imgErr) {
-          console.warn(`Failed to render design image ${i + 1}:`, imgErr);
         }
       }
     }
   }
 
   // ==========================================
-  // SLIDE 4: PRICE AND SYSTEM DESIGN (SPECIFICATIONS & PRICING)
+  // SLIDE 4: PRICE AND SYSTEM DESIGN (SPECIFICATIONS & PRICING - REPEATER: UP TO 4 HW + 2 SRV PER SLIDE)
   // ==========================================
-  doc.addPage([SLIDE_W, SLIDE_H], "landscape");
-  if (bgs.bgPricing) {
-    try {
-      doc.addImage(bgs.bgPricing, "PNG", 0, 0, SLIDE_W, SLIDE_H, undefined, "FAST");
-    } catch (err) {
-      console.warn("Failed to render bgPricing:", err);
-    }
-  }
-
-  const hwItems = data.items.filter((it) => it.itemType !== "SERVICE").slice(0, 4);
-  const srvItems = data.items.filter((it) => it.itemType === "SERVICE").slice(0, 2);
-
   const formatLkr = (num: number) =>
     `LKR ${num.toLocaleString("en-US", {
       minimumFractionDigits: 2,
       maximumFractionDigits: 2,
     })}`;
 
-  const hwTotal =
+  const allHwItems = data.items.filter((it) => it.itemType !== "SERVICE");
+  const allSrvItems = data.items.filter((it) => it.itemType === "SERVICE");
+
+  let bomSlidesToRender: Array<{
+    title?: string;
+    hardwareItems: RdQuotationPdfItem[];
+    serviceItems: RdQuotationPdfItem[];
+    hardwareTotal?: number;
+    servicesTotal?: number;
+    leadTime?: string;
+    warranty?: string;
+    commercialNote?: string;
+  }> = [];
+
+  if (Array.isArray(data.bomSlides) && data.bomSlides.length > 0) {
+    bomSlidesToRender = data.bomSlides.map((s) => ({
+      ...s,
+      hardwareItems: s.hardwareItems || [],
+      serviceItems: s.serviceItems || [],
+    }));
+  } else if (specsObj && Array.isArray(specsObj.bomSlides) && specsObj.bomSlides.length > 0) {
+    bomSlidesToRender = specsObj.bomSlides.map((s: any) => ({
+      ...s,
+      hardwareItems: s.hardwareItems || [],
+      serviceItems: s.serviceItems || [],
+    }));
+  } else {
+    // Automatic chunking: up to 4 HW items and up to 2 services per slide
+    const totalBomPages = Math.max(
+      Math.ceil(allHwItems.length / 4),
+      Math.ceil(allSrvItems.length / 2),
+      1
+    );
+
+    for (let i = 0; i < totalBomPages; i++) {
+      bomSlidesToRender.push({
+        hardwareItems: allHwItems.slice(i * 4, (i + 1) * 4),
+        serviceItems: allSrvItems.slice(i * 2, (i + 1) * 2),
+      });
+    }
+  }
+
+  // Calculate overall grand total
+  const calcAllHwTotal = allHwItems.reduce(
+    (s, it) => s + Number(it.totalPrice || it.quantity * it.unitPrice || 0),
+    0
+  );
+  const calcAllSrvTotal = allSrvItems.reduce(
+    (s, it) => s + Number(it.totalPrice || it.quantity * it.unitPrice || 0),
+    0
+  );
+
+  const overallHwTotal =
     data.hardwareTotal != null && Number(data.hardwareTotal) > 0
       ? Number(data.hardwareTotal)
-      : hwItems.reduce((s, it) => s + Number(it.totalPrice || it.quantity * it.unitPrice || 0), 0);
+      : calcAllHwTotal;
 
-  const srvTotal =
+  const overallSrvTotal =
     data.servicesTotal != null && Number(data.servicesTotal) > 0
       ? Number(data.servicesTotal)
-      : srvItems.reduce((s, it) => s + Number(it.totalPrice || it.quantity * it.unitPrice || 0), 0);
+      : calcAllSrvTotal;
 
   const grandTotal =
     Number(data.totalAmount) > 0
       ? Number(data.totalAmount)
-      : hwTotal + srvTotal;
+      : overallHwTotal + overallSrvTotal;
 
-  // --- 1. HARDWARE SECTION (Left Side - Max 4 items) ---
-  // Header Badge (Prominent bold heading)
-  doc.setFillColor(LK_TEAL[0], LK_TEAL[1], LK_TEAL[2]);
-  doc.roundedRect(36.0, 34.0, 142.0, 12.0, 2.0, 2.0, "F");
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(16.0);
-  doc.setTextColor(255, 255, 255);
-  doc.text("1. HARDWARE COMPONENTS (BOM)", 41.0, 42.2);
-
-  // Hardware items (Non-bold normal text, increased 18pt font)
-  let hwY = hwItems.length <= 2 ? 59.0 : hwItems.length === 3 ? 56.0 : 53.5;
-  const hwStep = hwItems.length <= 2 ? 16.0 : hwItems.length === 3 ? 13.5 : 11.5;
-  hwItems.forEach((it) => {
-    const name = it.productOrService;
-    const qtyStr = `x ${it.quantity}`;
-
-    // Bullet in Black (Normal weight, 18.5pt)
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(18.5);
-    doc.setTextColor(0, 0, 0);
-    doc.text("•", 38.0, hwY);
-
-    // Quantity right-aligned in Black (Normal weight, 18.0pt)
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(18.0);
-    doc.setTextColor(0, 0, 0);
-    doc.text(qtyStr, 246.0, hwY, { align: "right" });
-
-    // Item name in Black (Normal font weight, 18.0pt)
-    const qtyW = doc.getTextWidth(qtyStr);
-    const maxNameW = (246.0 - qtyW - 5.0) - 44.0;
-    doc.setTextColor(0, 0, 0);
-    let nameFontSize = 18.0;
-    doc.setFontSize(nameFontSize);
-
-    if (doc.getTextWidth(name) > maxNameW) {
-      doc.setFontSize(16.0);
-      if (doc.getTextWidth(name) > maxNameW) {
-        doc.setFontSize(14.5);
-      }
-      nameFontSize = doc.getFontSize();
-    }
-
-    const lines = doc.splitTextToSize(name, maxNameW);
-    if (lines.length > 1) {
-      doc.setFontSize(nameFontSize * 0.90);
-      doc.text(lines[0], 44.0, hwY - 2.0);
-      doc.text(lines[1], 44.0, hwY + 3.5);
-      hwY += hwStep + 2.5;
-    } else {
-      doc.text(lines[0], 44.0, hwY);
-      hwY += hwStep;
-    }
-  });
-
-  // Hardware Subtotal Pill (Prominent price larger than item descriptions)
-  const hwPillY = 100.5;
-  doc.setFillColor(241, 245, 249);
-  doc.setDrawColor(218, 226, 237);
-  doc.setLineWidth(0.4);
-  doc.roundedRect(36.0, hwPillY, 98.0, 13.5, 2.5, 2.5, "FD");
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(13.0);
-  doc.setTextColor(0, 0, 0);
-  doc.text("COMPONENT RELATED COST", 40.0, hwPillY + 8.8);
-
-  doc.setFillColor(LK_TEAL[0], LK_TEAL[1], LK_TEAL[2]);
-  doc.roundedRect(136.0, hwPillY, 112.0, 13.5, 2.5, 2.5, "F");
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(22.0);
-  doc.setTextColor(255, 255, 255);
-  doc.text(formatLkr(hwTotal), 192.0, hwPillY + 9.5, { align: "center" });
-
-  // --- 2. SERVICES SECTION (Left Side - Max 2 items) ---
-  const srvHeaderY = 121.5;
-  doc.setFillColor(LK_TEAL[0], LK_TEAL[1], LK_TEAL[2]);
-  doc.roundedRect(36.0, srvHeaderY, 128.0, 12.0, 2.0, 2.0, "F");
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(16.0);
-  doc.setTextColor(255, 255, 255);
-  doc.text("2. ENGINEERING SERVICES", 41.0, srvHeaderY + 8.2);
-
-  let srvY = 143.5;
-  const servicesToShow = srvItems.length > 0 ? srvItems : [
-    { productOrService: "Testing / Engineering Charges", quantity: 1, unitPrice: 0, totalPrice: 0 },
-    { productOrService: "IOT Installation and Programing", quantity: 1, unitPrice: 0, totalPrice: 0 },
-  ];
-  servicesToShow.forEach((srv, sIdx) => {
-    const name = srv.productOrService;
-    const curSrvY = srvY + sIdx * 16.0;
-
-    // Bullet in Black (Normal weight, 18.5pt)
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(18.5);
-    doc.setTextColor(0, 0, 0);
-    doc.text("•", 38.0, curSrvY);
-
-    // Service name in Black (Normal font weight, 18.0pt)
-    doc.setFontSize(18.0);
-    doc.setTextColor(0, 0, 0);
-    const maxSrvW = 202.0;
-    const lines = doc.splitTextToSize(name, maxSrvW);
-    if (lines.length > 1) {
-      doc.text(lines[0], 44.0, curSrvY - 2.0);
-      doc.setFontSize(15.0);
-      doc.text(lines[1], 44.0, curSrvY + 4.0);
-    } else {
-      doc.text(lines[0], 44.0, curSrvY);
-    }
-  });
-
-  // Services Subtotal Pill (Prominent price larger than item descriptions)
-  const srvPillY = 175.0;
-  doc.setFillColor(241, 245, 249);
-  doc.setDrawColor(218, 226, 237);
-  doc.setLineWidth(0.4);
-  doc.roundedRect(36.0, srvPillY, 98.0, 13.5, 2.5, 2.5, "FD");
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(13.0);
-  doc.setTextColor(0, 0, 0);
-  doc.text("SERVICES RELATED COST", 40.0, srvPillY + 8.8);
-
-  doc.setFillColor(LK_TEAL[0], LK_TEAL[1], LK_TEAL[2]);
-  doc.roundedRect(136.0, srvPillY, 112.0, 13.5, 2.5, 2.5, "F");
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(22.0);
-  doc.setTextColor(255, 255, 255);
-  doc.text(formatLkr(srvTotal), 192.0, srvPillY + 9.5, { align: "center" });
-
-  // --- 3. RIGHT SIDE CARDS (Lead Time, Warranty, Optional Commercial Note) ---
-  // Lead Time Card
-  doc.setFillColor(255, 255, 255);
-  doc.setDrawColor(218, 226, 237);
-  doc.setLineWidth(0.4);
-  doc.roundedRect(266.0, 34.0, 100.0, 54.0, 3.5, 3.5, "FD");
-  doc.setFillColor(248, 250, 252);
-  doc.roundedRect(266.0, 34.0, 100.0, 12.5, 3.5, 3.5, "F");
-  doc.rect(266.0, 42.5, 100.0, 4.0, "F");
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(10.5);
-  doc.setTextColor(LK_MUTED[0], LK_MUTED[1], LK_MUTED[2]);
-  doc.text("PROJECT ESTIMATED LEAD TIME", 316.0, 42.5, { align: "center" });
-  doc.setDrawColor(218, 226, 237);
-  doc.line(266.0, 46.5, 366.0, 46.5);
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(23.0);
-  doc.setTextColor(LK_SLATE[0], LK_SLATE[1], LK_SLATE[2]);
-  doc.text(data.leadTime || "10 Working Days", 316.0, 66.0, { align: "center" });
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(8.5);
-  doc.setTextColor(LK_MUTED[0], LK_MUTED[1], LK_MUTED[2]);
-  doc.text("Commences upon purchase order & advance confirmation", 316.0, 78.0, { align: "center" });
-
-  // Warranty Card
-  doc.setFillColor(255, 255, 255);
-  doc.setDrawColor(218, 226, 237);
-  doc.roundedRect(374.0, 34.0, 100.0, 54.0, 3.5, 3.5, "FD");
-  doc.setFillColor(248, 250, 252);
-  doc.roundedRect(374.0, 34.0, 100.0, 12.5, 3.5, 3.5, "F");
-  doc.rect(374.0, 42.5, 100.0, 4.0, "F");
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(10.5);
-  doc.setTextColor(LK_MUTED[0], LK_MUTED[1], LK_MUTED[2]);
-  doc.text("WARRANTY", 424.0, 42.5, { align: "center" });
-  doc.setDrawColor(218, 226, 237);
-  doc.line(374.0, 46.5, 474.0, 46.5);
-
-  const badgeImg = bgs.warrantyBadge || WARRANTY_BADGE_BASE64;
-  if (badgeImg) {
-    try {
-      doc.addImage(badgeImg, "PNG", 379.0, 50.5, 33.0, 22.9, undefined, "FAST");
-    } catch {
-      try {
-        doc.addImage(badgeImg, "JPEG", 379.0, 50.5, 33.0, 22.9, undefined, "FAST");
-      } catch (err) {
-        console.warn("Failed to render warranty badge:", err);
-      }
-    }
-  }
-
-  const warrantyTextCenterX = badgeImg ? 443.0 : 424.0;
-  const warrantyTextMaxW = badgeImg ? 58.0 : 90.0;
-  const warrantyVal = (data.warranty || "1 Year").trim();
-  const warrantyFontSize = warrantyVal.length > 14 ? 16.0 : warrantyVal.length > 9 ? 19.0 : 24.0;
-
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(warrantyFontSize);
-  doc.setTextColor(LK_SLATE[0], LK_SLATE[1], LK_SLATE[2]);
-  doc.text(warrantyVal, warrantyTextCenterX, 64.0, { align: "center" });
-
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(8.0);
-  doc.setTextColor(LK_MUTED[0], LK_MUTED[1], LK_MUTED[2]);
-  const subLines = doc.splitTextToSize("Manufacturer fault warranty as stated in quotation terms", warrantyTextMaxW);
-  doc.text(subLines, warrantyTextCenterX, 73.0, { align: "center", lineHeightFactor: 1.22 });
-
-  // Resolve commercial / warranty exclusion note (Only show box if note is provided)
+  // Resolve commercial / warranty exclusion note
   let commercialNoteText: string | null = null;
   if (data.commercialNote && data.commercialNote.trim()) {
     commercialNoteText = data.commercialNote.trim();
-  } else if (data.technicalSpecs) {
-    let specsObj: any = null;
-    if (typeof data.technicalSpecs === "string") {
-      try { specsObj = JSON.parse(data.technicalSpecs); } catch {}
-    } else if (typeof data.technicalSpecs === "object") {
-      specsObj = data.technicalSpecs;
-    }
-    if (specsObj?.commercialNote && typeof specsObj.commercialNote === "string" && specsObj.commercialNote.trim()) {
-      commercialNoteText = specsObj.commercialNote.trim();
-    }
+  } else if (specsObj?.commercialNote && typeof specsObj.commercialNote === "string" && specsObj.commercialNote.trim()) {
+    commercialNoteText = specsObj.commercialNote.trim();
   }
 
-  // Render note input text directly (no box frame, no header banner, no heading title)
-  if (commercialNoteText) {
-    const noteStartX = 266.0;
-    const maxW = 208.0;
-    const fontSize = 14.0;
-    const lineSpacing = 7.0;
-    const maxNoteY = 188.0;
+  // Iterate through each BOM slide
+  for (let bIdx = 0; bIdx < bomSlidesToRender.length; bIdx++) {
+    const slide = bomSlidesToRender[bIdx];
+    const hwItems = slide.hardwareItems;
+    const srvItems = slide.serviceItems;
 
-    const noteLines = commercialNoteText.split(/\r?\n/);
-    let curY = 100.0;
-
-    noteLines.forEach((rawLine) => {
-      const lineText = rawLine.trim();
-      if (!lineText) {
-        curY += lineSpacing * 0.8;
-        return;
+    doc.addPage([SLIDE_W, SLIDE_H], "landscape");
+    if (bgs.bgPricing) {
+      try {
+        doc.addImage(bgs.bgPricing, "PNG", 0, 0, SLIDE_W, SLIDE_H, undefined, "FAST");
+      } catch (err) {
+        console.warn("Failed to render bgPricing:", err);
       }
-      const noteTokens = parseSlideTokens(lineText);
-      let curX = noteStartX;
+    }
 
-      noteTokens.forEach((wObj, wIdx) => {
-        doc.setFont("helvetica", wObj.bold ? "bold" : "normal");
-        doc.setFontSize(fontSize);
-        const wordW = doc.getTextWidth(wObj.word);
-        const spaceW = doc.getTextWidth(" ");
+    // Subtotals for this slide
+    let hwTotal: number;
+    let srvTotal: number;
 
-        if (curX + wordW > noteStartX + maxW) {
-          curY += lineSpacing;
-          curX = noteStartX;
+    if (bomSlidesToRender.length === 1) {
+      hwTotal = overallHwTotal;
+      srvTotal = overallSrvTotal;
+    } else {
+      if (slide.hardwareTotal != null && Number(slide.hardwareTotal) >= 0) {
+        hwTotal = Number(slide.hardwareTotal);
+      } else {
+        const itemSum = hwItems.reduce(
+          (s, it) => s + Number(it.totalPrice || it.quantity * it.unitPrice || 0),
+          0
+        );
+        hwTotal = itemSum > 0 ? itemSum : (bIdx === 0 && overallHwTotal > 0 ? overallHwTotal : 0);
+      }
+
+      if (slide.servicesTotal != null && Number(slide.servicesTotal) >= 0) {
+        srvTotal = Number(slide.servicesTotal);
+      } else {
+        const itemSum = srvItems.reduce(
+          (s, it) => s + Number(it.totalPrice || it.quantity * it.unitPrice || 0),
+          0
+        );
+        srvTotal = itemSum > 0 ? itemSum : (bIdx === 0 && overallSrvTotal > 0 ? overallSrvTotal : 0);
+      }
+    }
+
+    // --- 1. HARDWARE SECTION (Left Side - Max 4 items per slide) ---
+    doc.setFillColor(LK_TEAL[0], LK_TEAL[1], LK_TEAL[2]);
+    const hwBadgeW = bomSlidesToRender.length > 1 ? 168.0 : 142.0;
+    doc.roundedRect(36.0, 34.0, hwBadgeW, 12.0, 2.0, 2.0, "F");
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(16.0);
+    doc.setTextColor(255, 255, 255);
+    const hwBadgeText =
+      bomSlidesToRender.length > 1
+        ? `1. HARDWARE COMPONENTS (BOM) - PART ${bIdx + 1}`
+        : "1. HARDWARE COMPONENTS (BOM)";
+    doc.text(hwBadgeText, 41.0, 42.2);
+
+    if (hwItems.length > 0) {
+      let hwY = hwItems.length <= 2 ? 59.0 : hwItems.length === 3 ? 56.0 : 53.5;
+      const hwStep = hwItems.length <= 2 ? 16.0 : hwItems.length === 3 ? 13.5 : 11.5;
+      hwItems.forEach((it) => {
+        const name = it.productOrService;
+        const qtyStr = `x ${it.quantity}`;
+
+        // Bullet in Black (Normal weight, 18.5pt)
+        doc.setFont("helvetica", "normal");
+        doc.setFontSize(18.5);
+        doc.setTextColor(0, 0, 0);
+        doc.text("•", 38.0, hwY);
+
+        // Quantity right-aligned in Black (Normal weight, 18.0pt)
+        doc.setFont("helvetica", "normal");
+        doc.setFontSize(18.0);
+        doc.setTextColor(0, 0, 0);
+        doc.text(qtyStr, 246.0, hwY, { align: "right" });
+
+        // Item name in Black (Normal font weight, 18.0pt)
+        const qtyW = doc.getTextWidth(qtyStr);
+        const maxNameW = (246.0 - qtyW - 5.0) - 44.0;
+        doc.setTextColor(0, 0, 0);
+        let nameFontSize = 18.0;
+        doc.setFontSize(nameFontSize);
+
+        if (doc.getTextWidth(name) > maxNameW) {
+          doc.setFontSize(16.0);
+          if (doc.getTextWidth(name) > maxNameW) {
+            doc.setFontSize(14.5);
+          }
+          nameFontSize = doc.getFontSize();
         }
 
-        if (curY <= maxNoteY) {
-          if (wObj.highlight) {
-            const nextWord = noteTokens[wIdx + 1];
-            const hasContinuousHl =
-              nextWord &&
-              nextWord.highlight &&
-              curX + wordW + spaceW <= noteStartX + maxW;
-            const hlW = hasContinuousHl ? wordW + spaceW + 0.8 : wordW + 0.8;
-            doc.setFillColor(255, 255, 0); // Yellow #FFFF00
-            doc.rect(curX - 0.4, curY - fontSize * 0.28, hlW, fontSize * 0.36, "F");
-          }
-
-          if (wObj.color) {
-            doc.setTextColor(wObj.color[0], wObj.color[1], wObj.color[2]);
-          } else {
-            doc.setTextColor(0, 0, 0);
-          }
-
-          doc.text(wObj.word, curX, curY);
-
-          if (wObj.underline) {
-            doc.setDrawColor(0, 0, 0);
-            doc.setLineWidth(0.4);
-            doc.line(curX, curY + 0.8, curX + wordW, curY + 0.8);
-          }
+        const lines = doc.splitTextToSize(name, maxNameW);
+        if (lines.length > 1) {
+          doc.setFontSize(nameFontSize * 0.90);
+          doc.text(lines[0], 44.0, hwY - 2.0);
+          doc.text(lines[1], 44.0, hwY + 3.5);
+          hwY += hwStep + 2.5;
+        } else {
+          doc.text(lines[0], 44.0, hwY);
+          hwY += hwStep;
         }
-
-        curX += wordW + spaceW;
       });
+    } else {
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(14.0);
+      doc.setTextColor(LK_MUTED[0], LK_MUTED[1], LK_MUTED[2]);
+      doc.text("Hardware components included in previous section.", 44.0, 65.0);
+    }
 
-      curY += lineSpacing;
-    });
+    // Hardware Subtotal Pill
+    const hwPillY = 100.5;
+    doc.setFillColor(241, 245, 249);
+    doc.setDrawColor(218, 226, 237);
+    doc.setLineWidth(0.4);
+    doc.roundedRect(36.0, hwPillY, 98.0, 13.5, 2.5, 2.5, "FD");
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(13.0);
+    doc.setTextColor(0, 0, 0);
+    doc.text("COMPONENT RELATED COST", 40.0, hwPillY + 8.8);
+
+    doc.setFillColor(LK_TEAL[0], LK_TEAL[1], LK_TEAL[2]);
+    doc.roundedRect(136.0, hwPillY, 112.0, 13.5, 2.5, 2.5, "F");
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(22.0);
+    doc.setTextColor(255, 255, 255);
+    doc.text(formatLkr(hwTotal), 192.0, hwPillY + 9.5, { align: "center" });
+
+    // --- 2. SERVICES SECTION (Left Side - Max 2 items per slide) ---
+    const srvHeaderY = 121.5;
+    doc.setFillColor(LK_TEAL[0], LK_TEAL[1], LK_TEAL[2]);
+    const srvBadgeW = bomSlidesToRender.length > 1 ? 154.0 : 128.0;
+    doc.roundedRect(36.0, srvHeaderY, srvBadgeW, 12.0, 2.0, 2.0, "F");
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(16.0);
+    doc.setTextColor(255, 255, 255);
+    const srvBadgeText =
+      bomSlidesToRender.length > 1
+        ? `2. ENGINEERING SERVICES - PART ${bIdx + 1}`
+        : "2. ENGINEERING SERVICES";
+    doc.text(srvBadgeText, 41.0, srvHeaderY + 8.2);
+
+    let srvY = 143.5;
+    const servicesToShow =
+      srvItems.length > 0
+        ? srvItems
+        : bIdx === 0 && allSrvItems.length === 0
+        ? [
+            { productOrService: "Testing / Engineering Charges", quantity: 1, unitPrice: 0, totalPrice: 0 },
+            { productOrService: "IOT Installation and Programing", quantity: 1, unitPrice: 0, totalPrice: 0 },
+          ]
+        : [];
+
+    if (servicesToShow.length > 0) {
+      servicesToShow.forEach((srv, sIdx) => {
+        const name = srv.productOrService;
+        const curSrvY = srvY + sIdx * 16.0;
+
+        // Bullet in Black (Normal weight, 18.5pt)
+        doc.setFont("helvetica", "normal");
+        doc.setFontSize(18.5);
+        doc.setTextColor(0, 0, 0);
+        doc.text("•", 38.0, curSrvY);
+
+        // Service name in Black (Normal font weight, 18.0pt)
+        doc.setFontSize(18.0);
+        doc.setTextColor(0, 0, 0);
+        const maxSrvW = 202.0;
+        const lines = doc.splitTextToSize(name, maxSrvW);
+        if (lines.length > 1) {
+          doc.text(lines[0], 44.0, curSrvY - 2.0);
+          doc.setFontSize(15.0);
+          doc.text(lines[1], 44.0, curSrvY + 4.0);
+        } else {
+          doc.text(lines[0], 44.0, curSrvY);
+        }
+      });
+    } else {
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(14.0);
+      doc.setTextColor(LK_MUTED[0], LK_MUTED[1], LK_MUTED[2]);
+      doc.text("Services included in previous section.", 44.0, 150.0);
+    }
+
+    // Services Subtotal Pill
+    const srvPillY = 175.0;
+    doc.setFillColor(241, 245, 249);
+    doc.setDrawColor(218, 226, 237);
+    doc.setLineWidth(0.4);
+    doc.roundedRect(36.0, srvPillY, 98.0, 13.5, 2.5, 2.5, "FD");
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(13.0);
+    doc.setTextColor(0, 0, 0);
+    doc.text("SERVICES RELATED COST", 40.0, srvPillY + 8.8);
+
+    doc.setFillColor(LK_TEAL[0], LK_TEAL[1], LK_TEAL[2]);
+    doc.roundedRect(136.0, srvPillY, 112.0, 13.5, 2.5, 2.5, "F");
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(22.0);
+    doc.setTextColor(255, 255, 255);
+    doc.text(formatLkr(srvTotal), 192.0, srvPillY + 9.5, { align: "center" });
+
+    // --- 3. RIGHT SIDE CARDS (Lead Time, Warranty, Optional Commercial Note) ---
+    // Lead Time Card
+    doc.setFillColor(255, 255, 255);
+    doc.setDrawColor(218, 226, 237);
+    doc.setLineWidth(0.4);
+    doc.roundedRect(266.0, 34.0, 100.0, 54.0, 3.5, 3.5, "FD");
+    doc.setFillColor(248, 250, 252);
+    doc.roundedRect(266.0, 34.0, 100.0, 12.5, 3.5, 3.5, "F");
+    doc.rect(266.0, 42.5, 100.0, 4.0, "F");
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(10.5);
+    doc.setTextColor(LK_MUTED[0], LK_MUTED[1], LK_MUTED[2]);
+    doc.text("PROJECT ESTIMATED LEAD TIME", 316.0, 42.5, { align: "center" });
+    doc.setDrawColor(218, 226, 237);
+    doc.line(266.0, 46.5, 366.0, 46.5);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(23.0);
+    doc.setTextColor(LK_SLATE[0], LK_SLATE[1], LK_SLATE[2]);
+    doc.text(slide.leadTime || data.leadTime || "10 Working Days", 316.0, 66.0, { align: "center" });
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(8.5);
+    doc.setTextColor(LK_MUTED[0], LK_MUTED[1], LK_MUTED[2]);
+    doc.text("Commences upon purchase order & advance confirmation", 316.0, 78.0, { align: "center" });
+
+    // Warranty Card
+    doc.setFillColor(255, 255, 255);
+    doc.setDrawColor(218, 226, 237);
+    doc.roundedRect(374.0, 34.0, 100.0, 54.0, 3.5, 3.5, "FD");
+    doc.setFillColor(248, 250, 252);
+    doc.roundedRect(374.0, 34.0, 100.0, 12.5, 3.5, 3.5, "F");
+    doc.rect(374.0, 42.5, 100.0, 4.0, "F");
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(10.5);
+    doc.setTextColor(LK_MUTED[0], LK_MUTED[1], LK_MUTED[2]);
+    doc.text("WARRANTY", 424.0, 42.5, { align: "center" });
+    doc.setDrawColor(218, 226, 237);
+    doc.line(374.0, 46.5, 474.0, 46.5);
+
+    const badgeImg = bgs.warrantyBadge || WARRANTY_BADGE_BASE64;
+    if (badgeImg) {
+      try {
+        doc.addImage(badgeImg, "PNG", 379.0, 50.5, 33.0, 22.9, undefined, "FAST");
+      } catch {
+        try {
+          doc.addImage(badgeImg, "JPEG", 379.0, 50.5, 33.0, 22.9, undefined, "FAST");
+        } catch (err) {
+          console.warn("Failed to render warranty badge:", err);
+        }
+      }
+    }
+
+    const warrantyTextCenterX = badgeImg ? 443.0 : 424.0;
+    const warrantyTextMaxW = badgeImg ? 58.0 : 90.0;
+    const warrantyVal = (slide.warranty || data.warranty || "1 Year").trim();
+    const warrantyFontSize = warrantyVal.length > 14 ? 16.0 : warrantyVal.length > 9 ? 19.0 : 24.0;
+
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(warrantyFontSize);
+    doc.setTextColor(LK_SLATE[0], LK_SLATE[1], LK_SLATE[2]);
+    doc.text(warrantyVal, warrantyTextCenterX, 64.0, { align: "center" });
+
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(8.0);
+    doc.setTextColor(LK_MUTED[0], LK_MUTED[1], LK_MUTED[2]);
+    const subLines = doc.splitTextToSize("Manufacturer fault warranty as stated in quotation terms", warrantyTextMaxW);
+    doc.text(subLines, warrantyTextCenterX, 73.0, { align: "center", lineHeightFactor: 1.22 });
+
+    // Render note input text directly (no box frame, no header banner, no heading title)
+    // Display on final BOM slide, or if slide-specific note is given
+    const currentSlideNote = slide.commercialNote || (bIdx === bomSlidesToRender.length - 1 ? commercialNoteText : null);
+    if (currentSlideNote) {
+      const noteStartX = 266.0;
+      const maxW = 208.0;
+      const fontSize = 14.0;
+      const lineSpacing = 7.0;
+      const maxNoteY = 188.0;
+
+      const noteLines = currentSlideNote.split(/\r?\n/);
+      let curY = 100.0;
+
+      noteLines.forEach((rawLine) => {
+        const lineText = rawLine.trim();
+        if (!lineText) {
+          curY += lineSpacing * 0.8;
+          return;
+        }
+        const noteTokens = parseSlideTokens(lineText);
+        let curX = noteStartX;
+
+        noteTokens.forEach((wObj, wIdx) => {
+          doc.setFont("helvetica", wObj.bold ? "bold" : "normal");
+          doc.setFontSize(fontSize);
+          const wordW = doc.getTextWidth(wObj.word);
+          const spaceW = doc.getTextWidth(" ");
+
+          if (curX + wordW > noteStartX + maxW) {
+            curY += lineSpacing;
+            curX = noteStartX;
+          }
+
+          if (curY <= maxNoteY) {
+            if (wObj.highlight) {
+              const nextWord = noteTokens[wIdx + 1];
+              const hasContinuousHl =
+                nextWord &&
+                nextWord.highlight &&
+                curX + wordW + spaceW <= noteStartX + maxW;
+              const hlW = hasContinuousHl ? wordW + spaceW + 0.8 : wordW + 0.8;
+              doc.setFillColor(255, 255, 0); // Yellow #FFFF00
+              doc.rect(curX - 0.4, curY - fontSize * 0.28, hlW, fontSize * 0.36, "F");
+            }
+
+            if (wObj.color) {
+              doc.setTextColor(wObj.color[0], wObj.color[1], wObj.color[2]);
+            } else {
+              doc.setTextColor(0, 0, 0);
+            }
+
+            doc.text(wObj.word, curX, curY);
+
+            if (wObj.underline) {
+              doc.setDrawColor(0, 0, 0);
+              doc.setLineWidth(0.4);
+              doc.line(curX, curY + 0.8, curX + wordW, curY + 0.8);
+            }
+          }
+
+          curX += wordW + spaceW;
+        });
+
+        curY += lineSpacing;
+      });
+    }
+
+    // --- 4. INVESTMENT BAR (Bottom Full Width) ---
+    const totalBarY = 196.0;
+    doc.setFillColor(241, 248, 249);
+    doc.setDrawColor(LK_TEAL[0], LK_TEAL[1], LK_TEAL[2]);
+    doc.setLineWidth(0.9);
+    doc.roundedRect(36.0, totalBarY, 438.0, 34.0, 4.5, 4.5, "FD");
+
+    const isFinalBomSlide = bIdx === bomSlidesToRender.length - 1;
+    const barAmount = isFinalBomSlide ? grandTotal : (hwTotal + srvTotal);
+
+    // Left Section of Total Bar
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(11.5);
+    doc.setTextColor(LK_MUTED[0], LK_MUTED[1], LK_MUTED[2]);
+    const subtitleText =
+      isFinalBomSlide
+        ? "COMMERCIAL INVESTMENT SCHEDULE"
+        : `COMMERCIAL SCHEDULE - SLIDE ${bIdx + 1} OF ${bomSlidesToRender.length}`;
+    doc.text(subtitleText, 48.0, totalBarY + 11.5);
+
+    doc.setFontSize(isFinalBomSlide ? 20.5 : 18.0);
+    doc.setTextColor(LK_TEAL[0], LK_TEAL[1], LK_TEAL[2]);
+    const barTitle = isFinalBomSlide ? "TOTAL PROJECT INVESTMENT" : "SECTION INVESTMENT SUB-TOTAL";
+    doc.text(barTitle, 48.0, totalBarY + 24.0);
+
+    // Separator Line
+    doc.setDrawColor(218, 226, 237);
+    doc.setLineWidth(0.6);
+    doc.line(175.0, totalBarY + 5.0, 175.0, totalBarY + 29.0);
+
+    // Amount (Massive LK Teal)
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(44.0);
+    doc.setTextColor(LK_TEAL[0], LK_TEAL[1], LK_TEAL[2]);
+    doc.text(formatLkr(barAmount), 325.0, totalBarY + 24.5, { align: "center" });
   }
-
-  // --- 4. GRAND TOTAL INVESTMENT BAR (Bottom Full Width) ---
-  const totalBarY = 196.0;
-  doc.setFillColor(241, 248, 249);
-  doc.setDrawColor(LK_TEAL[0], LK_TEAL[1], LK_TEAL[2]);
-  doc.setLineWidth(0.9);
-  doc.roundedRect(36.0, totalBarY, 438.0, 34.0, 4.5, 4.5, "FD");
-
-  // Left Section of Total Bar
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(11.5);
-  doc.setTextColor(LK_MUTED[0], LK_MUTED[1], LK_MUTED[2]);
-  doc.text("COMMERCIAL INVESTMENT SCHEDULE", 48.0, totalBarY + 11.5);
-  doc.setFontSize(20.5);
-  doc.setTextColor(LK_TEAL[0], LK_TEAL[1], LK_TEAL[2]);
-  doc.text("TOTAL PROJECT INVESTMENT", 48.0, totalBarY + 24.0);
-
-  // Separator Line
-  doc.setDrawColor(218, 226, 237);
-  doc.setLineWidth(0.6);
-  doc.line(175.0, totalBarY + 5.0, 175.0, totalBarY + 29.0);
-
-  // Grand Total Amount (Massive LK Teal)
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(44.0);
-  doc.setTextColor(LK_TEAL[0], LK_TEAL[1], LK_TEAL[2]);
-  doc.text(formatLkr(grandTotal), 325.0, totalBarY + 24.5, { align: "center" });
 
   // ==========================================
   // SLIDE 5: BANK DETAILS (DEDICATED SLIDE)
