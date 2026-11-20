@@ -1436,9 +1436,9 @@ describe("Unit Tests: Supply Excel Supplier Image Handling", () => {
     // Page 1: Cover
     // Page 2: System Overview
     // Page 3: Set 1 Slide 3 (Design) -> Badge has "SET 1 OF 2"
-    // Page 4: Set 1 Slide 4 (BOM) -> Hardware header has "SET 1" and intermediate total bar has "COMMERCIAL SCHEDULE - SET 1"
+    // Page 4: Set 1 Slide 4 (BOM) -> Hardware header has "SET 1" and total bar has "COMMERCIAL SCHEDULE - SET 1" & "SECTION INVESTMENT SUB-TOTAL"
     // Page 5: Set 2 Slide 3 (Design) -> Badge has "SET 2 OF 2"
-    // Page 6: Set 2 Slide 4 (BOM) -> Hardware header has "SET 2" and final total bar has "TOTAL PROJECT INVESTMENT"
+    // Page 6: Set 2 Slide 4 (BOM) -> Hardware header has "SET 2" and total bar has "COMMERCIAL SCHEDULE - SET 2" & "SECTION INVESTMENT SUB-TOTAL"
     // Page 7: Bank Details
     // Page 8: Terms
     // Page 9: Clients
@@ -1450,8 +1450,93 @@ describe("Unit Tests: Supply Excel Supplier Image Handling", () => {
 
     assert.ok(page3Text.includes("SET 1 OF 2"), "Page 3 must be Set 1 Slide 3 (Design)");
     assert.ok(page4Text.includes("SET 1"), "Page 4 must be Set 1 Slide 4 (BOM)");
+    assert.ok(page4Text.includes("SECTION INVESTMENT SUB-TOTAL"), "Page 4 must have SECTION INVESTMENT SUB-TOTAL for Set 1");
+    assert.ok(page4Text.includes("55,000.00"), "Page 4 must have Set 1 subtotal (5,000 + 50,000 = 55,000.00)");
     assert.ok(page5Text.includes("SET 2 OF 2"), "Page 5 must be Set 2 Slide 3 (Design)");
     assert.ok(page6Text.includes("SET 2"), "Page 6 must be Set 2 Slide 4 (BOM)");
-    assert.ok(page6Text.includes("TOTAL PROJECT INVESTMENT"), "Page 6 must be the final BOM slide with TOTAL PROJECT INVESTMENT");
+    assert.ok(page6Text.includes("SECTION INVESTMENT SUB-TOTAL"), "Page 6 must have SECTION INVESTMENT SUB-TOTAL for Set 2");
+    assert.ok(page6Text.includes("45,000.00"), "Page 6 must match Set 2's own price (15,000 + 30,000 = 45,000.00)");
+  });
+
+  it("does not leak Set 1 special note to Set 2 when Set 2 special note is omitted", async () => {
+    const setsNoteIsolationProposal: any = {
+      type: "PROJECT_PROPOSAL",
+      quotationNo: "20261120PQV6",
+      preparedDate: "2026-11-20",
+      expireDate: "2026-12-20",
+      paymentMethod: "Bank Transfer",
+      preparedBy: "Eng. Kasun",
+      quotationTo: "Apex Dynamics (Pvt) Ltd",
+      totalAmount: 100000,
+      commercialNote: "Set 1 Top-level Special Note",
+      proposalSets: [
+        {
+          id: "set-1",
+          title: "Set 1",
+          leadTime: "10 Working Days",
+          warranty: "1 Year",
+          systemDesignImages: [],
+          hardwareItems: [{ productOrService: "Sensor A", quantity: 1, unitPrice: 5000, totalPrice: 5000, itemType: "HARDWARE" }],
+          serviceItems: [],
+          hardwareTotal: 5000,
+          servicesTotal: 0,
+          commercialNote: "Special Exclusion Note ONLY For Set 1",
+        },
+        {
+          id: "set-2",
+          title: "Set 2",
+          leadTime: "10 Working Days",
+          warranty: "1 Year",
+          systemDesignImages: [],
+          hardwareItems: [{ productOrService: "Sensor B", quantity: 1, unitPrice: 3000, totalPrice: 3000, itemType: "HARDWARE" }],
+          serviceItems: [],
+          hardwareTotal: 3000,
+          servicesTotal: 0,
+          commercialNote: "", // Blank note for Set 2
+        },
+      ],
+      items: [],
+    };
+
+    const doc = await generateRdQuotationPdf(setsNoteIsolationProposal);
+    const page4Text = (doc as any).internal.pages[4].join("\n"); // Set 1 BOM
+    const page6Text = (doc as any).internal.pages[6].join("\n"); // Set 2 BOM
+
+    assert.ok(page4Text.includes("Exclusion"), "Page 4 must include Set 1's note word 'Exclusion'");
+    assert.ok(!page6Text.includes("Exclusion"), "Page 6 must NOT inherit Set 1's note word 'Exclusion'");
+  });
+
+  it("renders TOTAL PROJECT INVESTMENT when only 1 proposalSet is provided", async () => {
+    const singleSetProposal: any = {
+      type: "PROJECT_PROPOSAL",
+      quotationNo: "20261120PQV7",
+      preparedDate: "2026-11-20",
+      expireDate: "2026-12-20",
+      paymentMethod: "Bank Transfer",
+      preparedBy: "Eng. Kasun",
+      quotationTo: "Apex Dynamics (Pvt) Ltd",
+      totalAmount: 25000,
+      proposalSets: [
+        {
+          id: "set-1",
+          title: "Set 1",
+          leadTime: "10 Working Days",
+          warranty: "1 Year",
+          systemDesignImages: [],
+          hardwareItems: [{ productOrService: "Controller", quantity: 1, unitPrice: 25000, totalPrice: 25000, itemType: "HARDWARE" }],
+          serviceItems: [],
+          hardwareTotal: 25000,
+          servicesTotal: 0,
+          commercialNote: "Standard Note",
+        },
+      ],
+      items: [],
+    };
+
+    const doc = await generateRdQuotationPdf(singleSetProposal);
+    // Page 4: Set 1 Slide 4 (BOM)
+    const page4Text = (doc as any).internal.pages[4].join("\n");
+    assert.ok(page4Text.includes("TOTAL PROJECT INVESTMENT"), "Single set proposal must show TOTAL PROJECT INVESTMENT");
+    assert.ok(page4Text.includes("25,000.00"), "Must show single set price");
   });
 });

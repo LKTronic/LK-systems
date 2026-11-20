@@ -1476,8 +1476,9 @@ async function generateProjectProposalPdf(
     bIdx: number,
     totalBomPages: number,
     isFinalBomSlide: boolean,
-    totalInvestment: number,
-    badgeSuffix?: string
+    totalInvestment?: number,
+    badgeSuffix?: string,
+    isProposalSetMode: boolean = false
   ) => {
     const hwItems = (slide.hardwareItems || []).slice(0, 4);
     const srvItems = (slide.serviceItems || []).slice(0, 2);
@@ -1738,8 +1739,11 @@ async function generateProjectProposalPdf(
     doc.text(subLines, warrantyTextCenterX, 73.0, { align: "center", lineHeightFactor: 1.22 });
 
     // Render note input text directly (no box frame, no header banner, no heading title)
-    // Display on final BOM slide, or if slide-specific note is given
-    const currentSlideNote = slide.commercialNote || (isFinalBomSlide ? commercialNoteText : null);
+    // Display on final BOM slide, or if slide-specific note is given.
+    // In proposalSets mode, each set owns its note: if empty/blank, NEVER fall back to other slides!
+    const currentSlideNote = isProposalSetMode
+      ? (slide.commercialNote && slide.commercialNote.trim() ? slide.commercialNote.trim() : null)
+      : (slide.commercialNote || (isFinalBomSlide ? commercialNoteText : null));
     if (currentSlideNote) {
       const noteStartX = 266.0;
       const maxW = 208.0;
@@ -1811,21 +1815,30 @@ async function generateProjectProposalPdf(
     doc.setLineWidth(0.9);
     doc.roundedRect(36.0, totalBarY, 438.0, 34.0, 4.5, 4.5, "FD");
 
-    const barAmount = isFinalBomSlide ? totalInvestment : (hwTotal + srvTotal);
+    // In proposalSets mode:
+    // If totalBomPages === 1 (only 1 set): show "TOTAL PROJECT INVESTMENT" with that set's investment.
+    // If totalBomPages > 1 (multiple sets): each set displays its own "SECTION INVESTMENT SUB-TOTAL" with that set's subtotal.
+    // In legacy chunked mode: intermediate slides show section subtotal, final slide shows grand total.
+    const isSingleProposalSet = isProposalSetMode && totalBomPages === 1;
+    const isLegacyFinal = !isProposalSetMode && isFinalBomSlide;
+    const showGrandTotal = isSingleProposalSet || isLegacyFinal;
+
+    const barAmount = showGrandTotal && totalInvestment != null
+      ? totalInvestment
+      : (hwTotal + srvTotal);
 
     // Left Section of Total Bar
     doc.setFont("helvetica", "bold");
     doc.setFontSize(11.5);
     doc.setTextColor(LK_MUTED[0], LK_MUTED[1], LK_MUTED[2]);
-    const subtitleText =
-      isFinalBomSlide
-        ? "COMMERCIAL INVESTMENT SCHEDULE"
-        : `COMMERCIAL SCHEDULE - ${badgeSuffix || `SLIDE ${bIdx + 1} OF ${totalBomPages}`}`;
+    const subtitleText = showGrandTotal
+      ? "COMMERCIAL INVESTMENT SCHEDULE"
+      : `COMMERCIAL SCHEDULE - ${badgeSuffix || `SLIDE ${bIdx + 1} OF ${totalBomPages}`}`;
     doc.text(subtitleText, 48.0, totalBarY + 11.5);
 
-    doc.setFontSize(isFinalBomSlide ? 20.5 : 18.0);
+    doc.setFontSize(showGrandTotal ? 20.5 : 18.0);
     doc.setTextColor(LK_TEAL[0], LK_TEAL[1], LK_TEAL[2]);
-    const barTitle = isFinalBomSlide ? "TOTAL PROJECT INVESTMENT" : "SECTION INVESTMENT SUB-TOTAL";
+    const barTitle = showGrandTotal ? "TOTAL PROJECT INVESTMENT" : "SECTION INVESTMENT SUB-TOTAL";
     doc.text(barTitle, 48.0, totalBarY + 24.0);
 
     // Separator Line
@@ -1883,13 +1896,14 @@ async function generateProjectProposalPdf(
           servicesTotal: set.servicesTotal,
           leadTime: set.leadTime,
           warranty: set.warranty,
-          commercialNote: set.commercialNote,
+          commercialNote: set.commercialNote || null,
         },
         sIdx,
         totalSets,
         isFinalSet,
-        finalSetsTotal,
-        totalSets > 1 ? `SET ${sIdx + 1}` : undefined
+        totalSets === 1 ? finalSetsTotal : undefined,
+        totalSets > 1 ? `SET ${sIdx + 1}` : undefined,
+        true // isProposalSetMode
       );
     }
   } else {

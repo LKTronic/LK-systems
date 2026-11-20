@@ -93,7 +93,7 @@ export interface ProposalSetData {
   serviceItems: ProposalSetItem[];
   hardwareTotal: string;
   servicesTotal: string;
-  commercialNote: string;
+  commercialNote?: string;
 }
 
 interface ItemRow {
@@ -1943,10 +1943,6 @@ export default function EditRadQuotationPage({
                 commercialNote: s.commercialNote || null,
               }))
             : null,
-        systemDesignImages:
-          payload.type === "PROJECT_PROPOSAL"
-            ? proposalSets.flatMap((s) => s.systemDesignImages)
-            : systemDesignImages,
         termsAndConditions: payload.termsAndConditions,
         bankDetails:
           bankAccounts.find((b) => b.id === selectedBankAccountId) ||
@@ -3326,19 +3322,10 @@ export default function EditRadQuotationPage({
                           type="button"
                           onClick={handleAddSet}
                           className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-teal-950/80 border border-teal-800/80 hover:bg-teal-900 text-teal-300 transition-colors"
-                          title="Add a new paired Slide 3 & 4 set"
+                          title="Add a new set"
                         >
                           <Plus className="w-3.5 h-3.5" />
-                          <span>+ Add Set (Slides 3 &amp; 4)</span>
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => handleDuplicateSet(activeSetIndex)}
-                          className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition-colors"
-                          title="Duplicate active set"
-                        >
-                          <Copy className="w-3.5 h-3.5 text-teal-400" />
-                          <span>Duplicate Set</span>
+                          <span>+ Add Set</span>
                         </button>
                         {proposalSets.length > 1 && (
                           <button
@@ -3896,8 +3883,6 @@ export default function EditRadQuotationPage({
                 );
               })()}
 
-
-
               {/* Tab 4: Slide 5 Terms & Conditions */}
               {activeProposalTab === 4 && (
                 <div className="space-y-5">
@@ -3914,17 +3899,16 @@ export default function EditRadQuotationPage({
 
                 <div>
                   <div className="flex items-center justify-between mb-1.5">
-                    <label className="text-xs font-semibold text-slate-300">
+                    <label className="block text-xs font-semibold text-slate-300">
                       Additional Terms &amp; Conditions (Optional)
                     </label>
-                    {/* Write / Preview Tab switcher */}
-                    <div className="inline-flex rounded-lg bg-slate-950 p-0.5 border border-slate-800">
+                    <div className="flex items-center gap-1 bg-slate-950 p-0.5 rounded-lg border border-slate-800 text-[11px]">
                       <button
                         type="button"
                         onClick={() => setTermsTab("write")}
-                        className={`px-2.5 py-1 text-[11px] font-semibold rounded-md transition-all ${
+                        className={`px-2 py-0.5 rounded font-medium transition-colors ${
                           termsTab === "write"
-                            ? "bg-teal-600 text-white shadow-sm"
+                            ? "bg-teal-600 text-white"
                             : "text-slate-400 hover:text-slate-200"
                         }`}
                       >
@@ -3933,9 +3917,9 @@ export default function EditRadQuotationPage({
                       <button
                         type="button"
                         onClick={() => setTermsTab("preview")}
-                        className={`px-2.5 py-1 text-[11px] font-semibold rounded-md transition-all ${
+                        className={`px-2 py-0.5 rounded font-medium transition-colors ${
                           termsTab === "preview"
-                            ? "bg-teal-600 text-white shadow-sm"
+                            ? "bg-teal-600 text-white"
                             : "text-slate-400 hover:text-slate-200"
                         }`}
                       >
@@ -3945,12 +3929,12 @@ export default function EditRadQuotationPage({
                   </div>
 
                   {termsTab === "write" ? (
-                    <div>
-                      {/* Rich Formatting Toolbar */}
-                      <div className="flex flex-wrap items-center gap-1.5 bg-slate-950/80 border border-slate-700 border-b-0 rounded-t-lg px-2.5 py-1.5">
+                    <div className="space-y-1.5">
+                      {/* Terms Formatting Toolbar */}
+                      <div className="flex flex-wrap items-center gap-1.5 p-1.5 bg-slate-950/80 border border-slate-800 rounded-t-lg">
                         <button
                           type="button"
-                          onClick={() => insertTermsFormat("**", "**", "Bold Term Title")}
+                          onClick={() => insertTermsFormat("**", "**", "Bold Term")}
                           title="Bold (**text**)"
                           className="px-2 py-1 rounded bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-white border border-slate-700/80 text-xs font-bold flex items-center gap-1 transition-colors"
                         >
@@ -4681,7 +4665,7 @@ export default function EditRadQuotationPage({
                   <div className="flex justify-between items-center text-slate-400 text-[10px] pt-1 border-t border-slate-800/50">
                     <span>Design / BOM Slides:</span>
                     <span className="font-mono text-teal-400 font-semibold">
-                      {proposalSets.length} Design / {proposalSets.length} BOM ({proposalSets.length * 2} Slides)
+                      {Math.ceil(systemDesignImages.length / 8) || 1} Design / {Math.max(Math.ceil(hardwareItems.length / 4), Math.ceil(serviceItems.length / 2), 1)} BOM
                     </span>
                   </div>
                   <div className="border-t border-slate-800 pt-2 flex justify-between items-center">
@@ -4786,19 +4770,11 @@ export default function EditRadQuotationPage({
                   )}
                   <div className="border-t border-slate-800/80 pt-2 flex justify-between items-center text-slate-400">
                     <span>{quotationType === "UNI_QUOTATION" ? "Completion Time:" : "Lead Time:"}</span>
-                    <span className="text-slate-200 font-medium">
-                      {quotationType === "PROJECT_PROPOSAL"
-                        ? proposalSets[activeSetIndex]?.leadTime || proposalSets[0]?.leadTime || leadTime || "10 Working Days"
-                        : uniCompletionTime || leadTime || "10 business working days"}
-                    </span>
+                    <span className="text-slate-200 font-medium">{uniCompletionTime || leadTime || "10 business working days"}</span>
                   </div>
                   <div className="flex justify-between items-center text-slate-400">
                     <span>Warranty:</span>
-                    <span className="text-slate-200 font-medium">
-                      {quotationType === "PROJECT_PROPOSAL"
-                        ? proposalSets[activeSetIndex]?.warranty || proposalSets[0]?.warranty || warranty || "1 Year"
-                        : warranty || "As per manufacturer"}
-                    </span>
+                    <span className="text-slate-200 font-medium">{warranty || "As per manufacturer"}</span>
                   </div>
                 </div>
               ) : (

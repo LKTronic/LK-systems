@@ -3274,19 +3274,10 @@ function CreateRadQuotationContent() {
                           type="button"
                           onClick={handleAddSet}
                           className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-teal-950/80 border border-teal-800/80 hover:bg-teal-900 text-teal-300 transition-colors"
-                          title="Add a new paired Slide 3 & 4 set"
+                          title="Add a new set"
                         >
                           <Plus className="w-3.5 h-3.5" />
-                          <span>+ Add Set (Slides 3 &amp; 4)</span>
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => handleDuplicateSet(activeSetIndex)}
-                          className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition-colors"
-                          title="Duplicate active set"
-                        >
-                          <Copy className="w-3.5 h-3.5 text-teal-400" />
-                          <span>Duplicate Set</span>
+                          <span>+ Add Set</span>
                         </button>
                         {proposalSets.length > 1 && (
                           <button
