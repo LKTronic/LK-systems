@@ -6,20 +6,64 @@ function getCleanEnv(val?: string): string {
   return val.replace(/^["']|["']$/g, "").trim();
 }
 
+export function getCloudinaryCredentials() {
+  const cloudinaryUrl = process.env.CLOUDINARY_URL || process.env.cloudinary_url;
+  let parsedCloud = "";
+  let parsedKey = "";
+  let parsedSecret = "";
+  if (cloudinaryUrl) {
+    const match = cloudinaryUrl.trim().replace(/^["']|["']$/g, "").match(/^cloudinary:\/\/([^:]+):([^@]+)@(.+)$/);
+    if (match) {
+      parsedKey = match[1];
+      parsedSecret = match[2];
+      parsedCloud = match[3];
+    }
+  }
+
+  const cloudName =
+    getCleanEnv(
+      process.env.CLOUDINARY_CLOUD_NAME ||
+        process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME ||
+        process.env.CLOUD_NAME ||
+        process.env.CLOUDINARY_NAME ||
+        process.env.CLOUDINARY_CLOUDNAME ||
+        process.env.cloudinary_cloud_name ||
+        parsedCloud
+    ) || "iqopohvk";
+
+  const apiKey =
+    getCleanEnv(
+      process.env.CLOUDINARY_API_KEY ||
+        process.env.CLOUDINARY_KEY ||
+        process.env.API_KEY ||
+        process.env.cloudinary_api_key ||
+        parsedKey
+    );
+
+  const apiSecret =
+    getCleanEnv(
+      process.env.CLOUDINARY_API_SECRET ||
+        process.env.CLOUDINARY_SECRET ||
+        process.env.API_SECRET ||
+        process.env.cloudinary_api_secret ||
+        parsedSecret
+    );
+
+  return { cloudName, apiKey, apiSecret };
+}
+
 // Configure Cloudinary from environment variables
 export function isCloudinaryConfigured(): boolean {
-  return Boolean(
-    getCleanEnv(process.env.CLOUDINARY_CLOUD_NAME) &&
-      getCleanEnv(process.env.CLOUDINARY_API_KEY) &&
-      getCleanEnv(process.env.CLOUDINARY_API_SECRET)
-  );
+  const { cloudName, apiKey, apiSecret } = getCloudinaryCredentials();
+  return Boolean(cloudName && apiKey && apiSecret);
 }
 
 export function getCloudinaryClient() {
+  const { cloudName, apiKey, apiSecret } = getCloudinaryCredentials();
   cloudinary.config({
-    cloud_name: getCleanEnv(process.env.CLOUDINARY_CLOUD_NAME),
-    api_key: getCleanEnv(process.env.CLOUDINARY_API_KEY),
-    api_secret: getCleanEnv(process.env.CLOUDINARY_API_SECRET),
+    cloud_name: cloudName,
+    api_key: apiKey,
+    api_secret: apiSecret,
     secure: true,
   });
   return cloudinary;

@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getCloudinaryStorageUsage } from "@/lib/cloudinary";
+import { getCloudinaryStorageUsage, getCloudinaryCredentials } from "@/lib/cloudinary";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -7,13 +7,14 @@ export const revalidate = 0;
 export async function GET() {
   try {
     const usage = await getCloudinaryStorageUsage();
+    const creds = getCloudinaryCredentials();
     return NextResponse.json({
       success: true,
       isConfigured: usage.configured,
       diagnostics: {
-        hasCloudName: Boolean(process.env.CLOUDINARY_CLOUD_NAME?.trim()),
-        hasApiKey: Boolean(process.env.CLOUDINARY_API_KEY?.trim()),
-        hasApiSecret: Boolean(process.env.CLOUDINARY_API_SECRET?.trim()),
+        hasCloudName: Boolean(creds.cloudName),
+        hasApiKey: Boolean(creds.apiKey),
+        hasApiSecret: Boolean(creds.apiSecret),
       },
       ...usage,
     });
