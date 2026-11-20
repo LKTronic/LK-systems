@@ -38,6 +38,8 @@ import {
   Download,
   Save,
   ArrowLeft,
+  ArrowRight,
+  Check,
   Search,
   Loader2,
   CheckCircle2,
@@ -128,6 +130,7 @@ export default function EditRadQuotationPage({
   const [quotationTo, setQuotationTo] = useState("");
 
   // Project Proposal Specific Fields
+  const [activeProposalTab, setActiveProposalTab] = useState<number>(1);
   const [projectTitle, setProjectTitle] = useState("");
   const [overview, setOverview] = useState("");
   const [overviewTab, setOverviewTab] = useState<"write" | "preview">("write");
@@ -962,6 +965,50 @@ export default function EditRadQuotationPage({
         )
       : componentsTotal;
 
+  // Step completion indicators for Project Proposal wizard
+  const isStep1Complete = Boolean(
+    quotationNo.trim() && quotationTo.trim() && projectTitle.trim()
+  );
+  const isStep2Complete = Boolean(overview.trim().length > 0);
+  const isStep3Complete = Boolean(
+    hardwareItems.length > 0 || serviceItems.length > 0 || items.some((it) => it.productOrService.trim().length > 0)
+  );
+  const isStep4Complete = Boolean(leadTime.trim().length > 0 && warranty.trim().length > 0);
+  const isStep5Complete = Boolean(terms !== undefined && terms.trim().length >= 0);
+
+  const PROPOSAL_STEPS = [
+    {
+      step: 1,
+      title: "1. General & Cover",
+      sub: "General info & Slide 1 title",
+      isComplete: isStep1Complete,
+    },
+    {
+      step: 2,
+      title: "2. System Overview",
+      sub: "Slide 2 overview & intro",
+      isComplete: isStep2Complete,
+    },
+    {
+      step: 3,
+      title: "3. Design & BOM",
+      sub: "Images, hardware & services",
+      isComplete: isStep3Complete,
+    },
+    {
+      step: 4,
+      title: "4. Warranty & Notes",
+      sub: "Lead time, warranty & notes",
+      isComplete: isStep4Complete,
+    },
+    {
+      step: 5,
+      title: "5. Terms & Conditions",
+      sub: "Slide 5 terms & sign-off",
+      isComplete: isStep5Complete,
+    },
+  ];
+
   // Add Item
   const handleAddItem = (type: "HARDWARE" | "SERVICE" = "HARDWARE") => {
     if (quotationType === "PROJECT_PROPOSAL") {
@@ -1307,11 +1354,42 @@ export default function EditRadQuotationPage({
   const scrollToFirstError = (missing: Record<string, string>) => {
     const firstKey = Object.keys(missing)[0];
     if (!firstKey) return;
-    const el = document.getElementById(`field-${firstKey}`);
-    if (el) {
-      el.scrollIntoView({ behavior: "smooth", block: "center" });
-      el.focus?.();
+    if (quotationType === "PROJECT_PROPOSAL") {
+      if (
+        [
+          "quotationNo",
+          "preparedBy",
+          "preparedDate",
+          "expireDate",
+          "quotationTo",
+          "projectTitle",
+          "bankAccount",
+          "paymentMethod",
+          "advancePercent",
+        ].includes(firstKey)
+      ) {
+        setActiveProposalTab(1);
+      } else if (firstKey === "overview") {
+        setActiveProposalTab(2);
+      } else if (
+        firstKey.startsWith("item_") ||
+        firstKey === "hardwareItems" ||
+        firstKey === "serviceItems"
+      ) {
+        setActiveProposalTab(3);
+      } else if (["leadTime", "warranty", "commercialNote"].includes(firstKey)) {
+        setActiveProposalTab(4);
+      } else if (firstKey === "terms") {
+        setActiveProposalTab(5);
+      }
     }
+    setTimeout(() => {
+      const el = document.getElementById(`field-${firstKey}`);
+      if (el) {
+        el.scrollIntoView({ behavior: "smooth", block: "center" });
+        el.focus?.();
+      }
+    }, 60);
   };
 
   // Unified Save Quotation Handler: auto-saves DRAFT if half-filled, or COMPLETED if all required fields are filled
@@ -1644,11 +1722,82 @@ export default function EditRadQuotationPage({
         )}
 
         {/* Main Form Body */}
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-          {/* Left Form Column (2/3 width) */}
-          <div className="lg:col-span-8 space-y-6 min-w-0">
-            {/* General Info */}
-            <div className="bg-slate-900/80 border border-slate-800 rounded-xl p-5 shadow-sm space-y-4">
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
+          {/* Left Form Column (3/4 width: 75% / 9 cols) */}
+          <div className="lg:col-span-9 xl:col-span-9 space-y-5 min-w-0">
+            {/* Project Proposal Stepper Tabs */}
+            {quotationType === "PROJECT_PROPOSAL" && (
+              <div className="bg-slate-900/90 border border-slate-800 rounded-xl p-3 sm:p-4 shadow-sm">
+                <div className="flex items-center justify-between gap-1 sm:gap-2">
+                  {PROPOSAL_STEPS.map((s, idx) => {
+                    const isActive = activeProposalTab === s.step;
+                    const isDone = s.isComplete;
+                    return (
+                      <div key={s.step} className="flex items-center flex-1 last:flex-none">
+                        <button
+                          type="button"
+                          onClick={() => setActiveProposalTab(s.step)}
+                          className={`flex items-center gap-2.5 p-1.5 sm:p-2 rounded-xl transition-all text-left w-full sm:w-auto ${
+                            isActive
+                              ? "bg-slate-800/90 ring-2 ring-teal-500/70 border border-teal-500/50 shadow-md shadow-teal-950/50"
+                              : isDone
+                              ? "hover:bg-slate-800/60"
+                              : "hover:bg-slate-800/40 opacity-80 hover:opacity-100"
+                          }`}
+                        >
+                          {/* Number Circle with Fill Color */}
+                          <div
+                            className={`w-7 h-7 sm:w-8 sm:h-8 rounded-full flex items-center justify-center font-bold text-xs sm:text-sm shrink-0 transition-all ${
+                              isDone
+                                ? "bg-emerald-500 text-slate-950 shadow-md shadow-emerald-500/30 font-black ring-2 ring-emerald-400"
+                                : isActive
+                                ? "bg-teal-500 text-slate-950 shadow-md shadow-teal-500/30 font-black ring-2 ring-teal-300"
+                                : "bg-slate-800 text-slate-400 border border-slate-700"
+                            }`}
+                          >
+                            {isDone ? <Check className="w-4 h-4 stroke-[3]" /> : s.step}
+                          </div>
+
+                          {/* Step Info */}
+                          <div className="hidden md:block min-w-0 pr-1">
+                            <div
+                              className={`text-xs font-bold leading-tight truncate ${
+                                isActive
+                                  ? "text-teal-300"
+                                  : isDone
+                                  ? "text-emerald-300"
+                                  : "text-slate-300"
+                              }`}
+                            >
+                              {s.title}
+                            </div>
+                            <div className="text-[10px] text-slate-500 truncate leading-tight">
+                              {isDone ? "Completed ✓" : s.sub}
+                            </div>
+                          </div>
+                        </button>
+
+                        {/* Connecting Bar */}
+                        {idx < PROPOSAL_STEPS.length - 1 && (
+                          <div className="hidden lg:block flex-1 mx-2 h-0.5 rounded-full overflow-hidden bg-slate-800">
+                            <div
+                              className={`h-full transition-all duration-300 ${
+                                isDone ? "bg-emerald-500/80 w-full" : "w-0"
+                              }`}
+                            />
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* Tab 1: General Quotation Information & Slide 1 Project Title */}
+            {(quotationType !== "PROJECT_PROPOSAL" || activeProposalTab === 1) && (
+              <div className="space-y-4">
+                <div className="bg-slate-900/80 border border-slate-800 rounded-xl p-5 shadow-sm space-y-4">
               <h2 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2">
                 <FileText className="w-4 h-4 text-teal-400" />
                 Quotation Details
@@ -2135,280 +2284,208 @@ export default function EditRadQuotationPage({
                       </p>
                     )}
                   </div>
-
-                <div>
-                  <div className="flex items-center justify-between mb-1.5">
-                    <label className="block text-xs font-semibold text-teal-400">
-                      Slide 2: System Overview &amp; Introduction * (Manual Input)
-                    </label>
-                    <div className="flex items-center gap-1 bg-slate-950 p-0.5 rounded-lg border border-slate-800 text-[11px]">
-                      <button
-                        type="button"
-                        onClick={() => setOverviewTab("write")}
-                        className={`px-2 py-0.5 rounded font-medium transition-colors ${
-                          overviewTab === "write"
-                            ? "bg-teal-600 text-white"
-                            : "text-slate-400 hover:text-slate-200"
-                        }`}
-                      >
-                        Write
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setOverviewTab("preview")}
-                        className={`px-2 py-0.5 rounded font-medium transition-colors ${
-                          overviewTab === "preview"
-                            ? "bg-teal-600 text-white"
-                            : "text-slate-400 hover:text-slate-200"
-                        }`}
-                      >
-                        Formatted Preview
-                      </button>
-                    </div>
-                  </div>
-
-                  {overviewTab === "write" ? (
-                    <div className="space-y-1.5">
-                      {/* Formatting Toolbar */}
-                      <div className="flex flex-wrap items-center gap-1.5 p-1.5 bg-slate-950/80 border border-slate-800 rounded-t-lg">
-                        <button
-                          type="button"
-                          onClick={() => insertOverviewFormat("**", "**", "Bold Text")}
-                          title="Bold (**text**)"
-                          className="px-2 py-1 rounded bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-white border border-slate-700/80 text-xs font-bold flex items-center gap-1 transition-colors"
-                        >
-                          <Bold className="w-3.5 h-3.5" />
-                          <span>Bold</span>
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => insertOverviewFormat("<u>", "</u>", "Underlined Text")}
-                          title="Underline (<u>text</u>)"
-                          className="px-2 py-1 rounded bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-white border border-slate-700/80 text-xs underline flex items-center gap-1 transition-colors"
-                        >
-                          <Underline className="w-3.5 h-3.5" />
-                          <span>Underline</span>
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => insertOverviewFormat("==", "==", "Highlighted Text")}
-                          title="Highlight (==text==)"
-                          className="px-2 py-1 rounded bg-amber-950/60 hover:bg-amber-900/80 text-amber-300 hover:text-amber-200 border border-amber-700/60 text-xs font-semibold flex items-center gap-1 transition-colors"
-                        >
-                          <Highlighter className="w-3.5 h-3.5" />
-                          <span>Highlight</span>
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => insertOverviewFormat("\n• ", "", "Key Engineering Feature")}
-                          title="Bullet Point (• Feature)"
-                          className="px-2 py-1 rounded bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-white border border-slate-700/80 text-xs flex items-center gap-1 transition-colors"
-                        >
-                          <List className="w-3.5 h-3.5 text-orange-400" />
-                          <span>Bullet List</span>
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => insertOverviewFormat("\n1. ", "", "Ordered Milestone Feature")}
-                          title="Numbered List"
-                          className="px-2 py-1 rounded bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-white border border-slate-700/80 text-xs flex items-center gap-1 transition-colors"
-                        >
-                          <ListOrdered className="w-3.5 h-3.5 text-teal-400" />
-                          <span>Numbered List</span>
-                        </button>
-                        {/* Font Size Selector */}
-                        <div className="flex items-center gap-1 bg-slate-900 border border-slate-700/80 rounded px-1.5 py-0.5 text-xs text-slate-300">
-                          <Type className="w-3.5 h-3.5 text-teal-400 shrink-0" />
-                          <select
-                            value={overviewFontSize}
-                            onChange={(e) => setOverviewFontSize(e.target.value)}
-                            title="Slide 2 Font Size"
-                            className="bg-transparent text-slate-200 text-xs focus:outline-none cursor-pointer"
-                          >
-                            <option value="18.0" className="bg-slate-900 text-white">18pt (Compact)</option>
-                            <option value="20.5" className="bg-slate-900 text-white">20.5pt (Standard)</option>
-                            <option value="22.0" className="bg-slate-900 text-white">22pt (Recommended)</option>
-                            <option value="24.0" className="bg-slate-900 text-white">24pt (Large)</option>
-                            <option value="26.0" className="bg-slate-900 text-white">26pt (X-Large)</option>
-                            <option value="28.0" className="bg-slate-900 text-white">28pt</option>
-                          </select>
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() =>
-                            insertOverviewFormat(
-                              "\n• Feature Title: ",
-                              "",
-                              "Detailed functional capability and parameters"
-                            )
-                          }
-                          title="Add Feature Highlight with Title"
-                          className="px-2 py-1 rounded bg-teal-950/60 hover:bg-teal-900/80 text-teal-300 border border-teal-800/80 text-xs font-medium flex items-center gap-1 transition-colors ml-auto"
-                        >
-                          <Sparkles className="w-3.5 h-3.5 text-teal-400" />
-                          <span>+ Add Feature Item</span>
-                        </button>
-                      </div>
-
-                      <textarea
-                        id="slide2-overview-textarea"
-                        rows={6}
-                        value={overview}
-                        onChange={(e) => setOverview(e.target.value)}
-                        onKeyDown={(e) => handleAutoBulletKeyDown(e, overview, setOverview)}
-                        placeholder="Enter system overview, objectives, and key features for Slide 2... Use toolbar above for Bold (**text**), Highlight (==text==), Underline (<u>text</u>), and Bullet Lists (•). Press Enter to auto-continue bullets."
-                        className="w-full bg-slate-950 border border-slate-700 border-t-0 rounded-b-lg px-3 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-teal-500 font-mono leading-relaxed"
-                      />
-                      <div className="flex flex-wrap items-center justify-between text-[11px] text-slate-400 px-1 pt-1">
-                        <span>
-                          <span className="text-teal-400 font-semibold">Slide 2 Boundary:</span> Max ~700 characters | Max 8–10 lines recommended for optimal 16:9 widescreen presentation fit.
-                        </span>
-                        <span
-                          className={`font-mono font-semibold ${
-                            overview.length > 700 || overview.split("\n").filter((l) => l.trim()).length > 10
-                              ? "text-amber-400"
-                              : "text-slate-400"
-                          }`}
-                        >
-                          {overview.length}/700 chars | {overview.split("\n").filter((l) => l.trim()).length}/10 lines
-                        </span>
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="bg-slate-950 border border-slate-700 rounded-lg p-3.5 text-xs text-slate-200 min-h-[140px] space-y-2">
-                      <div className="text-[11px] font-bold text-teal-400 uppercase tracking-wider mb-2 pb-1.5 border-b border-slate-800 flex items-center gap-1.5">
-                        <FileText className="w-3.5 h-3.5 text-teal-400" />
-                        Live Slide 2 Formatted Preview
-                      </div>
-                      {renderOverviewPreview(overview)}
-                    </div>
-                  )}
-                </div>
                 </div>
               )}
             </div>
 
-            {/* Estimated Lead Time & Warranty (Below Slide 2, Above Slide 3) */}
+            {/* Step 1 Navigation Footer */}
             {quotationType === "PROJECT_PROPOSAL" && (
-              <div className="bg-slate-900/80 border border-slate-800 rounded-xl p-5 shadow-sm space-y-4">
-                <h2 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2 border-b border-slate-800 pb-3">
-                  <Clock className="w-4 h-4 text-teal-400" />
-                  Estimated Lead Time &amp; Warranty
-                </h2>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  {/* Estimated Lead Time */}
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-300 mb-1 flex items-center gap-1.5">
-                      <Clock className="w-3.5 h-3.5 text-teal-400" />
-                      Estimated Lead Time *
-                    </label>
-                    <input
-                      type="text"
-                      value={leadTime}
-                      onChange={(e) => setLeadTime(e.target.value)}
-                      placeholder="e.g. 10 Working Days"
-                      className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-teal-500"
-                    />
-                  </div>
-
-                  {/* Warranty & Support */}
-                  <div>
-                    <label className="block text-xs font-semibold text-slate-300 mb-1 flex items-center gap-1.5">
-                      <Shield className="w-3.5 h-3.5 text-teal-400" />
-                      Warranty &amp; Support *
-                    </label>
-                    <input
-                      type="text"
-                      value={warranty}
-                      onChange={(e) => setWarranty(e.target.value)}
-                      placeholder="e.g. 1 Year"
-                      className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-teal-500"
-                    />
-                  </div>
-                </div>
+              <div className="flex items-center justify-between pt-2">
+                <span className="text-xs text-slate-400 font-medium">
+                  Step 1 of 5: General Information &amp; Cover Slide
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setActiveProposalTab(2)}
+                  className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-teal-600 hover:bg-teal-500 text-white text-xs font-bold shadow-lg shadow-teal-950/40 transition-all hover:translate-x-0.5"
+                >
+                  <span>Next: Slide 2 Overview</span>
+                  <ArrowRight className="w-4 h-4" />
+                </button>
               </div>
             )}
+          </div>
+        )}
 
-            {/* Slide 3: System Design & Architecture Images (Repeater: 8 Images per slide) */}
-            {quotationType === "PROJECT_PROPOSAL" && (
-              <div className="bg-slate-900/80 border border-slate-800 rounded-xl p-5 shadow-sm space-y-4">
-                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-                  <div>
-                    <h2 className="text-sm font-bold text-teal-400 uppercase tracking-wider flex items-center gap-2">
-                      <ImageIcon className="w-4 h-4" />
-                      Slide 3: System Design & Architecture Images
-                    </h2>
-                    <p className="text-xs text-slate-400">
-                      Upload hardware, module, or architecture diagram images (8 images per slide, auto-repeats Slide 3 for additional images)
-                    </p>
-                  </div>
-                  <span className="text-xs font-mono font-semibold px-2.5 py-1 rounded bg-slate-800 text-teal-300 border border-slate-700 w-fit">
-                    {systemDesignImages.length} Uploaded ({Math.ceil(systemDesignImages.length / 8) || 1} Slide{Math.ceil(systemDesignImages.length / 8) > 1 ? "s" : ""})
-                  </span>
+        {/* Tab 2: Slide 2 System Overview & Introduction */}
+        {quotationType === "PROJECT_PROPOSAL" && activeProposalTab === 2 && (
+          <div className="space-y-4">
+            <div className="bg-slate-900/80 border border-slate-800 rounded-xl p-5 shadow-sm space-y-4">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-800 pb-3">
+                <div>
+                  <h2 className="text-sm font-bold text-teal-400 uppercase tracking-wider flex items-center gap-2">
+                    <FileText className="w-4 h-4" />
+                    Slide 2: System Overview &amp; Introduction * (Manual Input)
+                  </h2>
+                  <p className="text-xs text-slate-400 mt-0.5">
+                    Enter system overview, functional objectives, and key technical capabilities for Slide 2.
+                  </p>
                 </div>
+                <div className="flex items-center gap-1 bg-slate-950 p-0.5 rounded-lg border border-slate-800 text-[11px] self-start sm:self-auto">
+                  <button
+                    type="button"
+                    onClick={() => setOverviewTab("write")}
+                    className={`px-2 py-0.5 rounded font-medium transition-colors ${
+                      overviewTab === "write"
+                        ? "bg-teal-600 text-white"
+                        : "text-slate-400 hover:text-slate-200"
+                    }`}
+                  >
+                    Write
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setOverviewTab("preview")}
+                    className={`px-2 py-0.5 rounded font-medium transition-colors ${
+                      overviewTab === "preview"
+                        ? "bg-teal-600 text-white"
+                        : "text-slate-400 hover:text-slate-200"
+                    }`}
+                  >
+                    Formatted Preview
+                  </button>
+                </div>
+              </div>
 
-                {/* Upload Drop Zone / Button */}
-                {systemDesignImages.length < 32 && (
-                  <label className="border-2 border-dashed border-slate-700 hover:border-teal-500/70 bg-slate-950/50 hover:bg-slate-950 rounded-xl p-6 flex flex-col items-center justify-center gap-2 cursor-pointer transition-colors">
-                    <input
-                      type="file"
-                      accept="image/*"
-                      multiple
-                      onChange={handleDesignImageUpload}
-                      disabled={isUploadingDesignImages}
-                      className="hidden"
-                    />
-                    {isUploadingDesignImages ? (
-                      <div className="flex items-center gap-2 text-xs text-teal-400">
-                        <Loader2 className="w-5 h-5 animate-spin" />
-                        <span>Uploading design image...</span>
-                      </div>
-                    ) : (
-                      <>
-                        <Upload className="w-6 h-6 text-teal-400" />
-                        <span className="text-xs font-semibold text-slate-300">
-                          Click or drag images to upload for Slide 3
-                        </span>
-                        <span className="text-[11px] text-slate-500">
-                          Supports PNG, JPG, WebP. 8 images per slide (auto-repeater).
-                        </span>
-                      </>
-                    )}
-                  </label>
-                )}
-
-                {/* Thumbnails Grid */}
-                {systemDesignImages.length > 0 && (
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-2">
-                    {systemDesignImages.map((imgUrl, idx) => (
-                      <div
-                        key={idx}
-                        className="group relative rounded-lg overflow-hidden border border-slate-700 bg-slate-950 h-28 flex items-center justify-center p-2"
+              {overviewTab === "write" ? (
+                <div className="space-y-1.5">
+                  {/* Formatting Toolbar */}
+                  <div className="flex flex-wrap items-center gap-1.5 p-1.5 bg-slate-950/80 border border-slate-800 rounded-t-lg">
+                    <button
+                      type="button"
+                      onClick={() => insertOverviewFormat("**", "**", "Bold Text")}
+                      title="Bold (**text**)"
+                      className="px-2 py-1 rounded bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-white border border-slate-700/80 text-xs font-bold flex items-center gap-1 transition-colors"
+                    >
+                      <Bold className="w-3.5 h-3.5" />
+                      <span>Bold</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => insertOverviewFormat("<u>", "</u>", "Underlined Text")}
+                      title="Underline (<u>text</u>)"
+                      className="px-2 py-1 rounded bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-white border border-slate-700/80 text-xs underline flex items-center gap-1 transition-colors"
+                    >
+                      <Underline className="w-3.5 h-3.5" />
+                      <span>Underline</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => insertOverviewFormat("==", "==", "Highlighted Text")}
+                      title="Highlight (==text==)"
+                      className="px-2 py-1 rounded bg-amber-950/60 hover:bg-amber-900/80 text-amber-300 hover:text-amber-200 border border-amber-700/60 text-xs font-semibold flex items-center gap-1 transition-colors"
+                    >
+                      <Highlighter className="w-3.5 h-3.5" />
+                      <span>Highlight</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => insertOverviewFormat("\n• ", "", "Key Engineering Feature")}
+                      title="Bullet Point (• Feature)"
+                      className="px-2 py-1 rounded bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-white border border-slate-700/80 text-xs flex items-center gap-1 transition-colors"
+                    >
+                      <List className="w-3.5 h-3.5 text-orange-400" />
+                      <span>Bullet List</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => insertOverviewFormat("\n1. ", "", "Ordered Milestone Feature")}
+                      title="Numbered List"
+                      className="px-2 py-1 rounded bg-slate-900 hover:bg-slate-800 text-slate-300 hover:text-white border border-slate-700/80 text-xs flex items-center gap-1 transition-colors"
+                    >
+                      <ListOrdered className="w-3.5 h-3.5 text-teal-400" />
+                      <span>Numbered List</span>
+                    </button>
+                    {/* Font Size Selector */}
+                    <div className="flex items-center gap-1 bg-slate-900 border border-slate-700/80 rounded px-1.5 py-0.5 text-xs text-slate-300">
+                      <Type className="w-3.5 h-3.5 text-teal-400 shrink-0" />
+                      <select
+                        value={overviewFontSize}
+                        onChange={(e) => setOverviewFontSize(e.target.value)}
+                        title="Slide 2 Font Size"
+                        className="bg-transparent text-slate-200 text-xs focus:outline-none cursor-pointer"
                       >
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img
-                          src={imgUrl}
-                          alt={`Design image ${idx + 1}`}
-                          className="max-h-full max-w-full object-contain"
-                        />
-                        <span className="absolute bottom-1 left-1.5 px-1.5 py-0.5 rounded text-[10px] font-bold bg-slate-900/80 text-teal-300 border border-slate-700">
-                          #{idx + 1} • Slide 3.{Math.floor(idx / 8) + 1}
-                        </span>
-                        <button
-                          type="button"
-                          onClick={() => handleRemoveDesignImage(idx)}
-                          className="absolute top-1 right-1 p-1 rounded-full bg-slate-900/90 text-slate-400 hover:text-red-400 hover:bg-slate-800 transition-colors"
-                          title="Remove image"
-                        >
-                          <X className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
-                    ))}
+                        <option value="18.0" className="bg-slate-900 text-white">18pt (Compact)</option>
+                        <option value="20.5" className="bg-slate-900 text-white">20.5pt (Standard)</option>
+                        <option value="22.0" className="bg-slate-900 text-white">22pt (Recommended)</option>
+                        <option value="24.0" className="bg-slate-900 text-white">24pt (Large)</option>
+                        <option value="26.0" className="bg-slate-900 text-white">26pt (X-Large)</option>
+                        <option value="28.0" className="bg-slate-900 text-white">28pt</option>
+                      </select>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        insertOverviewFormat(
+                          "\n• Feature Title: ",
+                          "",
+                          "Detailed functional capability and parameters"
+                        )
+                      }
+                      title="Add Feature Highlight with Title"
+                      className="px-2 py-1 rounded bg-teal-950/60 hover:bg-teal-900/80 text-teal-300 border border-teal-800/80 text-xs font-medium flex items-center gap-1 transition-colors ml-auto"
+                    >
+                      <Sparkles className="w-3.5 h-3.5 text-teal-400" />
+                      <span>+ Add Feature Item</span>
+                    </button>
                   </div>
-                )}
-              </div>
-            )}
+
+                  <textarea
+                    id="slide2-overview-textarea"
+                    rows={6}
+                    value={overview}
+                    onChange={(e) => setOverview(e.target.value)}
+                    onKeyDown={(e) => handleAutoBulletKeyDown(e, overview, setOverview)}
+                    placeholder="Enter system overview, objectives, and key features for Slide 2... Use toolbar above for Bold (**text**), Highlight (==text==), Underline (<u>text</u>), and Bullet Lists (•). Press Enter to auto-continue bullets."
+                    className="w-full bg-slate-950 border border-slate-700 border-t-0 rounded-b-lg px-3 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-teal-500 font-mono leading-relaxed"
+                  />
+                  <div className="flex flex-wrap items-center justify-between text-[11px] text-slate-400 px-1 pt-1">
+                    <span>
+                      <span className="text-teal-400 font-semibold">Slide 2 Boundary:</span> Max ~700 characters | Max 8–10 lines recommended for optimal 16:9 widescreen presentation fit.
+                    </span>
+                    <span
+                      className={`font-mono font-semibold ${
+                        overview.length > 700 || overview.split("\n").filter((l) => l.trim()).length > 10
+                          ? "text-amber-400"
+                          : "text-slate-400"
+                      }`}
+                    >
+                      {overview.length}/700 chars | {overview.split("\n").filter((l) => l.trim()).length}/10 lines
+                    </span>
+                  </div>
+                </div>
+              ) : (
+                <div className="bg-slate-950 border border-slate-700 rounded-lg p-3.5 text-xs text-slate-200 min-h-[140px] space-y-2">
+                  <div className="text-[11px] font-bold text-teal-400 uppercase tracking-wider mb-2 pb-1.5 border-b border-slate-800 flex items-center gap-1.5">
+                    <FileText className="w-3.5 h-3.5 text-teal-400" />
+                    Live Slide 2 Formatted Preview
+                  </div>
+                  {renderOverviewPreview(overview)}
+                </div>
+              )}
+            </div>
+
+            {/* Step 2 Navigation Footer */}
+            <div className="flex items-center justify-between pt-2">
+              <button
+                type="button"
+                onClick={() => setActiveProposalTab(1)}
+                className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold border border-slate-700 transition-all"
+              >
+                <ArrowLeft className="w-4 h-4" />
+                <span>Back: General Info</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveProposalTab(3)}
+                className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-teal-600 hover:bg-teal-500 text-white text-xs font-bold shadow-lg shadow-teal-950/40 transition-all hover:translate-x-0.5"
+              >
+                <span>Next: Slide 3 Design &amp; BOM</span>
+                <ArrowRight className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+        )}
 
             {/* Type-Specific: 3D Print */}
             {quotationType === "THREE_D_PRINT" && (
@@ -2771,8 +2848,89 @@ export default function EditRadQuotationPage({
 
           {/* Bill of Materials & Services Section */}
           {quotationType === "PROJECT_PROPOSAL" ? (
-            <div className="space-y-6">
-              {/* 1. Hardware BOM List */}
+            <>
+              {/* Tab 3: Slide 3 Design Images + Hardware Components BOM + Engineering Services */}
+              {activeProposalTab === 3 && (
+                <div className="space-y-5">
+                  {/* Slide 3: System Design & Architecture Images (Repeater: 8 Images per slide) */}
+                  <div className="bg-slate-900/80 border border-slate-800 rounded-xl p-5 shadow-sm space-y-4">
+                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                      <div>
+                        <h2 className="text-sm font-bold text-teal-400 uppercase tracking-wider flex items-center gap-2">
+                          <ImageIcon className="w-4 h-4" />
+                          Slide 3: System Design &amp; Architecture Images
+                        </h2>
+                        <p className="text-xs text-slate-400">
+                          Upload hardware, module, or architecture diagram images (8 images per slide, auto-repeats Slide 3 for additional images)
+                        </p>
+                      </div>
+                      <span className="text-xs font-mono font-semibold px-2.5 py-1 rounded bg-slate-800 text-teal-300 border border-slate-700 w-fit">
+                        {systemDesignImages.length} Uploaded ({Math.ceil(systemDesignImages.length / 8) || 1} Slide{Math.ceil(systemDesignImages.length / 8) > 1 ? "s" : ""})
+                      </span>
+                    </div>
+
+                    {/* Upload Drop Zone / Button */}
+                    {systemDesignImages.length < 32 && (
+                      <label className="border-2 border-dashed border-slate-700 hover:border-teal-500/70 bg-slate-950/50 hover:bg-slate-950 rounded-xl p-6 flex flex-col items-center justify-center gap-2 cursor-pointer transition-colors">
+                        <input
+                          type="file"
+                          accept="image/*"
+                          multiple
+                          onChange={handleDesignImageUpload}
+                          disabled={isUploadingDesignImages}
+                          className="hidden"
+                        />
+                        {isUploadingDesignImages ? (
+                          <div className="flex items-center gap-2 text-xs text-teal-400">
+                            <Loader2 className="w-5 h-5 animate-spin" />
+                            <span>Uploading design image...</span>
+                          </div>
+                        ) : (
+                          <>
+                            <Upload className="w-6 h-6 text-teal-400" />
+                            <span className="text-xs font-semibold text-slate-300">
+                              Click or drag images to upload for Slide 3
+                            </span>
+                            <span className="text-[11px] text-slate-500">
+                              Supports PNG, JPG, WebP. 8 images per slide (auto-repeater).
+                            </span>
+                          </>
+                        )}
+                      </label>
+                    )}
+
+                    {/* Thumbnails Grid */}
+                    {systemDesignImages.length > 0 && (
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-2">
+                        {systemDesignImages.map((imgUrl, idx) => (
+                          <div
+                            key={idx}
+                            className="group relative rounded-lg overflow-hidden border border-slate-700 bg-slate-950 h-28 flex items-center justify-center p-2"
+                          >
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img
+                              src={imgUrl}
+                              alt={`Design image ${idx + 1}`}
+                              className="max-h-full max-w-full object-contain"
+                            />
+                            <span className="absolute bottom-1 left-1.5 px-1.5 py-0.5 rounded text-[10px] font-bold bg-slate-900/80 text-teal-300 border border-slate-700">
+                              #{idx + 1} • Slide 3.{Math.floor(idx / 8) + 1}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveDesignImage(idx)}
+                              className="absolute top-1 right-1 p-1 rounded-full bg-slate-900/90 text-slate-400 hover:text-red-400 hover:bg-slate-800 transition-colors"
+                              title="Remove image"
+                            >
+                              <X className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* 1. Hardware BOM List */}
               <div className="bg-slate-900/80 border border-slate-800 rounded-xl p-5 shadow-sm space-y-4">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800 pb-3">
                   <div>
@@ -3045,8 +3203,73 @@ export default function EditRadQuotationPage({
                 </div>
               </div>
 
-              {/* Slide 4: Special Operational Note / Warranty Exclusion (Optional) */}
-              <div className="bg-slate-900/80 border border-slate-800 rounded-xl p-5 shadow-sm space-y-4">
+                  {/* Step 3 Navigation Footer */}
+                  <div className="flex items-center justify-between pt-2">
+                    <button
+                      type="button"
+                      onClick={() => setActiveProposalTab(2)}
+                      className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold border border-slate-700 transition-all"
+                    >
+                      <ArrowLeft className="w-4 h-4" />
+                      <span>Back: Slide 2 Overview</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setActiveProposalTab(4)}
+                      className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-teal-600 hover:bg-teal-500 text-white text-xs font-bold shadow-lg shadow-teal-950/40 transition-all hover:translate-x-0.5"
+                    >
+                      <span>Next: Slide 4 Warranty &amp; Notes</span>
+                      <ArrowRight className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Tab 4: Estimated Lead Time & Warranty + Slide 4 Special Note */}
+              {activeProposalTab === 4 && (
+                <div className="space-y-5">
+                  {/* Estimated Lead Time & Warranty */}
+                  <div className="bg-slate-900/80 border border-slate-800 rounded-xl p-5 shadow-sm space-y-4">
+                    <h2 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2 border-b border-slate-800 pb-3">
+                      <Clock className="w-4 h-4 text-teal-400" />
+                      Estimated Lead Time &amp; Warranty
+                    </h2>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      {/* Estimated Lead Time */}
+                      <div>
+                        <label className="block text-xs font-semibold text-slate-300 mb-1 flex items-center gap-1.5">
+                          <Clock className="w-3.5 h-3.5 text-teal-400" />
+                          Estimated Lead Time *
+                        </label>
+                        <input
+                          type="text"
+                          value={leadTime}
+                          onChange={(e) => setLeadTime(e.target.value)}
+                          placeholder="e.g. 10 Working Days"
+                          className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-teal-500"
+                        />
+                      </div>
+
+                      {/* Warranty & Support */}
+                      <div>
+                        <label className="block text-xs font-semibold text-slate-300 mb-1 flex items-center gap-1.5">
+                          <Shield className="w-3.5 h-3.5 text-teal-400" />
+                          Warranty &amp; Support *
+                        </label>
+                        <input
+                          type="text"
+                          value={warranty}
+                          onChange={(e) => setWarranty(e.target.value)}
+                          placeholder="e.g. 1 Year"
+                          className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-teal-500"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Slide 4: Special Operational Note / Warranty Exclusion (Optional) */}
+                  <div className="bg-slate-900/80 border border-slate-800 rounded-xl p-5 shadow-sm space-y-4">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-800 pb-3">
                   <div>
                     <h2 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2">
@@ -3201,8 +3424,32 @@ export default function EditRadQuotationPage({
                 )}
               </div>
 
-              {/* Slide 5: Terms & Conditions Box (Below Bill of Materials) */}
-              <div className="bg-slate-900/80 border border-slate-800 rounded-xl p-5 shadow-sm space-y-4">
+                  {/* Step 4 Navigation Footer */}
+                  <div className="flex items-center justify-between pt-2">
+                    <button
+                      type="button"
+                      onClick={() => setActiveProposalTab(3)}
+                      className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold border border-slate-700 transition-all"
+                    >
+                      <ArrowLeft className="w-4 h-4" />
+                      <span>Back: Slide 3 Design &amp; BOM</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setActiveProposalTab(5)}
+                      className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-teal-600 hover:bg-teal-500 text-white text-xs font-bold shadow-lg shadow-teal-950/40 transition-all hover:translate-x-0.5"
+                    >
+                      <span>Next: Slide 5 Terms &amp; Conditions</span>
+                      <ArrowRight className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Tab 5: Slide 5 Terms & Conditions */}
+              {activeProposalTab === 5 && (
+                <div className="space-y-5">
+                  <div className="bg-slate-900/80 border border-slate-800 rounded-xl p-5 shadow-sm space-y-4">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-800 pb-3">
                   <h2 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2">
                     <FileText className="w-4 h-4 text-teal-400" />
@@ -3356,8 +3603,42 @@ export default function EditRadQuotationPage({
                   )}
                 </div>
               </div>
+
+              {/* Step 5 Navigation Footer */}
+              <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setActiveProposalTab(4)}
+                  className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold border border-slate-700 transition-all w-full sm:w-auto justify-center"
+                >
+                  <ArrowLeft className="w-4 h-4" />
+                  <span>Back: Slide 4 Warranty &amp; Notes</span>
+                </button>
+                <div className="flex items-center gap-2.5 w-full sm:w-auto justify-end">
+                  <button
+                    type="button"
+                    onClick={() => handleSave(false)}
+                    disabled={isSaving}
+                    className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-white text-xs font-bold border border-slate-700 shadow-md transition-all"
+                  >
+                    <Save className="w-4 h-4 text-teal-400" />
+                    <span>Save Quotation</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleSave(true)}
+                    disabled={isSaving}
+                    className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-teal-600 hover:bg-teal-500 text-white text-xs font-bold shadow-lg shadow-teal-950/40 transition-all hover:scale-[1.02]"
+                  >
+                    <Download className="w-4 h-4" />
+                    <span>Save &amp; Download PDF</span>
+                  </button>
+                </div>
+              </div>
             </div>
-          ) : (
+          )}
+        </>
+      ) : (
             /* Standard Table for THREE_D_PRINT & PCB */
             <div className="bg-slate-900/80 border border-slate-800 rounded-xl p-5 shadow-sm space-y-4">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800 pb-3">
@@ -3906,24 +4187,24 @@ export default function EditRadQuotationPage({
           )}
         </div>
 
-        {/* Right Column: Pinned Sticky Investment Summary (Locked with scroll, never scrolls off) */}
-        <div className="lg:col-span-4 self-start lg:sticky lg:top-20 z-10 max-h-[calc(100vh-5.5rem)] overflow-y-auto pr-1">
-          <div className="space-y-4">
+        {/* Right Column: Pinned Sticky Investment Summary (Compact width: 25% / 3 cols) */}
+        <div className="lg:col-span-3 xl:col-span-3 self-start lg:sticky lg:top-20 z-10 max-h-[calc(100vh-5.5rem)] overflow-y-auto pr-0.5">
+          <div className="space-y-3">
             {/* Investment Summary Card */}
-            <div className="bg-slate-900/90 border border-slate-800 rounded-xl p-5 shadow-sm space-y-4">
-              <h2 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2">
-                <CreditCard className="w-4 h-4 text-teal-400" />
+            <div className="bg-slate-900/90 border border-slate-800 rounded-xl p-3.5 sm:p-4 shadow-sm space-y-3">
+              <h2 className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-2">
+                <CreditCard className="w-3.5 h-3.5 text-teal-400" />
                 Investment Summary
               </h2>
 
               {/* Quotation Metadata Quick Reference */}
-              <div className="bg-slate-950/60 p-3 rounded-lg border border-slate-800/80 text-xs space-y-1.5">
+              <div className="bg-slate-950/60 p-2.5 rounded-lg border border-slate-800/80 text-[11px] space-y-1">
                 <div className="flex justify-between items-center text-slate-400">
                   <span>Quotation No:</span>
                   <span className="font-mono text-teal-400 font-semibold">{quotationNo || "Draft"}</span>
                 </div>
                 {quotationTo && (
-                  <div className="flex justify-between items-start text-slate-400 gap-2">
+                  <div className="flex justify-between items-start text-slate-400 gap-1.5">
                     <span className="shrink-0">Client:</span>
                     <span className="text-slate-300 text-right truncate font-medium">{quotationTo}</span>
                   </div>
@@ -3932,7 +4213,7 @@ export default function EditRadQuotationPage({
 
               {/* Financial Breakdown */}
               {quotationType === "PROJECT_PROPOSAL" ? (
-                <div className="space-y-2.5 bg-slate-950/60 p-3.5 rounded-lg border border-slate-800/80 text-xs">
+                <div className="space-y-2 bg-slate-950/60 p-2.5 sm:p-3 rounded-lg border border-slate-800/80 text-[11px]">
                   <div className="flex justify-between items-center text-slate-400">
                     <span>Hardware Subtotal:</span>
                     <span className="font-mono text-slate-200 font-semibold">
@@ -3945,15 +4226,15 @@ export default function EditRadQuotationPage({
                       {formatLKR(servicesTotal)}
                     </span>
                   </div>
-                  <div className="flex justify-between items-center text-slate-400 text-[11px] pt-1 border-t border-slate-800/50">
-                    <span>Generated Slides (Design / BOM):</span>
+                  <div className="flex justify-between items-center text-slate-400 text-[10px] pt-1 border-t border-slate-800/50">
+                    <span>Design / BOM Slides:</span>
                     <span className="font-mono text-teal-400 font-semibold">
-                      {Math.ceil(systemDesignImages.length / 8) || 1} Design / {Math.max(Math.ceil(hardwareItems.length / 4), Math.ceil(serviceItems.length / 2), 1)} BOM Slide(s)
+                      {Math.ceil(systemDesignImages.length / 8) || 1} Design / {Math.max(Math.ceil(hardwareItems.length / 4), Math.ceil(serviceItems.length / 2), 1)} BOM
                     </span>
                   </div>
                   <div className="border-t border-slate-800 pt-2 flex justify-between items-center">
-                    <span className="text-teal-400 font-bold text-sm">Total Investment:</span>
-                    <span className="font-mono text-emerald-400 text-lg font-bold">
+                    <span className="text-teal-400 font-bold text-xs">Total Investment:</span>
+                    <span className="font-mono text-emerald-400 text-base font-bold">
                       {formatLKR(totalAmount)}
                     </span>
                   </div>
