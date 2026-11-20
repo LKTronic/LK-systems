@@ -89,7 +89,7 @@ def draw_slide_header(draw, title_text, category_text="PROJECT ARCHITECTURE & SC
     draw.ellipse([W//2 - 286, 129, W//2 - 274, 139], fill=LK_TEAL + (255,))
     draw.ellipse([W//2 + 274, 129, W//2 + 286, 139], fill=LK_TEAL + (255,))
 
-def draw_slide_footer(img, draw, page_num=2):
+def draw_slide_footer(img, draw):
     # Footer separator line
     draw.line([(80, H - 145), (W - 80, H - 145)], fill=BORDER_COLOR + (255,), width=2)
     draw.line([(80, H - 145), (280, H - 145)], fill=LK_ORANGE + (255,), width=4)
@@ -118,9 +118,8 @@ def draw_slide_footer(img, draw, page_num=2):
             div_x = int(start_x + (i + 1) * slot_w)
             draw.line([(div_x, H - 110), (div_x, H - 40)], fill=BORDER_COLOR + (255,), width=1)
 
-    # Confidentiality metadata right
+    # Confidentiality metadata right (Dynamic slide number is rendered by jsPDF to support multi-set & multi-page terms)
     draw.text((W - 90, H - 85), "LK TRONICS (PVT) LTD • CONFIDENTIAL & PROPRIETARY", font=font_sm_bold, fill=LK_MUTED + (255,), anchor="ra")
-    draw.text((W - 90, H - 55), f"Turnkey IoT & Automation Proposal • Slide {page_num} of 8", font=font_sm, fill=LK_MUTED + (255,), anchor="ra")
 
 def draw_chamfered_card(draw, x1, y1, x2, y2, chamfer=24, fill=CARD_BG, stroke=BORDER_TEAL, width=3):
     pts = [
@@ -258,7 +257,7 @@ def make_slide1():
 def make_slide2():
     img, draw = create_base_canvas()
     draw_slide_header(draw, "SYSTEM OVERVIEW & OBJECTIVES", "PROJECT ARCHITECTURE & SCOPE")
-    draw_slide_footer(img, draw, page_num=2)
+    draw_slide_footer(img, draw)
 
     # Main Content Container Frame
     draw_chamfered_card(draw, 140, 160, W - 140, H - 170, chamfer=24, fill=CARD_BG, stroke=LK_TEAL, width=3)
@@ -274,7 +273,7 @@ def make_slide2():
 def make_slide3():
     img, draw = create_base_canvas()
     draw_slide_header(draw, "SYSTEM DESIGN & ARCHITECTURE", "HARDWARE INTEGRATION & CIRCUIT TOPOLOGY")
-    draw_slide_footer(img, draw, page_num=3)
+    draw_slide_footer(img, draw)
 
     # Main Content Container Frame
     draw_chamfered_card(draw, 140, 160, W - 140, H - 170, chamfer=24, fill=CARD_BG, stroke=LK_TEAL, width=3)
@@ -290,7 +289,7 @@ def make_slide3():
 def make_slide4():
     img, draw = create_base_canvas()
     draw_slide_header(draw, "BILL OF MATERIALS & COMMERCIAL INVESTMENT", "COST SCHEDULE & SPECIFICATIONS")
-    draw_slide_footer(img, draw, page_num=4)
+    draw_slide_footer(img, draw)
 
     # Main Content Container Frame
     draw_chamfered_card(draw, 140, 160, W - 140, H - 170, chamfer=24, fill=CARD_BG, stroke=LK_TEAL, width=3)
@@ -306,7 +305,7 @@ def make_slide4():
 def make_slide5():
     img, draw = create_base_canvas()
     draw_slide_header(draw, "PAYMENT TERMS & BANKING INFORMATION", "COMMERCIAL SETTLEMENT & ESCROW")
-    draw_slide_footer(img, draw, page_num=5)
+    draw_slide_footer(img, draw)
 
     # Main Content Container Frame
     draw_chamfered_card(draw, 140, 160, W - 140, H - 170, chamfer=24, fill=CARD_BG, stroke=LK_TEAL, width=3)
@@ -379,7 +378,7 @@ def make_slide5():
 def make_slide6():
     img, draw = create_base_canvas()
     draw_slide_header(draw, "TERMS AND CONDITIONS", "LEGAL FRAMEWORK & WARRANTY CONDITIONS")
-    draw_slide_footer(img, draw, page_num=6)
+    draw_slide_footer(img, draw)
 
     # Main Content Container Frame
     draw_chamfered_card(draw, 140, 160, W - 140, H - 170, chamfer=24, fill=CARD_BG, stroke=LK_TEAL, width=3)
@@ -395,10 +394,11 @@ def make_slide6():
 def make_slide7():
     img, draw = create_base_canvas()
     draw_slide_header(draw, "OUR VALUED CLIENTS", "INDUSTRY TRUST & PROVEN TRACK RECORD")
-    draw_slide_footer(img, draw, page_num=7)
+    draw_slide_footer(img, draw)
 
     # Main Content Container Frame
     draw_chamfered_card(draw, 140, 160, W - 140, H - 170, chamfer=24, fill=CARD_BG, stroke=LK_TEAL, width=3)
+    draw.rectangle([148, 168, W - 148, H - 178], outline=(241, 245, 249, 255), width=2)
 
     # Paste the 16 genuine client logos (clean LK Teal brackets)
     cw, ch = client_crop.size
@@ -406,7 +406,7 @@ def make_slide7():
     target_cw = int(cw * (target_ch / ch))
     resized_clients = client_crop.resize((target_cw, target_ch), Image.Resampling.LANCZOS)
     cx = (W - target_cw) // 2
-    cy = 200
+    cy = 160 + (H - 170 - 160 - target_ch) // 2
     img.paste(resized_clients, (cx, cy), resized_clients)
 
     out_path = os.path.join(OUT_DIR, "brand_slide7_clients.png")
@@ -419,7 +419,7 @@ def make_slide7():
 def make_slide8():
     img, draw = create_base_canvas()
     draw_slide_header(draw, "TECHNOLOGY & BRAND PARTNERS", "GLOBAL OEM ECOSYSTEM & AUTHORIZED CHANNELS")
-    draw_slide_footer(img, draw, page_num=8)
+    draw_slide_footer(img, draw)
 
     # Main Content Container: Partner logos card fits container directly, eliminating double box & dead whitespace
     target_w = W - 280  # 2280 px (from 140 to 2420, matching all slide container cards)

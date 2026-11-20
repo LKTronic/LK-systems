@@ -13,6 +13,7 @@ import {
   DEFAULT_GENERAL_TERMS_BULLETS,
   cleanProductDescription,
 } from "../src/lib/quotationPdfGenerator";
+import { generateRdQuotationPdf } from "../src/lib/rdQuotationPdfGenerator";
 import { getNextQuotationNo } from "../src/lib/quotationNo";
 import { getNextRdQuotationNo } from "../src/lib/rdQuotationNo";
 import {
@@ -1244,5 +1245,448 @@ describe("Unit Tests: Supply Excel Supplier Image Handling", () => {
     assert.equal(formatBytes(1024), "1.0 KB");
     assert.equal(formatBytes(5 * 1024 * 1024), "5.0 MB");
     assert.equal(formatBytes(25 * 1024 * 1024 * 1024), "25.00 GB");
+  });
+
+  it("generates single-page Slide 3 and Slide 4 when within standard caps (<=8 images, <=4 HW, <=2 SRV)", async () => {
+    const baseProposalData: any = {
+      type: "PROJECT_PROPOSAL",
+      quotationNo: "20261120PQV1",
+      preparedDate: "2026-11-20",
+      expireDate: "2026-12-20",
+      paymentMethod: "Bank Transfer",
+      preparedBy: "Eng. Kasun",
+      quotationTo: "ABC Tech (Pvt) Ltd",
+      projectTitle: "Smart Factory IoT System",
+      leadTime: "10 Working Days",
+      warranty: "1 Year",
+      hardwareTotal: 150000,
+      servicesTotal: 50000,
+      totalAmount: 200000,
+      systemDesignImages: ["data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=="],
+      items: [
+        { productOrService: "ESP32 Gateway", quantity: 2, unitPrice: 25000, totalPrice: 50000, itemType: "HARDWARE" },
+        { productOrService: "RS485 Sensor", quantity: 4, unitPrice: 25000, totalPrice: 100000, itemType: "HARDWARE" },
+        { productOrService: "Firmware Development", quantity: 1, unitPrice: 50000, totalPrice: 50000, itemType: "SERVICE" },
+      ],
+    };
+
+    const doc = await generateRdQuotationPdf(baseProposalData);
+    // Standard proposal has 8 pages (Cover, Scope, Design, BOM, Bank, Terms, Clients, Partners)
+    assert.equal(doc.getNumberOfPages(), 8);
+  });
+
+  it("automatically generates multiple repeater Slide 3s when images exceed 8", async () => {
+    const dummyImg = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==";
+    const multiImageProposal: any = {
+      type: "PROJECT_PROPOSAL",
+      quotationNo: "20261120PQV2",
+      preparedDate: "2026-11-20",
+      expireDate: "2026-12-20",
+      paymentMethod: "Bank Transfer",
+      preparedBy: "Eng. Kasun",
+      quotationTo: "ABC Tech (Pvt) Ltd",
+      projectTitle: "Smart Factory IoT System",
+      leadTime: "10 Working Days",
+      warranty: "1 Year",
+      totalAmount: 200000,
+      // 10 images -> 2 Design slides (8 on first, 2 on second)
+      systemDesignImages: Array(10).fill(dummyImg),
+      items: [
+        { productOrService: "ESP32 Gateway", quantity: 2, unitPrice: 25000, totalPrice: 50000, itemType: "HARDWARE" },
+        { productOrService: "Firmware Development", quantity: 1, unitPrice: 50000, totalPrice: 50000, itemType: "SERVICE" },
+      ],
+    };
+
+    const doc = await generateRdQuotationPdf(multiImageProposal);
+    // 8 base + 1 additional design slide = 9 pages
+    assert.equal(doc.getNumberOfPages(), 9);
+  });
+
+  it("automatically generates multiple repeater Slide 4s when hardware > 4 or services > 2", async () => {
+    const multiItemProposal: any = {
+      type: "PROJECT_PROPOSAL",
+      quotationNo: "20261120PQV3",
+      preparedDate: "2026-11-20",
+      expireDate: "2026-12-20",
+      paymentMethod: "Bank Transfer",
+      preparedBy: "Eng. Kasun",
+      quotationTo: "ABC Tech (Pvt) Ltd",
+      projectTitle: "Smart Factory IoT System",
+      leadTime: "10 Working Days",
+      warranty: "1 Year",
+      totalAmount: 350000,
+      systemDesignImages: ["data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=="],
+      // 6 hardware items (4 on slide 4.1, 2 on slide 4.2) + 3 service items (2 on slide 4.1, 1 on slide 4.2)
+      items: [
+        { productOrService: "ESP32 Gateway", quantity: 1, unitPrice: 20000, totalPrice: 20000, itemType: "HARDWARE" },
+        { productOrService: "RS485 Sensor A", quantity: 1, unitPrice: 15000, totalPrice: 15000, itemType: "HARDWARE" },
+        { productOrService: "RS485 Sensor B", quantity: 1, unitPrice: 15000, totalPrice: 15000, itemType: "HARDWARE" },
+        { productOrService: "Industrial 24V PSU", quantity: 1, unitPrice: 10000, totalPrice: 10000, itemType: "HARDWARE" },
+        { productOrService: "Relay Module 8CH", quantity: 1, unitPrice: 8000, totalPrice: 8000, itemType: "HARDWARE" },
+        { productOrService: "IP65 Enclosure", quantity: 1, unitPrice: 12000, totalPrice: 12000, itemType: "HARDWARE" },
+        { productOrService: "Firmware Development", quantity: 1, unitPrice: 120000, totalPrice: 120000, itemType: "SERVICE" },
+        { productOrService: "IoT Cloud Dashboard", quantity: 1, unitPrice: 100000, totalPrice: 100000, itemType: "SERVICE" },
+        { productOrService: "On-site Calibration & Testing", quantity: 1, unitPrice: 50000, totalPrice: 50000, itemType: "SERVICE" },
+      ],
+    };
+
+    const doc = await generateRdQuotationPdf(multiItemProposal);
+    // 8 base + 1 additional BOM slide = 9 pages
+    assert.equal(doc.getNumberOfPages(), 9);
+
+    // Verify intermediate BOM slide (page 4) contains Section Sub-Total, and final BOM slide (page 5) contains Total Project Investment
+    const page4Stream = (doc as any).internal.pages[4].join("\n");
+    const page5Stream = (doc as any).internal.pages[5].join("\n");
+
+    assert.ok(page4Stream.includes("SECTION INVESTMENT SUB-TOTAL") || page4Stream.includes("COMMERCIAL SCHEDULE - SLIDE 1 OF 2"));
+    assert.ok(page5Stream.includes("TOTAL PROJECT INVESTMENT"));
+    assert.ok(page4Stream.includes("PART 1"));
+    assert.ok(page5Stream.includes("PART 2"));
+  });
+
+  it("supports explicit designSlides and bomSlides repeater configuration", async () => {
+    const explicitProposal: any = {
+      type: "PROJECT_PROPOSAL",
+      quotationNo: "20261120PQV4",
+      preparedDate: "2026-11-20",
+      expireDate: "2026-12-20",
+      paymentMethod: "Bank Transfer",
+      preparedBy: "Eng. Kasun",
+      quotationTo: "ABC Tech (Pvt) Ltd",
+      totalAmount: 500000,
+      designSlides: [
+        { title: "Gateway Architecture", images: ["data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=="] },
+        { title: "Sensor Node Schematics", images: ["data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=="] },
+        { title: "Cloud Integration", images: ["data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=="] },
+      ],
+      bomSlides: [
+        {
+          hardwareItems: [{ productOrService: "HW Part 1", quantity: 1, unitPrice: 100000, totalPrice: 100000, itemType: "HARDWARE" }],
+          serviceItems: [{ productOrService: "Service Part 1", quantity: 1, unitPrice: 150000, totalPrice: 150000, itemType: "SERVICE" }],
+        },
+        {
+          hardwareItems: [{ productOrService: "HW Part 2", quantity: 1, unitPrice: 100000, totalPrice: 100000, itemType: "HARDWARE" }],
+          serviceItems: [{ productOrService: "Service Part 2", quantity: 1, unitPrice: 150000, totalPrice: 150000, itemType: "SERVICE" }],
+        },
+      ],
+      items: [],
+    };
+
+    const doc = await generateRdQuotationPdf(explicitProposal);
+    // 3 design slides + 2 BOM slides + Cover + Intro + Bank + Terms + Clients + Partners = 11 pages
+    assert.equal(doc.getNumberOfPages(), 11);
+  });
+
+  it("renders paired Slide 3 and Slide 4 sets in alternating sequence when proposalSets is provided", async () => {
+    const pairedSetsProposal: any = {
+      type: "PROJECT_PROPOSAL",
+      quotationNo: "20261120PQV5",
+      preparedDate: "2026-11-20",
+      expireDate: "2026-12-20",
+      paymentMethod: "Bank Transfer",
+      preparedBy: "Eng. Kasun",
+      quotationTo: "Apex Dynamics (Pvt) Ltd",
+      totalAmount: 600000,
+      proposalSets: [
+        {
+          id: "set-1",
+          title: "Set 1",
+          leadTime: "10 Working Days",
+          warranty: "1 Year",
+          systemDesignImages: [
+            "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==",
+          ],
+          hardwareItems: [
+            { productOrService: "Arduino Nano", quantity: 2, unitPrice: 2500, totalPrice: 5000, itemType: "HARDWARE" },
+          ],
+          serviceItems: [
+            { productOrService: "IoT Programming", quantity: 1, unitPrice: 50000, totalPrice: 50000, itemType: "SERVICE" },
+          ],
+          hardwareTotal: 5000,
+          servicesTotal: 50000,
+          commercialNote: "Special Note Set 1",
+        },
+        {
+          id: "set-2",
+          title: "Set 2",
+          leadTime: "14 Working Days",
+          warranty: "2 Years",
+          systemDesignImages: [
+            "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==",
+          ],
+          hardwareItems: [
+            { productOrService: "Modbus RTU Module", quantity: 1, unitPrice: 15000, totalPrice: 15000, itemType: "HARDWARE" },
+          ],
+          serviceItems: [
+            { productOrService: "Field Calibration", quantity: 1, unitPrice: 30000, totalPrice: 30000, itemType: "SERVICE" },
+          ],
+          hardwareTotal: 15000,
+          servicesTotal: 30000,
+          commercialNote: "Special Note Set 2",
+        },
+      ],
+      items: [],
+    };
+
+    const doc = await generateRdQuotationPdf(pairedSetsProposal);
+    // 2 sets * 2 slides (Slide 3 + Slide 4) + Cover (1) + Intro (1) + Bank (1) + Terms (1) + Clients (1) + Partners (1) = 10 pages total
+    assert.equal(doc.getNumberOfPages(), 10);
+
+    // Verify alternating pages:
+    // Page 1: Cover
+    // Page 2: System Overview
+    // Page 3: Set 1 Slide 3 (Design) -> Badge has "SET 1 OF 2"
+    // Page 4: Set 1 Slide 4 (BOM) -> Hardware header has "SET 1" and total bar has "COMMERCIAL SCHEDULE - SET 1" & "SECTION INVESTMENT SUB-TOTAL"
+    // Page 5: Set 2 Slide 3 (Design) -> Badge has "SET 2 OF 2"
+    // Page 6: Set 2 Slide 4 (BOM) -> Hardware header has "SET 2" and total bar has "COMMERCIAL SCHEDULE - SET 2" & "SECTION INVESTMENT SUB-TOTAL"
+    // Page 7: Bank Details
+    // Page 8: Terms
+    // Page 9: Clients
+    // Page 10: Partners
+    const page3Text = (doc as any).internal.pages[3].join("\n");
+    const page4Text = (doc as any).internal.pages[4].join("\n");
+    const page5Text = (doc as any).internal.pages[5].join("\n");
+    const page6Text = (doc as any).internal.pages[6].join("\n");
+
+    assert.ok(page3Text.includes("SET 1 OF 2"), "Page 3 must be Set 1 Slide 3 (Design)");
+    assert.ok(page4Text.includes("SET 1"), "Page 4 must be Set 1 Slide 4 (BOM)");
+    assert.ok(page4Text.includes("SECTION INVESTMENT SUB-TOTAL"), "Page 4 must have SECTION INVESTMENT SUB-TOTAL for Set 1");
+    assert.ok(page4Text.includes("55,000.00"), "Page 4 must have Set 1 subtotal (5,000 + 50,000 = 55,000.00)");
+    assert.ok(page5Text.includes("SET 2 OF 2"), "Page 5 must be Set 2 Slide 3 (Design)");
+    assert.ok(page6Text.includes("SET 2"), "Page 6 must be Set 2 Slide 4 (BOM)");
+    assert.ok(page6Text.includes("SECTION INVESTMENT SUB-TOTAL"), "Page 6 must have SECTION INVESTMENT SUB-TOTAL for Set 2");
+    assert.ok(page6Text.includes("45,000.00"), "Page 6 must match Set 2's own price (15,000 + 30,000 = 45,000.00)");
+  });
+
+  it("does not leak Set 1 special note to Set 2 when Set 2 special note is omitted", async () => {
+    const setsNoteIsolationProposal: any = {
+      type: "PROJECT_PROPOSAL",
+      quotationNo: "20261120PQV6",
+      preparedDate: "2026-11-20",
+      expireDate: "2026-12-20",
+      paymentMethod: "Bank Transfer",
+      preparedBy: "Eng. Kasun",
+      quotationTo: "Apex Dynamics (Pvt) Ltd",
+      totalAmount: 100000,
+      commercialNote: "Set 1 Top-level Special Note",
+      proposalSets: [
+        {
+          id: "set-1",
+          title: "Set 1",
+          leadTime: "10 Working Days",
+          warranty: "1 Year",
+          systemDesignImages: [],
+          hardwareItems: [{ productOrService: "Sensor A", quantity: 1, unitPrice: 5000, totalPrice: 5000, itemType: "HARDWARE" }],
+          serviceItems: [],
+          hardwareTotal: 5000,
+          servicesTotal: 0,
+          commercialNote: "Special Exclusion Note ONLY For Set 1",
+        },
+        {
+          id: "set-2",
+          title: "Set 2",
+          leadTime: "10 Working Days",
+          warranty: "1 Year",
+          systemDesignImages: [],
+          hardwareItems: [{ productOrService: "Sensor B", quantity: 1, unitPrice: 3000, totalPrice: 3000, itemType: "HARDWARE" }],
+          serviceItems: [],
+          hardwareTotal: 3000,
+          servicesTotal: 0,
+          commercialNote: "", // Blank note for Set 2
+        },
+      ],
+      items: [],
+    };
+
+    const doc = await generateRdQuotationPdf(setsNoteIsolationProposal);
+    const page4Text = (doc as any).internal.pages[4].join("\n"); // Set 1 BOM
+    const page6Text = (doc as any).internal.pages[6].join("\n"); // Set 2 BOM
+
+    assert.ok(page4Text.includes("Exclusion"), "Page 4 must include Set 1's note word 'Exclusion'");
+    assert.ok(!page6Text.includes("Exclusion"), "Page 6 must NOT inherit Set 1's note word 'Exclusion'");
+  });
+
+  it("renders TOTAL PROJECT INVESTMENT when only 1 proposalSet is provided", async () => {
+    const singleSetProposal: any = {
+      type: "PROJECT_PROPOSAL",
+      quotationNo: "20261120PQV7",
+      preparedDate: "2026-11-20",
+      expireDate: "2026-12-20",
+      paymentMethod: "Bank Transfer",
+      preparedBy: "Eng. Kasun",
+      quotationTo: "Apex Dynamics (Pvt) Ltd",
+      totalAmount: 25000,
+      proposalSets: [
+        {
+          id: "set-1",
+          title: "Set 1",
+          leadTime: "10 Working Days",
+          warranty: "1 Year",
+          systemDesignImages: [],
+          hardwareItems: [{ productOrService: "Controller", quantity: 1, unitPrice: 25000, totalPrice: 25000, itemType: "HARDWARE" }],
+          serviceItems: [],
+          hardwareTotal: 25000,
+          servicesTotal: 0,
+          commercialNote: "Standard Note",
+        },
+      ],
+      items: [],
+    };
+
+    const doc = await generateRdQuotationPdf(singleSetProposal);
+    // Page 4: Set 1 Slide 4 (BOM)
+    const page4Text = (doc as any).internal.pages[4].join("\n");
+    assert.ok(page4Text.includes("TOTAL PROJECT INVESTMENT"), "Single set proposal must show TOTAL PROJECT INVESTMENT");
+    assert.ok(page4Text.includes("25,000.00"), "Must show single set price");
+  });
+
+  it("dynamically generates correct Slide X of Y footer on single-set proposal (8 pages)", async () => {
+    const singleSetProposal: any = {
+      type: "PROJECT_PROPOSAL",
+      quotationNo: "20261120PQV8",
+      preparedDate: "2026-11-20",
+      expireDate: "2026-12-20",
+      paymentMethod: "Bank Transfer",
+      preparedBy: "Eng. Kasun",
+      quotationTo: "Apex Dynamics (Pvt) Ltd",
+      totalAmount: 15000,
+      proposalSets: [
+        {
+          id: "set-1",
+          title: "Set 1",
+          leadTime: "10 Working Days",
+          warranty: "1 Year",
+          systemDesignImages: [],
+          hardwareItems: [{ productOrService: "Module A", quantity: 1, unitPrice: 15000, totalPrice: 15000, itemType: "HARDWARE" }],
+          serviceItems: [],
+        },
+      ],
+      items: [],
+    };
+
+    const doc = await generateRdQuotationPdf(singleSetProposal);
+    const totalPages = doc.getNumberOfPages();
+    assert.equal(totalPages, 8, "Single set proposal must have exactly 8 pages");
+
+    for (let p = 2; p <= totalPages; p++) {
+      const pageText = (doc as any).internal.pages[p].join("\n");
+      assert.ok(
+        pageText.includes(`Slide ${p} of ${totalPages}`),
+        `Page ${p} must contain dynamic footer 'Slide ${p} of ${totalPages}'`
+      );
+    }
+  });
+
+  it("dynamically generates correct Slide X of Y footer and set badges on two-set proposal (10 pages)", async () => {
+    const twoSetProposal: any = {
+      type: "PROJECT_PROPOSAL",
+      quotationNo: "20261120PQV9",
+      preparedDate: "2026-11-20",
+      expireDate: "2026-12-20",
+      paymentMethod: "Bank Transfer",
+      preparedBy: "Eng. Kasun",
+      quotationTo: "Apex Dynamics (Pvt) Ltd",
+      totalAmount: 40000,
+      proposalSets: [
+        {
+          id: "set-1",
+          title: "Set 1",
+          leadTime: "10 Working Days",
+          warranty: "1 Year",
+          systemDesignImages: [],
+          hardwareItems: [{ productOrService: "Module A", quantity: 1, unitPrice: 15000, totalPrice: 15000, itemType: "HARDWARE" }],
+          serviceItems: [],
+          hardwareTotal: 15000,
+          servicesTotal: 0,
+        },
+        {
+          id: "set-2",
+          title: "Set 2",
+          leadTime: "14 Working Days",
+          warranty: "2 Years",
+          systemDesignImages: [],
+          hardwareItems: [{ productOrService: "Module B", quantity: 1, unitPrice: 25000, totalPrice: 25000, itemType: "HARDWARE" }],
+          serviceItems: [],
+          hardwareTotal: 25000,
+          servicesTotal: 0,
+        },
+      ],
+      items: [],
+    };
+
+    const doc = await generateRdQuotationPdf(twoSetProposal);
+    const totalPages = doc.getNumberOfPages();
+    assert.equal(totalPages, 10, "Two-set proposal must have exactly 10 pages");
+
+    // Check dynamic footers on every slide
+    for (let p = 2; p <= totalPages; p++) {
+      const pageText = (doc as any).internal.pages[p].join("\n");
+      assert.ok(
+        pageText.includes(`Slide ${p} of ${totalPages}`),
+        `Page ${p} must contain dynamic footer 'Slide ${p} of ${totalPages}'`
+      );
+    }
+
+    // Set 1 Slide 3 (Page 3) & Slide 4 (Page 4)
+    const page3Text = (doc as any).internal.pages[3].join("\n");
+    const page4Text = (doc as any).internal.pages[4].join("\n");
+    assert.ok(page3Text.includes("SET 1 OF 2"), "Page 3 (Set 1 Design) must have SET 1 OF 2 badge");
+    assert.ok(page4Text.includes("SET 1 OF 2"), "Page 4 (Set 1 BOM) must have SET 1 OF 2 badge");
+
+    // Set 2 Slide 3 (Page 5) & Slide 4 (Page 6)
+    const page5Text = (doc as any).internal.pages[5].join("\n");
+    const page6Text = (doc as any).internal.pages[6].join("\n");
+    assert.ok(page5Text.includes("SET 2 OF 2"), "Page 5 (Set 2 Design) must have SET 2 OF 2 badge");
+    assert.ok(page6Text.includes("SET 2 OF 2"), "Page 6 (Set 2 BOM) must have SET 2 OF 2 badge");
+
+    // Clients is Page 9 of 10, Partners is Page 10 of 10
+    const page9Text = (doc as any).internal.pages[9].join("\n");
+    const page10Text = (doc as any).internal.pages[10].join("\n");
+    assert.ok(page9Text.includes("Slide 9 of 10"), "Clients slide must be Slide 9 of 10");
+    assert.ok(page10Text.includes("Slide 10 of 10"), "Partners slide must be Slide 10 of 10");
+  });
+
+  it("dynamically updates total slide count and footers when terms span across 2 pages", async () => {
+    // 6 default terms + 4 custom terms = 10 terms total, paginating across exactly 2 slides
+    const longTerms = Array.from({ length: 4 }, (_, i) => `Custom Term Clause ${i + 1}: Detailed requirement and engineering standard specification that takes multiple lines to simulate full overflow pagination across slides.`);
+    const multiTermsProposal: any = {
+      type: "PROJECT_PROPOSAL",
+      quotationNo: "20261120PQV10",
+      preparedDate: "2026-11-20",
+      expireDate: "2026-12-20",
+      paymentMethod: "Bank Transfer",
+      preparedBy: "Eng. Kasun",
+      quotationTo: "Apex Dynamics (Pvt) Ltd",
+      totalAmount: 10000,
+      proposalSets: [
+        {
+          id: "set-1",
+          title: "Set 1",
+          leadTime: "10 Working Days",
+          warranty: "1 Year",
+          systemDesignImages: [],
+          hardwareItems: [{ productOrService: "Sensor", quantity: 1, unitPrice: 10000, totalPrice: 10000, itemType: "HARDWARE" }],
+          serviceItems: [],
+        },
+      ],
+      termsAndConditions: longTerms.join("\n"),
+      items: [],
+    };
+
+    const doc = await generateRdQuotationPdf(multiTermsProposal);
+    const totalPages = doc.getNumberOfPages();
+    // 1 cover + 1 intro + 1 design + 1 bom + 1 bank + 2 terms + 1 clients + 1 partners = 9 pages
+    assert.equal(totalPages, 9, "Multi-terms proposal must paginate terms into 2 slides (total 9 pages)");
+
+    // Terms continuation slide (Page 7)
+    const page7Text = (doc as any).internal.pages[7].join("\n");
+    assert.ok(page7Text.includes("PART 2") && page7Text.includes("CONTINUED"), "Terms continuation slide must have PART 2 CONTINUED badge");
+    assert.ok(page7Text.includes("Slide 7 of 9"), "Terms continuation slide must have Slide 7 of 9 footer");
+
+    // Clients slide is Slide 8 of 9, Partners is Slide 9 of 9
+    const page8Text = (doc as any).internal.pages[8].join("\n");
+    const page9Text = (doc as any).internal.pages[9].join("\n");
+    assert.ok(page8Text.includes("Slide 8 of 9"), "Clients slide must be Slide 8 of 9");
+    assert.ok(page9Text.includes("Slide 9 of 9"), "Partners slide must be Slide 9 of 9");
   });
 });
