@@ -1539,4 +1539,154 @@ describe("Unit Tests: Supply Excel Supplier Image Handling", () => {
     assert.ok(page4Text.includes("TOTAL PROJECT INVESTMENT"), "Single set proposal must show TOTAL PROJECT INVESTMENT");
     assert.ok(page4Text.includes("25,000.00"), "Must show single set price");
   });
+
+  it("dynamically generates correct Slide X of Y footer on single-set proposal (8 pages)", async () => {
+    const singleSetProposal: any = {
+      type: "PROJECT_PROPOSAL",
+      quotationNo: "20261120PQV8",
+      preparedDate: "2026-11-20",
+      expireDate: "2026-12-20",
+      paymentMethod: "Bank Transfer",
+      preparedBy: "Eng. Kasun",
+      quotationTo: "Apex Dynamics (Pvt) Ltd",
+      totalAmount: 15000,
+      proposalSets: [
+        {
+          id: "set-1",
+          title: "Set 1",
+          leadTime: "10 Working Days",
+          warranty: "1 Year",
+          systemDesignImages: [],
+          hardwareItems: [{ productOrService: "Module A", quantity: 1, unitPrice: 15000, totalPrice: 15000, itemType: "HARDWARE" }],
+          serviceItems: [],
+        },
+      ],
+      items: [],
+    };
+
+    const doc = await generateRdQuotationPdf(singleSetProposal);
+    const totalPages = doc.getNumberOfPages();
+    assert.equal(totalPages, 8, "Single set proposal must have exactly 8 pages");
+
+    for (let p = 2; p <= totalPages; p++) {
+      const pageText = (doc as any).internal.pages[p].join("\n");
+      assert.ok(
+        pageText.includes(`Slide ${p} of ${totalPages}`),
+        `Page ${p} must contain dynamic footer 'Slide ${p} of ${totalPages}'`
+      );
+    }
+  });
+
+  it("dynamically generates correct Slide X of Y footer and set badges on two-set proposal (10 pages)", async () => {
+    const twoSetProposal: any = {
+      type: "PROJECT_PROPOSAL",
+      quotationNo: "20261120PQV9",
+      preparedDate: "2026-11-20",
+      expireDate: "2026-12-20",
+      paymentMethod: "Bank Transfer",
+      preparedBy: "Eng. Kasun",
+      quotationTo: "Apex Dynamics (Pvt) Ltd",
+      totalAmount: 40000,
+      proposalSets: [
+        {
+          id: "set-1",
+          title: "Set 1",
+          leadTime: "10 Working Days",
+          warranty: "1 Year",
+          systemDesignImages: [],
+          hardwareItems: [{ productOrService: "Module A", quantity: 1, unitPrice: 15000, totalPrice: 15000, itemType: "HARDWARE" }],
+          serviceItems: [],
+          hardwareTotal: 15000,
+          servicesTotal: 0,
+        },
+        {
+          id: "set-2",
+          title: "Set 2",
+          leadTime: "14 Working Days",
+          warranty: "2 Years",
+          systemDesignImages: [],
+          hardwareItems: [{ productOrService: "Module B", quantity: 1, unitPrice: 25000, totalPrice: 25000, itemType: "HARDWARE" }],
+          serviceItems: [],
+          hardwareTotal: 25000,
+          servicesTotal: 0,
+        },
+      ],
+      items: [],
+    };
+
+    const doc = await generateRdQuotationPdf(twoSetProposal);
+    const totalPages = doc.getNumberOfPages();
+    assert.equal(totalPages, 10, "Two-set proposal must have exactly 10 pages");
+
+    // Check dynamic footers on every slide
+    for (let p = 2; p <= totalPages; p++) {
+      const pageText = (doc as any).internal.pages[p].join("\n");
+      assert.ok(
+        pageText.includes(`Slide ${p} of ${totalPages}`),
+        `Page ${p} must contain dynamic footer 'Slide ${p} of ${totalPages}'`
+      );
+    }
+
+    // Set 1 Slide 3 (Page 3) & Slide 4 (Page 4)
+    const page3Text = (doc as any).internal.pages[3].join("\n");
+    const page4Text = (doc as any).internal.pages[4].join("\n");
+    assert.ok(page3Text.includes("SET 1 OF 2"), "Page 3 (Set 1 Design) must have SET 1 OF 2 badge");
+    assert.ok(page4Text.includes("SET 1 OF 2"), "Page 4 (Set 1 BOM) must have SET 1 OF 2 badge");
+
+    // Set 2 Slide 3 (Page 5) & Slide 4 (Page 6)
+    const page5Text = (doc as any).internal.pages[5].join("\n");
+    const page6Text = (doc as any).internal.pages[6].join("\n");
+    assert.ok(page5Text.includes("SET 2 OF 2"), "Page 5 (Set 2 Design) must have SET 2 OF 2 badge");
+    assert.ok(page6Text.includes("SET 2 OF 2"), "Page 6 (Set 2 BOM) must have SET 2 OF 2 badge");
+
+    // Clients is Page 9 of 10, Partners is Page 10 of 10
+    const page9Text = (doc as any).internal.pages[9].join("\n");
+    const page10Text = (doc as any).internal.pages[10].join("\n");
+    assert.ok(page9Text.includes("Slide 9 of 10"), "Clients slide must be Slide 9 of 10");
+    assert.ok(page10Text.includes("Slide 10 of 10"), "Partners slide must be Slide 10 of 10");
+  });
+
+  it("dynamically updates total slide count and footers when terms span across 2 pages", async () => {
+    // 6 default terms + 4 custom terms = 10 terms total, paginating across exactly 2 slides
+    const longTerms = Array.from({ length: 4 }, (_, i) => `Custom Term Clause ${i + 1}: Detailed requirement and engineering standard specification that takes multiple lines to simulate full overflow pagination across slides.`);
+    const multiTermsProposal: any = {
+      type: "PROJECT_PROPOSAL",
+      quotationNo: "20261120PQV10",
+      preparedDate: "2026-11-20",
+      expireDate: "2026-12-20",
+      paymentMethod: "Bank Transfer",
+      preparedBy: "Eng. Kasun",
+      quotationTo: "Apex Dynamics (Pvt) Ltd",
+      totalAmount: 10000,
+      proposalSets: [
+        {
+          id: "set-1",
+          title: "Set 1",
+          leadTime: "10 Working Days",
+          warranty: "1 Year",
+          systemDesignImages: [],
+          hardwareItems: [{ productOrService: "Sensor", quantity: 1, unitPrice: 10000, totalPrice: 10000, itemType: "HARDWARE" }],
+          serviceItems: [],
+        },
+      ],
+      termsAndConditions: longTerms.join("\n"),
+      items: [],
+    };
+
+    const doc = await generateRdQuotationPdf(multiTermsProposal);
+    const totalPages = doc.getNumberOfPages();
+    // 1 cover + 1 intro + 1 design + 1 bom + 1 bank + 2 terms + 1 clients + 1 partners = 9 pages
+    assert.equal(totalPages, 9, "Multi-terms proposal must paginate terms into 2 slides (total 9 pages)");
+
+    // Terms continuation slide (Page 7)
+    const page7Text = (doc as any).internal.pages[7].join("\n");
+    assert.ok(page7Text.includes("PART 2") && page7Text.includes("CONTINUED"), "Terms continuation slide must have PART 2 CONTINUED badge");
+    assert.ok(page7Text.includes("Slide 7 of 9"), "Terms continuation slide must have Slide 7 of 9 footer");
+
+    // Clients slide is Slide 8 of 9, Partners is Slide 9 of 9
+    const page8Text = (doc as any).internal.pages[8].join("\n");
+    const page9Text = (doc as any).internal.pages[9].join("\n");
+    assert.ok(page8Text.includes("Slide 8 of 9"), "Clients slide must be Slide 8 of 9");
+    assert.ok(page9Text.includes("Slide 9 of 9"), "Partners slide must be Slide 9 of 9");
+  });
 });

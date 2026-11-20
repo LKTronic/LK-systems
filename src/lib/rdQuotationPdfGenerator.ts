@@ -1516,6 +1516,17 @@ async function generateProjectProposalPdf(
       srvTotal = itemSum > 0 ? itemSum : (bIdx === 0 && overallSrvTotal > 0 ? overallSrvTotal : 0);
     }
 
+    // Top indicator badge matching Slide 3
+    if (totalBomPages > 1) {
+      const topBadgeText = badgeSuffix ? `${badgeSuffix} OF ${totalBomPages}` : `PART ${bIdx + 1} OF ${totalBomPages}`;
+      doc.setFillColor(LK_TEAL[0], LK_TEAL[1], LK_TEAL[2]);
+      doc.roundedRect(386.0, 18.0, 88.0, 10.0, 2.0, 2.0, "F");
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(11.0);
+      doc.setTextColor(255, 255, 255);
+      doc.text(topBadgeText, 430.0, 24.8, { align: "center" });
+    }
+
     // --- 1. HARDWARE SECTION (Left Side - Max 4 items per slide) ---
     doc.setFillColor(LK_TEAL[0], LK_TEAL[1], LK_TEAL[2]);
     const hwBadgeW = totalBomPages > 1 ? 168.0 : 142.0;
@@ -2244,6 +2255,13 @@ async function generateProjectProposalPdf(
           console.warn("Failed to render continuation bgTerms:", err);
         }
       }
+      // Top indicator badge for continued terms
+      doc.setFillColor(LK_TEAL[0], LK_TEAL[1], LK_TEAL[2]);
+      doc.roundedRect(386.0, 18.0, 88.0, 10.0, 2.0, 2.0, "F");
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(11.0);
+      doc.setTextColor(255, 255, 255);
+      doc.text("PART 2 (CONTINUED)", 430.0, 24.8, { align: "center" });
       termY = 48.0;
     }
 
@@ -2330,6 +2348,27 @@ async function generateProjectProposalPdf(
     } catch (err) {
       console.warn("Failed to render bgPartners:", err);
     }
+  }
+
+  // --- DYNAMIC SLIDE NUMBERING (Post-processing across all generated slides) ---
+  const totalPages = doc.getNumberOfPages();
+  for (let p = 2; p <= totalPages; p++) {
+    doc.setPage(p);
+
+    // Defensively mask any baked static footer text in case older cached images were loaded
+    doc.setFillColor(248, 250, 252);
+    doc.rect(380.0, 270.5, 115.0, 8.5, "F");
+
+    // Draw dynamic right-aligned slide footer: Turnkey IoT & Automation Proposal • Slide X of Y
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(8.0);
+    doc.setTextColor(LK_MUTED[0], LK_MUTED[1], LK_MUTED[2]);
+    doc.text(
+      `Turnkey IoT & Automation Proposal • Slide ${p} of ${totalPages}`,
+      490.0,
+      275.0,
+      { align: "right" }
+    );
   }
 
   return doc;
@@ -3086,14 +3125,14 @@ export async function generateRdQuotationPdf(
       bgPartners,
       warrantyBadge,
     ] = await Promise.all([
-      loadImageAsBase64("/template_assets/pptx_slides/brand_slide1_cover.png"),
-      loadImageAsBase64("/template_assets/pptx_slides/brand_slide2_intro.png"),
-      loadImageAsBase64("/template_assets/pptx_slides/brand_slide3_design.png"),
-      loadImageAsBase64("/template_assets/pptx_slides/brand_slide4_pricing.png"),
-      loadImageAsBase64("/template_assets/pptx_slides/brand_slide5_bank.png"),
-      loadImageAsBase64("/template_assets/pptx_slides/brand_slide6_terms.png"),
-      loadImageAsBase64("/template_assets/pptx_slides/brand_slide7_clients.png"),
-      loadImageAsBase64("/template_assets/pptx_slides/brand_slide8_partners.png"),
+      loadImageAsBase64("/template_assets/pptx_slides/brand_slide1_cover.png?v=3"),
+      loadImageAsBase64("/template_assets/pptx_slides/brand_slide2_intro.png?v=3"),
+      loadImageAsBase64("/template_assets/pptx_slides/brand_slide3_design.png?v=3"),
+      loadImageAsBase64("/template_assets/pptx_slides/brand_slide4_pricing.png?v=3"),
+      loadImageAsBase64("/template_assets/pptx_slides/brand_slide5_bank.png?v=3"),
+      loadImageAsBase64("/template_assets/pptx_slides/brand_slide6_terms.png?v=3"),
+      loadImageAsBase64("/template_assets/pptx_slides/brand_slide7_clients.png?v=3"),
+      loadImageAsBase64("/template_assets/pptx_slides/brand_slide8_partners.png?v=3"),
       loadImageAsBase64("/template_assets/logos/warranty_badge.png"),
     ]);
     return await generateProjectProposalPdf(data, {
