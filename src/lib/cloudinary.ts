@@ -1,20 +1,25 @@
 import { v2 as cloudinary, type UploadApiResponse } from "cloudinary";
 import { Readable } from "stream";
 
+function getCleanEnv(val?: string): string {
+  if (!val) return "";
+  return val.replace(/^["']|["']$/g, "").trim();
+}
+
 // Configure Cloudinary from environment variables
 export function isCloudinaryConfigured(): boolean {
   return Boolean(
-    process.env.CLOUDINARY_CLOUD_NAME &&
-      process.env.CLOUDINARY_API_KEY &&
-      process.env.CLOUDINARY_API_SECRET
+    getCleanEnv(process.env.CLOUDINARY_CLOUD_NAME) &&
+      getCleanEnv(process.env.CLOUDINARY_API_KEY) &&
+      getCleanEnv(process.env.CLOUDINARY_API_SECRET)
   );
 }
 
 export function getCloudinaryClient() {
   cloudinary.config({
-    cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
-    api_key: process.env.CLOUDINARY_API_KEY,
-    api_secret: process.env.CLOUDINARY_API_SECRET,
+    cloud_name: getCleanEnv(process.env.CLOUDINARY_CLOUD_NAME),
+    api_key: getCleanEnv(process.env.CLOUDINARY_API_KEY),
+    api_secret: getCleanEnv(process.env.CLOUDINARY_API_SECRET),
     secure: true,
   });
   return cloudinary;
