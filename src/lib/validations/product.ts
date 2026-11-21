@@ -39,6 +39,7 @@ export const productSchema = z.object({
     .nullable(),
   additionalNote: z.string().optional().nullable(),
   imagePath: z.string().optional().nullable(),
+  supplierImage: z.string().optional().nullable(),
   price: z.coerce.number().min(0, "Price must be greater than or equal to 0").default(0),
   priceUSD: z.coerce.number().optional().nullable(),
   priceLKR: z.coerce.number().optional().nullable(),

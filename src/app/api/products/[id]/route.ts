@@ -173,9 +173,9 @@ export async function PUT(
                 : null
               : existingProduct.imagePath,
           supplierImage:
-            data.imagePath !== undefined
-              ? data.imagePath && data.imagePath.trim() !== "" && data.imagePath !== "null"
-                ? data.imagePath.trim()
+            data.supplierImage !== undefined
+              ? data.supplierImage && data.supplierImage.trim() !== "" && data.supplierImage !== "null"
+                ? data.supplierImage.trim()
                 : null
               : existingProduct.supplierImage,
           categoryId: data.categoryId !== undefined ? data.categoryId : existingProduct.categoryId,

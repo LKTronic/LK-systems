@@ -650,7 +650,7 @@ export default function ProductDetailPage({
                 </div>
               )}
 
-              {product.supplierImage && (
+              {product.supplierImage && product.supplierImage !== product.imagePath && (
                 <div className="pt-3 border-t border-slate-800 text-xs space-y-2">
                   <span className="text-slate-400 block font-medium flex items-center gap-1.5">
                     <ImageIcon className="w-3.5 h-3.5 text-teal-400" />
