@@ -223,7 +223,22 @@ export async function POST(request: NextRequest) {
             const imgBuffer = Buffer.from(imgData.buffer);
             await writeFile(filePath, imgBuffer);
 
-            // Persist to MySQL database so site updates/git pulls never lose Excel images
+            let resolvedImageUrl = `/uploads/products/${uniqueName}`;
+
+            // 1. Direct Cloudinary Upload into pms_products/
+            try {
+              const { isCloudinaryConfigured, uploadProductImage } = await import("@/lib/cloudinary");
+              if (isCloudinaryConfigured()) {
+                const cloudRes = await uploadProductImage(imgBuffer, uniqueName);
+                if (cloudRes?.url) {
+                  resolvedImageUrl = cloudRes.url;
+                }
+              }
+            } catch (cloudErr) {
+              console.warn("Cloudinary upload during Excel import warning:", cloudErr);
+            }
+
+            // 2. Persist to MySQL database as safety net
             try {
               const { backupImageToDatabase } = await import("@/lib/imageStorage");
               await backupImageToDatabase(uniqueName, imgBuffer, ext === ".png" ? "image/png" : "image/jpeg");
@@ -231,7 +246,7 @@ export async function POST(request: NextRequest) {
               console.warn("Database image backup non-fatal warning:", backupErr);
             }
 
-            embeddedImagesByRow.set(rowNumber, `/uploads/products/${uniqueName}`);
+            embeddedImagesByRow.set(rowNumber, resolvedImageUrl);
           }
         }
       }

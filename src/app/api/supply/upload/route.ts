@@ -251,6 +251,21 @@ export async function POST(request: NextRequest) {
             const imgBuffer = Buffer.from(imgData.buffer);
             await writeFile(targetFilePath, imgBuffer);
 
+            let imgUrl = `/uploads/products/${uniqueName}`;
+
+            // Direct Cloudinary Upload into pms_products/
+            try {
+              const { isCloudinaryConfigured, uploadProductImage } = await import("@/lib/cloudinary");
+              if (isCloudinaryConfigured()) {
+                const cloudRes = await uploadProductImage(imgBuffer, uniqueName);
+                if (cloudRes?.url) {
+                  imgUrl = cloudRes.url;
+                }
+              }
+            } catch (cloudErr) {
+              console.warn("Cloudinary upload during Supply Excel import warning:", cloudErr);
+            }
+
             // Persist to MySQL database so site updates/git pulls never lose Excel images
             try {
               await backupImageToDatabase(
@@ -261,8 +276,6 @@ export async function POST(request: NextRequest) {
             } catch (backupErr) {
               console.warn("Database image backup non-fatal warning:", backupErr);
             }
-
-            const imgUrl = `/uploads/products/${uniqueName}`;
             const isNearSupplierCol =
               colMap.supplierImage && Math.abs(colNumber - colMap.supplierImage) <= 2;
             const isNearGeneralCol =
