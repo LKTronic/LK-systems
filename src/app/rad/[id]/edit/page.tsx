@@ -117,6 +117,7 @@ interface ProductSearchResult {
   sku?: string | null;
   productName: string;
   priceLKR: number | string | null;
+  imagePath?: string | null;
 }
 
 export default function EditRadQuotationPage({
@@ -189,6 +190,7 @@ export default function EditRadQuotationPage({
   const [targetSetItemId, setTargetSetItemId] = useState<string | null>(null);
 
   // Uni Quotation Specific Fields
+  const [componentsCost, setComponentsCost] = useState<number | string>("");
   const [engineeringCharges, setEngineeringCharges] = useState<number | string>("");
   const [discount, setDiscount] = useState<number | string>("");
   const [uniCompletionTime, setUniCompletionTime] = useState<string>("");
@@ -1033,8 +1035,18 @@ export default function EditRadQuotationPage({
             ]);
           }
         } else if (q.type === "UNI_QUOTATION") {
+          if (parsedSpecs?.componentsTotal != null) {
+            setComponentsCost(parsedSpecs.componentsTotal);
+          } else if (q.hardwareTotal != null) {
+            setComponentsCost(q.hardwareTotal);
+          } else if (Array.isArray(q.items) && q.items.length > 0) {
+            const sum = q.items.slice(0, 4).reduce((acc: number, it: any) => acc + (Number(it.quantity) || 0) * (Number(it.unitPrice) || 0), 0);
+            if (sum > 0) setComponentsCost(sum);
+          }
           if (parsedSpecs?.engineeringCharges != null) {
             setEngineeringCharges(parsedSpecs.engineeringCharges);
+          } else if (q.servicesTotal != null) {
+            setEngineeringCharges(q.servicesTotal);
           }
           if (parsedSpecs?.discount != null) {
             setDiscount(parsedSpecs.discount);
@@ -1248,11 +1260,14 @@ export default function EditRadQuotationPage({
       ? Number(customServicesTotal)
       : computedServicesTotal;
 
-  const componentsTotal = items.slice(0, 4).reduce(
-    (sum, i) =>
-      sum + (Number(i.quantity) || 0) * (Number(i.unitPrice) || 0),
-    0
-  );
+  const componentsTotal =
+    quotationType === "UNI_QUOTATION"
+      ? Number(componentsCost) || 0
+      : items.slice(0, 4).reduce(
+          (sum, i) =>
+            sum + (Number(i.quantity) || 0) * (Number(i.unitPrice) || 0),
+          0
+        );
 
   const totalAmount =
     quotationType === "PROJECT_PROPOSAL"
@@ -1439,7 +1454,8 @@ export default function EditRadQuotationPage({
             ? {
                 ...it,
                 productOrService: prod.productName,
-                unitPrice: price,
+                unitPrice: quotationType === "UNI_QUOTATION" ? 0 : price,
+                image: quotationType === "UNI_QUOTATION" && prod.imagePath ? prod.imagePath : it.image,
               }
             : it
         )
@@ -1477,7 +1493,7 @@ export default function EditRadQuotationPage({
         : quotationType === "UNI_QUOTATION"
         ? {
             completionTime: uniCompletionTime || leadTime || "10 business working days",
-            componentsTotal,
+            componentsTotal: Number(componentsCost) || 0,
             engineeringCharges: Number(engineeringCharges) || 0,
             discount: Number(discount) || 0,
             validityDays: Number(validityDays) || 5,
@@ -1553,7 +1569,7 @@ export default function EditRadQuotationPage({
         quotationType === "PROJECT_PROPOSAL"
           ? hardwareTotal
           : quotationType === "UNI_QUOTATION"
-          ? componentsTotal
+          ? Number(componentsCost) || 0
           : null,
       servicesTotal:
         quotationType === "PROJECT_PROPOSAL"
@@ -1581,9 +1597,19 @@ export default function EditRadQuotationPage({
                 totalPrice: (Number(it.quantity) || 1) * (Number(it.unitPrice) || 0),
                 notes: null,
               }))
+          : quotationType === "UNI_QUOTATION"
+          ? items.map((it, idx) => ({
+              itemIndex: idx + 1,
+              itemType: "HARDWARE",
+              productOrService: it.productOrService || "Component",
+              quantity: Number(it.quantity) || 1,
+              unitPrice: 0,
+              totalPrice: 0,
+              notes: null,
+            }))
           : items.map((it, idx) => ({
               itemIndex: idx + 1,
-              itemType: it.itemType,
+              itemType: (it.itemType as "HARDWARE" | "SERVICE") || "HARDWARE",
               productOrService: it.productOrService || "Item",
               quantity: Number(it.quantity) || 1,
               unitPrice: Number(it.unitPrice) || 0,
@@ -1597,8 +1623,6 @@ export default function EditRadQuotationPage({
                       printTimeMinutes: it.printTimeMinutes !== undefined && it.printTimeMinutes !== "" ? Number(it.printTimeMinutes) : (it.printTimeHours ? Number(it.printTimeHours) * 60 : ""),
                       calcMode: it.calcMode || printSpecs.pricingMode || "AUTO",
                     })}`
-                  : quotationType === "UNI_QUOTATION" && it.image
-                  ? JSON.stringify({ image: it.image, note: it.notes || "" })
                   : (it.notes || null),
             })),
     };
@@ -1682,6 +1706,12 @@ export default function EditRadQuotationPage({
       if (items.length > 4) {
         missing["items"] = "University Quotation can have at most 4 items";
       }
+      if (componentsCost === "" || isNaN(Number(componentsCost)) || Number(componentsCost) < 0) {
+        missing["componentsCost"] = "Total Estimated Cost of Project Components";
+      }
+      if (engineeringCharges === "" || isNaN(Number(engineeringCharges)) || Number(engineeringCharges) < 0) {
+        missing["engineeringCharges"] = "Engineering Charges";
+      }
     }
     if (quotationType === "PROJECT_PROPOSAL") {
       const allItems = proposalSets.flatMap((s) => [...s.hardwareItems, ...s.serviceItems]);
@@ -1705,7 +1735,7 @@ export default function EditRadQuotationPage({
           if (Number(it.quantity) < 1) {
             missing[`item_${idx}_quantity`] = `Item #${idx + 1} Quantity`;
           }
-          if (Number(it.unitPrice) < 0) {
+          if (quotationType !== "UNI_QUOTATION" && Number(it.unitPrice) < 0) {
             missing[`item_${idx}_unitPrice`] = `Item #${idx + 1} Unit Rate`;
           }
         });
@@ -1914,7 +1944,7 @@ export default function EditRadQuotationPage({
           null,
         items: payload.items.map((it) => ({
           itemIndex: it.itemIndex,
-          itemType: it.itemType,
+          itemType: (it.itemType as "HARDWARE" | "SERVICE") || "HARDWARE",
           productOrService: it.productOrService,
           quantity: it.quantity,
           unitPrice: it.unitPrice,
@@ -4038,7 +4068,8 @@ export default function EditRadQuotationPage({
           )}
         </>
       ) : (
-            /* Standard Table for THREE_D_PRINT & PCB */
+        <>
+            {/* Standard Table for THREE_D_PRINT, PCB & UNI_QUOTATION */}
             <div className="bg-slate-900/80 border border-slate-800 rounded-xl p-5 shadow-sm space-y-4">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800 pb-3">
                 <div>
@@ -4442,56 +4473,125 @@ export default function EditRadQuotationPage({
                             </div>
                           </div>
                         </div>
-                      ) : (
-                        /* Manual Unit Rate Layout (Standard, PCB or Uni Quotation) */
-                        <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-start">
-                          {quotationType === "UNI_QUOTATION" && (
-                            <div className="md:col-span-2">
-                              <label className="block text-[11px] font-medium text-blue-400 mb-1">
-                                Image
-                              </label>
-                              <div className="flex items-center gap-1.5">
-                                {item.image ? (
-                                  <div className="relative group w-10 h-10 rounded border border-slate-700 bg-slate-900 overflow-hidden shrink-0">
-                                    <img
-                                      src={item.image}
-                                      alt="Part"
-                                      className="w-full h-full object-contain"
-                                    />
-                                    <button
-                                      type="button"
-                                      onClick={() => handleItemChange(item.id, "image", "")}
-                                      className="absolute inset-0 bg-red-950/80 text-white text-[10px] flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
-                                      title="Remove"
-                                    >
-                                      ✕
-                                    </button>
-                                  </div>
-                                ) : null}
-                                <label className="px-2 py-1.5 bg-slate-900 hover:bg-slate-800 text-blue-300 border border-slate-700 rounded text-[10px] font-medium cursor-pointer inline-flex items-center gap-1">
-                                  <Upload className="w-3 h-3" />
-                                  <span>{item.image ? "Change" : "Upload"}</span>
-                                  <input
-                                    type="file"
-                                    accept="image/*"
-                                    className="hidden"
-                                    onChange={(e) => {
-                                      const file = e.target.files?.[0];
-                                      if (file) {
-                                        const reader = new FileReader();
-                                        reader.onload = () => {
-                                          handleItemChange(item.id, "image", reader.result as string);
-                                        };
-                                        reader.readAsDataURL(file);
-                                      }
-                                    }}
+                      ) : quotationType === "UNI_QUOTATION" ? (
+                        /* Uni Quotation Line Item (No Unit Rate, No Total - Project Proposal Style with Image) */
+                        <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3">
+                          {/* Image Thumbnail & Upload */}
+                          <div className="shrink-0">
+                            <div className="flex items-center gap-2">
+                              {item.image ? (
+                                <div className="relative group w-11 h-11 rounded-lg border border-slate-700 bg-slate-900 overflow-hidden shrink-0 shadow-inner">
+                                  <img
+                                    src={item.image}
+                                    alt="Component"
+                                    className="w-full h-full object-contain"
                                   />
-                                </label>
-                              </div>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleItemChange(item.id, "image", "")}
+                                    className="absolute inset-0 bg-red-950/80 text-white text-xs flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                                    title="Remove photo"
+                                  >
+                                    ✕
+                                  </button>
+                                </div>
+                              ) : null}
+                              <label className="px-2.5 py-1.5 bg-slate-900 hover:bg-slate-800 text-blue-300 border border-slate-700 rounded-lg text-xs font-medium cursor-pointer inline-flex items-center gap-1.5 transition-colors">
+                                <Upload className="w-3.5 h-3.5 text-blue-400" />
+                                <span>{item.image ? "Change" : "Upload Photo"}</span>
+                                <input
+                                  type="file"
+                                  accept="image/*"
+                                  className="hidden"
+                                  onChange={(e) => {
+                                    const file = e.target.files?.[0];
+                                    if (file) {
+                                      const reader = new FileReader();
+                                      reader.onload = () => {
+                                        handleItemChange(item.id, "image", reader.result as string);
+                                      };
+                                      reader.readAsDataURL(file);
+                                    }
+                                  }}
+                                />
+                              </label>
                             </div>
-                          )}
+                          </div>
 
-                          <div className={quotationType === "UNI_QUOTATION" ? "md:col-span-4" : "md:col-span-6"}>
+                          {/* Component Description */}
+                          <div className="flex-1 w-full">
+                            <input
+                              id={`field-item_${idx}_productOrService`}
+                              type="text"
+                              value={item.productOrService}
+                              onChange={(e) => {
+                                handleItemChange(item.id, "productOrService", e.target.value);
+                                if (e.target.value.trim()) clearFieldError(`item_${idx}_productOrService`);
+                              }}
+                              placeholder="Component description (e.g. ESP32 Development Board, Modbus Converter...)"
+                              className={`w-full rounded-lg px-3 py-2 text-xs text-white transition-colors ${
+                                unfilledFields[`item_${idx}_productOrService`]
+                                  ? "border-2 border-red-500 ring-2 ring-red-500/50 bg-red-950/30"
+                                  : "bg-slate-900 border border-slate-700 focus:outline-none focus:border-blue-500"
+                              }`}
+                            />
+                            {unfilledFields[`item_${idx}_productOrService`] && (
+                              <p className="text-[10px] text-red-400 font-medium mt-1 flex items-center gap-1">
+                                <AlertCircle className="w-3 h-3 text-red-400 shrink-0" />
+                                <span>Description is required</span>
+                              </p>
+                            )}
+                          </div>
+
+                          {/* Quantity */}
+                          <div className="w-28 shrink-0 flex items-center gap-1.5 self-start sm:self-center">
+                            <span className="text-[11px] font-semibold text-slate-400 shrink-0">Qty:</span>
+                            <input
+                              id={`field-item_${idx}_quantity`}
+                              type="number"
+                              min="1"
+                              value={item.quantity}
+                              onChange={(e) => {
+                                const val = parseFloat(e.target.value) || 0;
+                                handleItemChange(item.id, "quantity", val);
+                                if (val >= 1) clearFieldError(`item_${idx}_quantity`);
+                              }}
+                              className={`w-full rounded-lg px-2.5 py-1.5 text-xs font-bold font-mono focus:outline-none text-center transition-colors ${
+                                unfilledFields[`item_${idx}_quantity`]
+                                  ? "border-2 border-red-500 ring-2 ring-red-500/50 bg-red-950/30"
+                                  : "bg-slate-900 border border-slate-700 text-blue-300 focus:border-blue-500"
+                              }`}
+                            />
+                          </div>
+
+                          {/* Actions */}
+                          <div className="flex items-center gap-1.5 shrink-0 self-end sm:self-center">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setTargetItemIndex(idx);
+                                setIsProductModalOpen(true);
+                              }}
+                              className="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs flex items-center gap-1 transition-colors"
+                              title="Import from PMS inventory"
+                            >
+                              <Search className="w-3 h-3 text-blue-400" />
+                              <span>PMS</span>
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveItem(item.id)}
+                              className="p-1.5 rounded-lg text-slate-500 hover:text-red-400 hover:bg-slate-800 transition-colors"
+                              title="Delete component"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        /* Manual Unit Rate Layout (Standard or PCB) */
+                        <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-start">
+                          <div className="md:col-span-6">
                             <label className="block text-[11px] font-medium text-slate-400 mb-1">
                               Product / Item Description *
                             </label>
@@ -4583,8 +4683,140 @@ export default function EditRadQuotationPage({
                 })}
               </div>
             </div>
-          )}
-        </div>
+
+            {/* Table 2: Key Cost Elements (Fixed) for Uni Quotations */}
+            {quotationType === "UNI_QUOTATION" && (
+              <div className="bg-slate-900/80 border border-slate-800 rounded-xl p-5 shadow-sm space-y-4">
+                <div className="border-b border-slate-800 pb-3">
+                  <h2 className="text-sm font-bold text-blue-400 uppercase tracking-wider flex items-center gap-2">
+                    <Calculator className="w-4 h-4 text-blue-400" />
+                    Table 2: Key Cost Elements (Fixed)
+                  </h2>
+                  <p className="text-xs text-slate-400 mt-0.5">
+                    Enter the estimated components total cost, engineering charges, and discount below. These will be formatted and printed on Page 2 Table 2 of the quotation document.
+                  </p>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  {/* 1. Total Estimated Cost of Project Components */}
+                  <div className="space-y-1.5">
+                    <label className="block text-xs font-semibold text-slate-300 flex items-center justify-between">
+                      <span>1. Estimated Components Cost *</span>
+                      <span className="text-[10px] text-blue-400 font-mono font-bold">
+                        {formatLKR(Number(componentsCost) || 0)}
+                      </span>
+                    </label>
+                    <div className="relative">
+                      <span className="absolute left-3 top-2 text-xs text-slate-500 font-mono">Rs.</span>
+                      <input
+                        id="field-componentsCost"
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        value={componentsCost}
+                        onChange={(e) => {
+                          setComponentsCost(e.target.value);
+                          if (e.target.value !== "") clearFieldError("componentsCost");
+                        }}
+                        placeholder="e.g. 10730.00"
+                        className={`w-full bg-slate-950 border rounded-lg pl-9 pr-3 py-2 text-xs text-white font-mono focus:outline-none transition-colors ${
+                          unfilledFields["componentsCost"]
+                            ? "border-2 border-red-500 ring-2 ring-red-500/50 bg-red-950/20"
+                            : "border-slate-700 focus:border-blue-500"
+                        }`}
+                      />
+                    </div>
+                    <p className="text-[10px] text-slate-500">
+                      Total cost of components utilized in Table 1 (max 4 items)
+                    </p>
+                  </div>
+
+                  {/* 2. Engineering Charges * */}
+                  <div className="space-y-1.5">
+                    <label className="block text-xs font-semibold text-slate-300 flex items-center justify-between">
+                      <span>2. Engineering Charges *</span>
+                      <span className="text-[10px] text-blue-300 font-mono font-bold">
+                        {formatLKR(Number(engineeringCharges) || 0)}
+                      </span>
+                    </label>
+                    <div className="relative">
+                      <span className="absolute left-3 top-2 text-xs text-slate-500 font-mono">Rs.</span>
+                      <input
+                        id="field-engineeringCharges"
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        value={engineeringCharges}
+                        onChange={(e) => {
+                          setEngineeringCharges(e.target.value);
+                          if (e.target.value !== "") clearFieldError("engineeringCharges");
+                        }}
+                        placeholder="e.g. 17340.00"
+                        className={`w-full bg-slate-950 border rounded-lg pl-9 pr-3 py-2 text-xs text-white font-mono focus:outline-none transition-colors ${
+                          unfilledFields["engineeringCharges"]
+                            ? "border-2 border-red-500 ring-2 ring-red-500/50 bg-red-950/20"
+                            : "border-slate-700 focus:border-blue-500"
+                        }`}
+                      />
+                    </div>
+                    <p className="text-[10px] text-slate-500">
+                      Hardware design, firmware development &amp; testing
+                    </p>
+                  </div>
+
+                  {/* Discount (Deduction in Red) */}
+                  <div className="space-y-1.5">
+                    <label className="block text-xs font-semibold text-red-400 flex items-center justify-between">
+                      <span>Discount (Deduction in Red)</span>
+                      <span className="text-[10px] text-red-400 font-mono font-bold">
+                        -{formatLKR(Number(discount) || 0)}
+                      </span>
+                    </label>
+                    <div className="relative">
+                      <span className="absolute left-3 top-2 text-xs text-red-400/60 font-mono">Rs.</span>
+                      <input
+                        id="field-discount"
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        value={discount}
+                        onChange={(e) => setDiscount(e.target.value)}
+                        placeholder="0.00"
+                        className="w-full bg-slate-950 border border-slate-700 rounded-lg pl-9 pr-3 py-2 text-xs text-red-400 font-mono focus:outline-none focus:border-red-500"
+                      />
+                    </div>
+                    <p className="text-[10px] text-slate-500">
+                      Academic grant or fee deduction
+                    </p>
+                  </div>
+                </div>
+
+                {/* Calculation Summary Bar */}
+                <div className="bg-slate-950/70 p-3.5 rounded-lg border border-slate-800 flex flex-wrap items-center justify-between gap-3">
+                  <div className="text-xs text-slate-400 flex items-center gap-2 flex-wrap">
+                    <span className="font-semibold text-slate-300">Cost Elements:</span>
+                    <span className="font-mono text-slate-200">{formatLKR(Number(componentsCost) || 0)}</span>
+                    <span className="text-slate-600">+</span>
+                    <span className="font-mono text-blue-300">{formatLKR(Number(engineeringCharges) || 0)}</span>
+                    {Number(discount) > 0 && (
+                      <>
+                        <span className="text-slate-600">-</span>
+                        <span className="font-mono text-red-400">{formatLKR(Number(discount) || 0)}</span>
+                      </>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-bold text-white uppercase tracking-wider">Total Project Cost:</span>
+                    <span className="text-base font-bold font-mono text-emerald-400 underline decoration-double">
+                      {formatLKR(totalAmount)}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            )}
+        </>
+      )}
+    </div>
 
         {/* Right Column: Pinned Sticky Investment Summary (Compact width: 25% / 3 cols) */}
         <div className="lg:col-span-3 xl:col-span-3 self-start lg:sticky lg:top-20 z-10 max-h-[calc(100vh-5.5rem)] overflow-y-auto pr-0.5">
@@ -4639,58 +4871,38 @@ export default function EditRadQuotationPage({
                   </div>
                 </div>
               ) : quotationType === "UNI_QUOTATION" ? (
-                <div className="space-y-3 bg-slate-950/60 p-3.5 rounded-lg border border-slate-800/80 text-xs">
-                  <div className="text-[11px] font-bold text-blue-400 uppercase tracking-wider pb-1 border-b border-slate-800/80">
-                    Table 2: Key Cost Elements (Fixed)
+                <div className="space-y-2.5 bg-slate-950/60 p-3.5 rounded-lg border border-slate-800/80 text-xs">
+                  <div className="text-[11px] font-bold text-blue-400 uppercase tracking-wider pb-1 border-b border-slate-800/80 flex items-center justify-between">
+                    <span>Table 2 Summary</span>
+                    <span className="text-[10px] text-slate-400 font-normal">Fixed Cost Elements</span>
                   </div>
 
-                  <div className="flex justify-between items-center text-slate-300">
-                    <span className="font-medium">1. Total Estimated Cost of Project Components:</span>
-                    <span className="font-mono text-slate-100 font-bold">
-                      {formatLKR(componentsTotal)}
+                  <div className="flex justify-between items-center text-slate-300 text-[11px]">
+                    <span className="text-slate-400">1. Components Cost:</span>
+                    <span className="font-mono text-slate-100 font-semibold">
+                      {formatLKR(Number(componentsCost) || 0)}
                     </span>
                   </div>
-                  <p className="text-[10px] text-slate-500 italic">
-                    (Auto-calculated from Table 1 components utilized, max 4 items)
-                  </p>
 
-                  <div className="space-y-1 pt-1 border-t border-slate-800/60">
-                    <div className="flex justify-between items-center text-slate-300">
-                      <span className="font-medium">2. Engineering Charges *</span>
-                      <span className="font-mono text-blue-300 font-bold">
-                        {formatLKR(Number(engineeringCharges) || 0)}
-                      </span>
-                    </div>
-                    <input
-                      type="number"
-                      min="0"
-                      value={engineeringCharges}
-                      onChange={(e) => setEngineeringCharges(e.target.value)}
-                      placeholder="Engineering Charges (LKR)"
-                      className="w-full bg-slate-900 border border-slate-700 rounded px-2.5 py-1 text-xs text-white font-mono focus:outline-none focus:border-blue-500"
-                    />
+                  <div className="flex justify-between items-center text-slate-300 text-[11px]">
+                    <span className="text-slate-400">2. Engineering Charges:</span>
+                    <span className="font-mono text-blue-300 font-semibold">
+                      {formatLKR(Number(engineeringCharges) || 0)}
+                    </span>
                   </div>
 
-                  <div className="space-y-1 pt-1 border-t border-slate-800/60">
-                    <div className="flex justify-between items-center text-red-400">
-                      <span className="font-medium">Discount (Deduction in Red)</span>
-                      <span className="font-mono text-red-400 font-bold">
+                  {Number(discount) > 0 && (
+                    <div className="flex justify-between items-center text-red-400 text-[11px]">
+                      <span>Discount:</span>
+                      <span className="font-mono font-semibold">
                         -{formatLKR(Number(discount) || 0)}
                       </span>
                     </div>
-                    <input
-                      type="number"
-                      min="0"
-                      value={discount}
-                      onChange={(e) => setDiscount(e.target.value)}
-                      placeholder="Discount Amount (LKR)"
-                      className="w-full bg-slate-900 border border-slate-700 rounded px-2.5 py-1 text-xs text-white font-mono focus:outline-none focus:border-red-500"
-                    />
-                  </div>
+                  )}
 
-                  <div className="border-t-2 border-slate-700 pt-2.5 flex justify-between items-center">
-                    <span className="text-white font-bold text-sm">Total Project Cost:</span>
-                    <span className="font-mono text-emerald-400 text-lg font-bold underline decoration-double">
+                  <div className="border-t border-slate-800 pt-2 flex justify-between items-center">
+                    <span className="text-white font-bold text-xs">Total Project Cost:</span>
+                    <span className="font-mono text-emerald-400 text-base font-bold underline decoration-double">
                       {formatLKR(totalAmount)}
                     </span>
                   </div>

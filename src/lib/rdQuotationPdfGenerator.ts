@@ -2774,7 +2774,7 @@ async function generateUniQuotationPdf(
 
   let componentsTotal = Number(parsedSpecs?.componentsTotal);
   if (!componentsTotal || isNaN(componentsTotal) || componentsTotal <= 0) {
-    componentsTotal = componentsToRender.reduce(
+    componentsTotal = Number(data.hardwareTotal) || componentsToRender.reduce(
       (acc, it) =>
         acc +
         (Number(it.totalPrice) ||
@@ -2783,7 +2783,11 @@ async function generateUniQuotationPdf(
     );
   }
 
-  const engineeringCharges = Number(parsedSpecs?.engineeringCharges || 0);
+  const engineeringCharges = Number(
+    parsedSpecs?.engineeringCharges != null
+      ? parsedSpecs.engineeringCharges
+      : data.servicesTotal || 0
+  );
   const discount = Number(parsedSpecs?.discount || 0);
   const calculatedGrandTotal = Math.max(
     0,
