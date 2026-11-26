@@ -4477,6 +4477,7 @@ function CreateRadQuotationContent() {
                                       };
                                       reader.readAsDataURL(file);
                                     }
+                                    e.target.value = "";
                                   }}
                                 />
                               </label>
@@ -5073,12 +5074,25 @@ function CreateRadQuotationContent() {
                     onClick={() => handleSelectProduct(prod)}
                     className="p-3 rounded-xl bg-slate-950/60 border border-slate-800/80 hover:border-teal-600/80 hover:bg-slate-800/60 cursor-pointer transition-colors flex items-center justify-between gap-3"
                   >
-                    <div>
-                      <div className="text-sm font-medium text-white">
-                        {prod.productName}
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div className="w-10 h-10 rounded-lg border border-slate-700 bg-slate-900 overflow-hidden shrink-0 flex items-center justify-center">
+                        {prod.imagePath ? (
+                          <img
+                            src={prod.imagePath}
+                            alt={prod.productName}
+                            className="w-full h-full object-contain"
+                          />
+                        ) : (
+                          <Package className="w-4 h-4 text-slate-600" />
+                        )}
                       </div>
-                      <div className="text-xs text-slate-400 font-mono mt-0.5">
-                        Record: {prod.recordNo} {prod.sku ? `| SKU: ${prod.sku}` : ""}
+                      <div className="min-w-0">
+                        <div className="text-sm font-medium text-white truncate">
+                          {prod.productName}
+                        </div>
+                        <div className="text-xs text-slate-400 font-mono mt-0.5">
+                          Record: {prod.recordNo} {prod.sku ? `| SKU: ${prod.sku}` : ""}
+                        </div>
                       </div>
                     </div>
                     <div className="text-right shrink-0">

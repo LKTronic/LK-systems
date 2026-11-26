@@ -1,6 +1,10 @@
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
-import { formatLKR, formatRs } from "@/lib/quotationPdfGenerator";
+import {
+  formatLKR,
+  formatRs,
+  loadImageAsBase64 as sharedLoadImageAsBase64,
+} from "@/lib/quotationPdfGenerator";
 import {
   RdQuotationType,
   DEFAULT_THREE_D_PRINT_SPECS,
@@ -99,44 +103,7 @@ export interface RdQuotationPdfData {
  * Loads an image from URL as base64 data (supports browser and Node.js)
  */
 async function loadImageAsBase64(url: string): Promise<string | null> {
-  if (!url) return null;
-  if (url.startsWith("data:")) return url;
-
-  if (typeof window === "undefined") {
-    try {
-      const fs = await import("fs");
-      const path = await import("path");
-      const cleanUrl = url.split("?")[0].replace(/^\//, "");
-      const filePath = path.join(process.cwd(), "public", cleanUrl);
-      if (fs.existsSync(filePath)) {
-        const buffer = fs.readFileSync(filePath);
-        const ext = path.extname(filePath).toLowerCase();
-        const mime =
-          ext === ".png"
-            ? "image/png"
-            : ext === ".webp"
-            ? "image/webp"
-            : "image/jpeg";
-        return `data:${mime};base64,${buffer.toString("base64")}`;
-      }
-    } catch {
-      return null;
-    }
-    return null;
-  }
-  try {
-    const res = await fetch(url);
-    if (!res.ok) return null;
-    const blob = await res.blob();
-    return new Promise((resolve) => {
-      const reader = new FileReader();
-      reader.onloadend = () => resolve(reader.result as string);
-      reader.onerror = () => resolve(null);
-      reader.readAsDataURL(blob);
-    });
-  } catch {
-    return null;
-  }
+  return sharedLoadImageAsBase64(url);
 }
 
 /**
