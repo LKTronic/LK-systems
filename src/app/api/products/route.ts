@@ -30,6 +30,11 @@ export async function GET(request: NextRequest) {
       .then((m) => m.syncAllUploadsToDatabase())
       .catch(() => {});
 
+    // Automatic hourly background synchronization from lk-tronics.com
+    import("@/lib/webStoreAutoSync")
+      .then((m) => m.triggerAutoSyncIfStale())
+      .catch(() => {});
+
     const { searchParams } = new URL(request.url);
     const search = searchParams.get("search")?.trim() || "";
     const status = searchParams.get("status") || "ALL"; // ALL, PENDING, ACTIVE, EXPIRED, PRICE_NOT_AVAILABLE, NOT_REQUESTED

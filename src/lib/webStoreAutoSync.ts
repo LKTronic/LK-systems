@@ -52,7 +52,10 @@ export function getWooCommerceConfig() {
 
 let lastAutoSyncTimestamp = 0;
 let isAutoSyncRunning = false;
-const AUTO_SYNC_INTERVAL_MS = 15 * 60 * 1000; // 15 minutes
+// Auto sync runs every hour (60 minutes)
+export const AUTO_SYNC_INTERVAL_MS = 60 * 60 * 1000; // 1 hour
+export const SETTING_KEY_LAST_FULL_SYNC = "pms_last_webstore_full_sync";
+export const SETTING_KEY_LAST_AUTO_SYNC = "pms_last_webstore_auto_sync";
 
 export async function syncWebStoreBatch(options: {
   page?: number;
@@ -295,6 +298,22 @@ export async function syncWebStoreBatch(options: {
 
   lastAutoSyncTimestamp = Date.now();
 
+  // If this was a full catalog sync, persist timestamp to SystemSetting
+  if (syncAll) {
+    try {
+      await prisma.systemSetting.upsert({
+        where: { key: SETTING_KEY_LAST_FULL_SYNC },
+        update: { value: new Date().toISOString() },
+        create: {
+          key: SETTING_KEY_LAST_FULL_SYNC,
+          value: new Date().toISOString(),
+        },
+      });
+    } catch (saveErr) {
+      console.warn("Could not save last full sync setting:", saveErr);
+    }
+  }
+
   return {
     success: true,
     added: totalAdded,
@@ -307,13 +326,37 @@ export async function syncWebStoreBatch(options: {
 }
 
 /**
- * Triggers automatic background sync if more than 15 minutes have elapsed since the last sync.
+ * Triggers automatic background sync if more than 1 hour has elapsed since the last sync.
  * Non-blocking, executes asynchronously in the background.
  */
 export async function triggerAutoSyncIfStale(): Promise<void> {
   const now = Date.now();
   if (isAutoSyncRunning) return;
-  if (now - lastAutoSyncTimestamp < AUTO_SYNC_INTERVAL_MS) return;
+
+  // Check in-memory timestamp first
+  if (lastAutoSyncTimestamp > 0 && now - lastAutoSyncTimestamp < AUTO_SYNC_INTERVAL_MS) {
+    return;
+  }
+
+  // Check persistent timestamp from DB if memory timestamp is reset
+  if (lastAutoSyncTimestamp === 0) {
+    try {
+      const setting = await prisma.systemSetting.findUnique({
+        where: { key: SETTING_KEY_LAST_AUTO_SYNC },
+      });
+      if (setting && setting.value) {
+        const persistedTime = new Date(setting.value).getTime();
+        if (!isNaN(persistedTime)) {
+          lastAutoSyncTimestamp = persistedTime;
+          if (now - persistedTime < AUTO_SYNC_INTERVAL_MS) {
+            return;
+          }
+        }
+      }
+    } catch {
+      // Continue if DB check fails
+    }
+  }
 
   isAutoSyncRunning = true;
   lastAutoSyncTimestamp = now;
@@ -321,10 +364,20 @@ export async function triggerAutoSyncIfStale(): Promise<void> {
   // Run in background without awaiting to keep UI requests fast
   (async () => {
     try {
-      console.log("[AutoSync] Starting automatic background sync from lk-tronics.com...");
+      console.log("[AutoSync] Starting automatic background sync from lk-tronics.com (hourly schedule)...");
       // Quick sync of newest 50 products and updates
       const res = await syncWebStoreBatch({ page: 1, perPage: 50 });
       console.log(`[AutoSync] Completed: ${res.message}`);
+
+      // Persist auto sync timestamp
+      await prisma.systemSetting.upsert({
+        where: { key: SETTING_KEY_LAST_AUTO_SYNC },
+        update: { value: new Date().toISOString() },
+        create: {
+          key: SETTING_KEY_LAST_AUTO_SYNC,
+          value: new Date().toISOString(),
+        },
+      }).catch(() => {});
     } catch (err) {
       console.error("[AutoSync] Background sync error:", err);
     } finally {

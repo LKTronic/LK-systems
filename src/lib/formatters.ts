@@ -23,6 +23,29 @@ export function formatDateDMY(dateInput: string | Date | null | undefined): stri
 }
 
 /**
+ * Formats a date string or Date object into DD/MM/YYYY hh:mm A format.
+ * Example: "2026-11-27T10:54:00.000Z" -> "27/11/2026 10:54 AM"
+ */
+export function formatDateTimeDMY(dateInput: string | Date | null | undefined): string {
+  if (!dateInput) return "";
+  const d = new Date(dateInput);
+  if (isNaN(d.getTime())) return "";
+
+  const day = d.getDate().toString().padStart(2, "0");
+  const month = (d.getMonth() + 1).toString().padStart(2, "0");
+  const year = d.getFullYear();
+
+  let hours = d.getHours();
+  const minutes = d.getMinutes().toString().padStart(2, "0");
+  const ampm = hours >= 12 ? "PM" : "AM";
+  hours = hours % 12;
+  hours = hours ? hours : 12; // 0 hour should be 12
+  const formattedHours = hours.toString().padStart(2, "0");
+
+  return `${day}/${month}/${year} ${formattedHours}:${minutes} ${ampm}`;
+}
+
+/**
  * Formats numeric or string amount as LKR currency.
  * Example: 1500 -> "1,500.00 LKR"
  */

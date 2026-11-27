@@ -7,7 +7,7 @@ import { useSession } from "next-auth/react";
 import { AppLayout } from "@/components/AppLayout";
 import { ImageUpload } from "@/components/ImageUpload";
 import { CategorySearchDropdown } from "@/components/CategorySearchDropdown";
-import { formatLKR, formatDateDMY, extractStorageLocation } from "@/lib/formatters";
+import { formatLKR, formatDateDMY, formatDateTimeDMY, extractStorageLocation } from "@/lib/formatters";
 import { syncShopCatalogToIndexedDb, searchShopIndexedDb } from "@/lib/offlineShopDb";
 import { getEffectiveRole, cacheCurrentPageAssets } from "@/lib/offlineAuth";
 import {
@@ -186,6 +186,7 @@ export default function ProductsPage() {
     syncedInPms: number;
     pmsTotalCount: number;
     lastSyncedAt: string | null;
+    lastFullSyncAt?: string | null;
   } | null>(null);
   const [syncResult, setSyncResult] = useState<{
     added: number;
@@ -2697,7 +2698,7 @@ export default function ProductsPage() {
                   </div>
                   <span className="text-[10px] text-slate-500 block mt-0.5">
                     {syncStats?.lastSyncedAt
-                      ? `Updated: ${formatDateDMY(syncStats.lastSyncedAt)}`
+                      ? `Updated: ${formatDateTimeDMY(syncStats.lastSyncedAt)}`
                       : "Ready to sync"}
                   </span>
                 </div>
@@ -2747,8 +2748,18 @@ export default function ProductsPage() {
                       </span>
                     </div>
                     <p className="text-[11px] text-slate-400 mt-1">
-                      Sync all 992+ items across the entire store
+                      Sync all {syncStats?.totalStoreProducts ? `${syncStats.totalStoreProducts}+` : "992+"} items across the entire store
                     </p>
+                    <div className="mt-2 pt-2 border-t border-slate-800/80 flex items-center justify-between text-[10px]">
+                      <span className="text-slate-500 font-medium">Last Full Sync:</span>
+                      <span className="text-indigo-300 font-semibold">
+                        {syncStats?.lastFullSyncAt
+                          ? formatDateTimeDMY(syncStats.lastFullSyncAt)
+                          : syncStats?.lastSyncedAt
+                          ? formatDateTimeDMY(syncStats.lastSyncedAt)
+                          : "Not yet performed"}
+                      </span>
+                    </div>
                   </button>
                 </div>
               </div>

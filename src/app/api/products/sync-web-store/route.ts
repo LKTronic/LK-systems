@@ -2,7 +2,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { syncWebStoreBatch, getWooCommerceConfig } from "@/lib/webStoreAutoSync";
+import {
+  syncWebStoreBatch,
+  getWooCommerceConfig,
+  SETTING_KEY_LAST_FULL_SYNC,
+} from "@/lib/webStoreAutoSync";
 
 // GET /api/products/sync-web-store (Get sync status and store info)
 export async function GET(request: NextRequest) {
@@ -54,7 +58,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Get count of products already synced in PMS as ONLINE_WEB / LK_TRONICS
-    const [syncedCount, pmsTotalCount, lastSyncedProduct] = await Promise.all([
+    const [syncedCount, pmsTotalCount, lastSyncedProduct, lastFullSyncSetting] = await Promise.all([
       prisma.product.count({
         where: {
           OR: [
@@ -76,6 +80,9 @@ export async function GET(request: NextRequest) {
         orderBy: { updatedAt: "desc" },
         select: { updatedAt: true },
       }),
+      prisma.systemSetting.findUnique({
+        where: { key: SETTING_KEY_LAST_FULL_SYNC },
+      }),
     ]);
 
     return NextResponse.json({
@@ -86,6 +93,7 @@ export async function GET(request: NextRequest) {
       syncedInPms: syncedCount,
       pmsTotalCount,
       lastSyncedAt: lastSyncedProduct?.updatedAt || null,
+      lastFullSyncAt: lastFullSyncSetting?.value || null,
     });
   } catch (error: any) {
     console.error("Error getting web store status:", error);
