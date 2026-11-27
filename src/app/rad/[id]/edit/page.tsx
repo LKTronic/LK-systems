@@ -589,7 +589,22 @@ export default function EditRadQuotationPage({
       warranty: "1 Year",
       systemDesignImages: [],
       hardwareItems: [],
-      serviceItems: [],
+      serviceItems: [
+        {
+          id: `srv-default-1-${Date.now()}`,
+          itemType: "SERVICE",
+          productOrService: "Programming and Engineering Charges",
+          quantity: 1,
+          unitPrice: 0,
+        },
+        {
+          id: `srv-default-2-${Date.now()}`,
+          itemType: "SERVICE",
+          productOrService: "Fabrication, System Integration, and Testing",
+          quantity: 1,
+          unitPrice: 0,
+        },
+      ],
       hardwareTotal: "",
       servicesTotal: "",
       commercialNote: "",
@@ -3648,7 +3663,7 @@ export default function EditRadQuotationPage({
                                   type="text"
                                   value={item.productOrService}
                                   onChange={(e) => handleActiveSetItemChange(item.id, "productOrService", e.target.value)}
-                                  placeholder="Service description (e.g. Testing / Engineering Charges, IoT Installation...)"
+                                  placeholder="Service description (e.g. Programming and Engineering Charges, Fabrication, System Integration, and Testing...)"
                                   className="w-full rounded-lg px-3 py-2 text-xs text-white bg-slate-900 border border-slate-700 focus:outline-none focus:border-indigo-500 transition-colors"
                                 />
                               </div>

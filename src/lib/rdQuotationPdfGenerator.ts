@@ -1597,8 +1597,8 @@ async function generateProjectProposalPdf(
         ? srvItems
         : bIdx === 0 && allSrvItems.length === 0
         ? [
-            { productOrService: "Testing / Engineering Charges", quantity: 1, unitPrice: 0, totalPrice: 0 },
-            { productOrService: "IOT Installation and Programing", quantity: 1, unitPrice: 0, totalPrice: 0 },
+            { productOrService: "Programming and Engineering Charges", quantity: 1, unitPrice: 0, totalPrice: 0 },
+            { productOrService: "Fabrication, System Integration, and Testing", quantity: 1, unitPrice: 0, totalPrice: 0 },
           ]
         : [];
 

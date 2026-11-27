@@ -330,8 +330,8 @@ export const DEFAULT_PROJECT_PROPOSAL_HARDWARE = [
 ];
 
 export const DEFAULT_PROJECT_PROPOSAL_SERVICES = [
-  { productOrService: "Testing / Engineering Charges", quantity: 1 },
-  { productOrService: "IOT Installation and Programing", quantity: 1 },
+  { productOrService: "Programming and Engineering Charges", quantity: 1 },
+  { productOrService: "Fabrication, System Integration, and Testing", quantity: 1 },
 ];
 
 export const DEFAULT_PROJECT_PROPOSAL_MILESTONES = [

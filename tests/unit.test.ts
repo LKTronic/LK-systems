@@ -1056,8 +1056,8 @@ describe("Unit Tests: Supply Excel Supplier Image Handling", () => {
     assert.equal(DEFAULT_PROJECT_PROPOSAL_SERVICES.length, 2);
     assert.equal(DEFAULT_PROJECT_PROPOSAL_HARDWARE[0].productOrService, "Arduino Nano");
     assert.equal(DEFAULT_PROJECT_PROPOSAL_HARDWARE[3].productOrService, "HLK-20M05 AC-DC 220V to 5V Power Supply");
-    assert.equal(DEFAULT_PROJECT_PROPOSAL_SERVICES[0].productOrService, "Testing / Engineering Charges");
-    assert.equal(DEFAULT_PROJECT_PROPOSAL_SERVICES[1].productOrService, "IOT Installation and Programing");
+    assert.equal(DEFAULT_PROJECT_PROPOSAL_SERVICES[0].productOrService, "Programming and Engineering Charges");
+    assert.equal(DEFAULT_PROJECT_PROPOSAL_SERVICES[1].productOrService, "Fabrication, System Integration, and Testing");
   });
 
   it("preserves custom project proposal terms including custom warranty, delivery, and scope terms", () => {
